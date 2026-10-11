@@ -28,7 +28,7 @@ die aktuelle Basis läuft.
 | **B1 Modem-Power-Modi** (aus/PSM/eDRX als Config + AT-Sequenzen) | ✅ Struktur umgesetzt; Entscheidung braucht M1/M3 |
 | **B8 Feldstabilität** (Ring-Log in RTC, Reset-Zähler, monotone Uptime) | ✅ umgesetzt |
 | B2 Motion-Wake-Drossel **3 min** | ✅ Konstante + Logik + Tests |
-| B5 Audio-AGC, B9 Low-Battery, B11 Selbsttest | 🟡 Logik vorhanden (AGC/Policy); Verkabelung mit der Hardware offen |
+| B5 Audio-AGC, B9 Low-Battery, B11 Selbsttest | 🟡 AGC/Policy als Logik vorhanden; **Bring-up-Selbsttest als Firmware-Env umgesetzt** (`tsim7080g-s3-bringup`) |
 
 ## A. Server / Stack
 

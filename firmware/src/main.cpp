@@ -22,6 +22,10 @@
 #include "wake_cycle.h"
 #include "wake_policy.h"
 
+#if UT_BRINGUP
+#include "bringup.h"
+#endif
+
 // --- Debug-Ausgabe ---------------------------------------------------------
 // Release-Build (UT_DEBUG_SERIAL=0): keine serielle Ausgabe, kein CDC-Warten.
 // Achtung: Serial.flush() blockiert auf dem S3 – hier bewusst nicht verwendet.
@@ -129,6 +133,17 @@ void setup() {
   delay(200);
 #endif
 
+#if UT_BRINGUP
+  // Bring-up/Selbsttest: prüft Hardware und bietet eine Kommando-Konsole.
+  pinMode(PIN_AMP_SD, OUTPUT);
+  digitalWrite(PIN_AMP_SD, LOW);
+  pinMode(PIN_MIC_POWER, OUTPUT);
+  digitalWrite(PIN_MIC_POWER, LOW);
+  ModemSerial.begin(115200, SERIAL_8N1, PIN_MODEM_RX, PIN_MODEM_TX);
+  bringup::run_all(ModemSerial, Serial);
+  return;
+#endif
+
   const WakeReason reason = getWakeReason();
   if (reason == WakeReason::Cold) {
     g_log.clear();          // RTC-Speicher beim Kaltstart nicht vertrauen
@@ -193,6 +208,11 @@ void setup() {
 }
 
 void loop() {
+#if UT_BRINGUP
+  bringup::loop(ModemSerial, Serial);
+  delay(50);
+  return;
+#endif
   // Alle Abläufe sind zustandsbasiert und enden in goToSleep(); loop() bleibt leer.
   delay(1000);
 }

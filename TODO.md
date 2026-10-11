@@ -55,6 +55,7 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
       → offen: Flash-Schreiben (`Update`/esp_ota) mit Hardware
 - [x] GNSS-Auswertung `AT+CGNSINF` + UTC→Epoch *(2026-10-11)*
 - [x] Feldstabilität: Ring-Log (RTC), Reset-Zähler, monotone Uptime über Sleeps *(2026-10-11)*
+- [x] **Bring-up-Firmware** (`tsim7080g-s3-bringup`): Selbsttest I2C/PMU/LIS3DH/Modem/GNSS/I2S/Piezo/Taster + Kommando-Konsole *(2026-10-11)*
 - [ ] **(i) HTTP-Engine des Modems implementieren** (`AT+SHCONF/SHBOD/SHREQ/SHREAD`) – Hardware-Phase M6
 - [ ] **(i) PWRKEY/Power-Zyklus + Rail-Handling messen** (B1, M1/M3)
 - [ ] LIS3DH: I2C-Init, Schwellwert-Interrupt, EXT1-Wake

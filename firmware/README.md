@@ -38,6 +38,7 @@ ist `esp32-s3-devkitc-1` mit QIO-Flash und OPI-PSRAM konfiguriert.
 |---|---|---|
 | `tsim7080g-s3` (Default) | **Release/Akkubetrieb** | `ARDUINO_USB_CDC_ON_BOOT=0`, keine Debug-Ausgabe – sonst startet das Board am Akku nicht (S3 wartet auf USB-Host!) |
 | `tsim7080g-s3-dev` | Entwicklung am USB | CDC + `LOGF`-Ausgabe aktiv |
+| `tsim7080g-s3-bringup` | **Selbsttest für die Inbetriebnahme** | prüft I2C/PMU/LIS3DH/Modem/GNSS/I2S/Piezo/Taster + Kommando-Konsole (`docs/bring-up.md`) |
 | `native` | Host-Tests der Logik | braucht gcc/g++ auf dem Host |
 
 > **Wichtig:** Die Platform `espressif32@6.13.0` liefert Arduino-Core 2.x

@@ -26,10 +26,35 @@ Messprotokoll: `scripts/new-measurement-session.sh`.
 
 1. USB-C (der obere Anschluss) an den PC, **ohne** Akku.
 2. Seriellen Monitor öffnen (115200) – das Board meldet sich als USB-CDC.
-3. **Dev-Firmware flashen** (`pio run -e tsim7080g-s3-dev -t upload`) – der
-   Release-Build hat absichtlich kein USB-CDC (docs/esp32s3.md).
-4. Wenn der Upload hakt: BOOT halten → RST → RST los → BOOT los, erneut flashen.
-5. Erfolgskriterium: Der Sketch startet und gibt `[UT] Wake-Grund: …` aus.
+3. **Bring-up-Firmware flashen** (Selbsttest, führt automatisch durch die Prüfungen):
+
+   ```bash
+   cd firmware
+   pio run -e tsim7080g-s3-bringup -t upload
+   pio device monitor            # 115200
+   ```
+
+   Der Selbsttest prüft der Reihe nach: Chip/PSRAM, **I2C-Bus** (LIS3DH 0x18,
+   PMU 0x34), **PMU** (Akku/Spannung/TS-Pin), **LIS3DH** (WHO_AM_I + Achsen),
+   **Modem** (PWRKEY, AT, CCID, CSQ, CEREG, CPSMS, CEDRXS), **GNSS** (Antenne,
+   Fix bis 60 s), **I2S-Ton**, **Mikrofonpegel**, **Piezo**, **Taster**.
+
+   Danach stehen Kommandos im Monitor bereit:
+
+   | Taste | Wirkung |
+   |---|---|
+   | `r` | alle Tests erneut |
+   | `m` / `g` | nur Modem / nur GNSS |
+   | `t` / `i` | Ton / Mikrofonpegel |
+   | `p` / `l` / `b` | Piezo / LIS3DH / Taster |
+   | `s` | **Deep Sleep 60 s** – für die Strommessung M1 |
+   | `h` | Hilfe |
+
+4. Für den späteren Betrieb die normale Firmware flashen:
+   `pio run -e tsim7080g-s3-dev -t upload` (Entwicklung) bzw.
+   `pio run -e tsim7080g-s3 -t upload` (**Release für den Akkubetrieb** –
+   bewusst ohne USB-CDC, siehe `docs/esp32s3.md`).
+5. Wenn der Upload hakt: BOOT halten → RST → RST los → BOOT los, erneut flashen.
 
 > **Merksatz:** USB-C = ESP32-S3 (Flashen/Seriell), Micro-USB = nur Modem-Firmware.
 
