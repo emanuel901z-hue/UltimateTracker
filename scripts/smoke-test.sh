@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Smoke-Test für den Server-Stack (Traccar + Audio-Bridge).
+# Aufruf innerhalb der Distro (Stack muss laufen):
+#   bash scripts/smoke-test.sh
+#
+# Voraussetzungen: curl, python3; server/.env mit gesetzten Tokens.
+
+set -euo pipefail
+
+SERVER_DIR="${SERVER_DIR:-$HOME/UltimateTracker/server}"
+BASE="${BASE:-http://localhost:8085}"
+TRACCAR="${TRACCAR:-http://localhost:5055}"
+WEB="${WEB:-http://localhost:8082}"
+
+cd "$SERVER_DIR"
+DTOK=$(grep '^DEVICE_TOKEN=' .env | cut -d= -f2)
+PTOK=$(grep '^PARENT_TOKEN=' .env | cut -d= -f2)
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+python3 - "$TMP/test.wav" <<'PY'
+import math, struct, sys, wave
+w = wave.open(sys.argv[1], "wb")
+w.setnchannels(1)
+w.setsampwidth(2)
+w.setframerate(8000)
+w.writeframes(b"".join(struct.pack("<h", int(12000 * math.sin(2 * math.pi * 440 * i / 8000))) for i in range(8000)))
+w.close()
+PY
+
+pass() { echo "  OK   - $1"; }
+fail() { echo "  FAIL - $1"; exit 1; }
+
+echo "1) Health"
+curl -sf "$BASE/healthz" | grep -q '"status":"ok"' && pass "Bridge erreichbar" || fail "Bridge nicht erreichbar"
+
+echo "2) Uplink (Tracker -> Bridge)"
+UP=$(curl -sf -X POST -H "X-Auth-Token: $DTOK" -F device_id=TEST123 -F audio=@"$TMP/test.wav" "$BASE/api/v1/device/messages")
+echo "$UP" | grep -q '"converted":true' && pass "Upload + Konvertierung nach MP3" || fail "Upload fehlgeschlagen: $UP"
+
+echo "3) Eltern-Liste"
+curl -sf -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages?limit=3" | grep -q '"direction":"in"' && pass "Nachricht sichtbar" || fail "Liste leer"
+
+echo "4) Downlink (Eltern -> Bridge)"
+curl -sf -X POST -H "X-Auth-Token: $PTOK" -F device_id=TEST123 -F audio=@"$TMP/test.wav" "$BASE/api/v1/parent/messages" | grep -q '"converted":true' && pass "Konvertierung nach IMA-ADPCM" || fail "Downlink-Konvertierung fehlgeschlagen"
+
+echo "5) Tracker-Poll + Download"
+PEND=$(curl -sf -H "X-Auth-Token: $DTOK" "$BASE/api/v1/device/pending?device_id=TEST123")
+MID=$(printf '%s' "$PEND" | python3 -c 'import json,sys; print(json.load(sys.stdin)["message_id"] or "")')
+[ -n "$MID" ] && pass "Nachricht angekündigt ($MID)" || fail "Keine Nachricht im Poll"
+curl -sf -H "X-Auth-Token: $DTOK" -o "$TMP/down.wav" "$BASE/api/v1/device/messages/$MID/audio"
+head -c 12 "$TMP/down.wav" | grep -q "RIFF" && pass "WAV-Datei geladen ($(stat -c%s "$TMP/down.wav") Bytes)" || fail "Download ist keine WAV-Datei"
+
+echo "6) Suchmodus"
+curl -sf -X POST -H "X-Auth-Token: $PTOK" -F active=true "$BASE/api/v1/parent/search-mode" | grep -q '"search_mode":true' && pass "Suchmodus setzbar" || fail "Suchmodus fehlgeschlagen"
+
+echo "7) Auth-Schutz"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Auth-Token: falsch" "$BASE/api/v1/parent/messages")
+[ "$CODE" = "401" ] && pass "Falsches Token -> 401" || fail "Auth greift nicht (HTTP $CODE)"
+
+echo "8) Traccar Web"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' "$WEB")
+[ "$CODE" = "200" ] && pass "Web-UI erreichbar" || fail "Web-UI HTTP $CODE"
+
+echo "9) Traccar OsmAnd-Position"
+curl -sf "$TRACCAR/?id=TEST123&lat=48.1372&lon=11.5756&batt=87&timestamp=$(date +%s)" >/dev/null && pass "Position akzeptiert" || fail "Position abgelehnt"
+
+echo
+echo "Alle Smoke-Tests bestanden."

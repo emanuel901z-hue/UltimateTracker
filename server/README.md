@@ -1,0 +1,52 @@
+# Server-Stack (Docker Compose)
+
+Zwei Dienste im selben Docker-Netz:
+
+| Dienst | Port(s) | Aufgabe |
+|---|---|---|
+| `traccar` | 8082 (Web), 5055 (OsmAnd) | Positionen, Karte, Geofence, Akkustand |
+| `audio-bridge` | 8085 (Web/API) | Sprachnachrichten beide Richtungen, Eltern-UI, Poll-Queue |
+
+## Starten
+
+```bash
+cp .env.example .env     # Tokens setzen!
+docker compose up -d
+docker compose logs -f audio-bridge
+```
+
+- Eltern-UI: <http://localhost:8085> (Parent-Token eingeben)
+- Traccar: <http://localhost:8082> – **ersten Benutzer registrieren** (wird automatisch
+  Administrator; Traccar legt keinen Standard-Admin mehr an)
+- Tracker-Uploads: `http://<host>:5055/?id=<IMEI>&lat=..&lon=..&batt=..&timestamp=..`
+
+## Konfiguration
+
+- `server/.env` – Tokens und Suchmodusdauer (gitignored; Vorlage `.env.example`).
+- `server/traccar/traccar.xml` – Auto-Registrierung + Event-Weiterleitung an die Bridge.
+
+## API (Kurzfassung)
+
+| Methode | Pfad | Auth | Zweck |
+|---|---|---|---|
+| POST | `/api/v1/device/messages` | Device-Token | Audio-Uplink |
+| GET | `/api/v1/device/pending` | Device-Token | Nachricht/Suchmodus abfragen |
+| GET | `/api/v1/device/messages/{id}/audio` | Device-Token | Downlink-Datei |
+| POST | `/api/v1/parent/messages` | Parent-Token | Sprachnachricht aufnehmen |
+| GET | `/api/v1/parent/messages` | Parent-Token | Nachrichtenliste |
+| POST | `/api/v1/parent/search-mode` | Parent-Token | Suchmodus setzen |
+| POST | `/api/v1/traccar/events` | optional Token | Webhook-Empfänger |
+
+Token-Header: `X-Auth-Token: <token>`.
+
+## Daten
+
+- `audio-data`-Volume → `/data` im Container: `bridge.sqlite3`, `audio/`, `events.jsonl`.
+- `traccar-data`-Volume → Traccar-Datenbank.
+- Backup: `docker run --rm -v ultimatetracker_audio-data:/data -v "$PWD":/backup alpine tar czf /backup/audio-data.tgz -C /data .`
+
+## Sicherheit
+
+- Tokens stark wählen (`openssl rand -hex 24`), Traccar-Admin mit sicherem Passwort anlegen.
+- **Nicht** direkt ins Internet exponieren: Reverse-Proxy mit TLS davor (Caddy/Traefik),
+  siehe `../docs/deployment.md` (Abschnitt „TLS“).

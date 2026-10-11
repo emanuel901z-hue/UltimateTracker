@@ -1,0 +1,11 @@
+# Zeilenenden: LF im Repo (Shell-Skripte, Dockerfiles); Windows-Skripte CRLF.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Binärdateien
+*.png binary
+*.jpg binary
+*.pdf binary
+*.stl binary
+*.3mf binary

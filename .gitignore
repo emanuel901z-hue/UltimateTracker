@@ -1,0 +1,31 @@
+# Secrets / lokale Konfiguration
+.env
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Server-Laufzeitdaten (Docker-Volumes werden getrennt gesichert)
+server/traccar/data/
+server/audio-bridge/data/
+*.db
+*.sqlite3
+
+# Lokal erzeugte Zugangsdaten (nie committen)
+ADMIN-ZUGANG.txt
+server/ADMIN-ZUGANG.txt
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.code-workspace

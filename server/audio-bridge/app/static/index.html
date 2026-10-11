@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UltimateTracker – Eltern</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 44rem; padding: 1rem; }
+  h1 { font-size: 1.3rem; }
+  label { display: block; margin: .4rem 0; }
+  input[type=text], input[type=password] { width: 100%; padding: .4rem; }
+  button { padding: .5rem .9rem; margin-right: .4rem; }
+  #status { margin-left: .4rem; opacity: .8; }
+  ul { list-style: none; padding: 0; }
+  li { border-top: 1px solid #8884; padding: .5rem 0; }
+  audio { display: block; margin-top: .3rem; width: 100%; }
+</style>
+</head>
+<body>
+<h1>UltimateTracker – Eltern</h1>
+
+<label>Gerät (Tracker-ID / IMEI)
+  <input id="device" type="text" placeholder="z. B. 860000000000000" autocomplete="off">
+</label>
+<label>Parent-Token
+  <input id="token" type="password" autocomplete="off">
+</label>
+
+<div>
+  <button id="rec">Aufnahme starten</button>
+  <button id="send" disabled>Senden</button>
+  <span id="status"></span>
+</div>
+
+<label><input type="checkbox" id="search"> Suchmodus aktiv (Tracker piept, pollt häufiger)</label>
+
+<h2>Nachrichten</h2>
+<button id="refresh">Aktualisieren</button>
+<ul id="list"></ul>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const state = {
+  device: localStorage.getItem('ut_device') || '',
+  token: localStorage.getItem('ut_token') || '',
+  recorder: null,
+  chunks: [],
+  blob: null,
+};
+
+$('device').value = state.device;
+$('token').value = state.token;
+$('device').addEventListener('input', (e) => {
+  state.device = e.target.value.trim();
+  localStorage.setItem('ut_device', state.device);
+});
+$('token').addEventListener('input', (e) => {
+  state.token = e.target.value.trim();
+  localStorage.setItem('ut_token', state.token);
+});
+
+function setStatus(text) { $('status').textContent = text; }
+
+$('rec').addEventListener('click', async () => {
+  if (state.recorder && state.recorder.state === 'recording') {
+    state.recorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.chunks = [];
+    const rec = new MediaRecorder(stream);
+    state.recorder = rec;
+    rec.addEventListener('dataavailable', (e) => state.chunks.push(e.data));
+    rec.addEventListener('stop', () => {
+      stream.getTracks().forEach((t) => t.stop());
+      state.blob = new Blob(state.chunks, { type: rec.mimeType || 'audio/webm' });
+      $('rec').textContent = 'Aufnahme starten';
+      $('send').disabled = false;
+      setStatus('Aufnahme bereit (' + Math.round(state.blob.size / 1024) + ' kB)');
+    });
+    rec.start();
+    $('rec').textContent = 'Stopp';
+    setStatus('Aufnahme läuft …');
+  } catch (err) {
+    setStatus('Mikrofon nicht verfügbar: ' + err.message);
+  }
+});
+
+$('send').addEventListener('click', async () => {
+  if (!state.blob) return;
+  if (!state.device || !state.token) { setStatus('Bitte Gerät und Token angeben.'); return; }
+  const fd = new FormData();
+  fd.append('device_id', state.device);
+  fd.append('audio', state.blob, 'message.webm');
+  setStatus('Sende …');
+  const res = await fetch('/api/v1/parent/messages', {
+    method: 'POST',
+    headers: { 'X-Auth-Token': state.token },
+    body: fd,
+  });
+  if (res.ok) {
+    setStatus('Gesendet – der Tracker holt die Nachricht beim nächsten Poll.');
+    state.blob = null;
+    $('send').disabled = true;
+    load();
+  } else {
+    setStatus('Fehler: HTTP ' + res.status);
+  }
+});
+
+$('search').addEventListener('change', async (e) => {
+  if (!state.token) { setStatus('Bitte Token angeben.'); return; }
+  const fd = new FormData();
+  fd.append('active', e.target.checked ? 'true' : 'false');
+  const res = await fetch('/api/v1/parent/search-mode', {
+    method: 'POST',
+    headers: { 'X-Auth-Token': state.token },
+    body: fd,
+  });
+  setStatus(res.ok ? (e.target.checked ? 'Suchmodus aktiv.' : 'Suchmodus beendet.') : 'Fehler: HTTP ' + res.status);
+});
+
+$('refresh').addEventListener('click', load);
+
+async function load() {
+  if (!state.token) { setStatus('Token fehlt.'); return; }
+  const res = await fetch('/api/v1/parent/messages', { headers: { 'X-Auth-Token': state.token } });
+  if (!res.ok) { setStatus('Liste: HTTP ' + res.status); return; }
+  const data = await res.json();
+  const list = $('list');
+  list.innerHTML = '';
+  for (const m of data.messages) {
+    const li = document.createElement('li');
+    const when = new Date(m.created_at).toLocaleString();
+    li.textContent = when + ' – ' + (m.direction === 'in' ? 'vom Tracker' : 'an Tracker') + ' (' + m.status + ')';
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    fetch(m.audio_url, { headers: { 'X-Auth-Token': state.token } })
+      .then((r) => r.blob())
+      .then((b) => { audio.src = URL.createObjectURL(b); })
+      .catch(() => {});
+    li.appendChild(audio);
+    list.appendChild(li);
+  }
+}
+
+load();
+</script>
+</body>
+</html>

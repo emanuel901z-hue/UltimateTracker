@@ -1,0 +1,41 @@
+name: ultimatetracker
+
+services:
+  traccar:
+    # TODO: Version pinnen, sobald eine Referenzversion verifiziert ist.
+    image: traccar/traccar:latest
+    container_name: ut-traccar
+    restart: unless-stopped
+    ports:
+      - "8082:8082"   # Web-UI
+      - "5055:5055"   # OsmAnd-Protokoll (Tracker-Uploads)
+    volumes:
+      - ./traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+      - traccar-data:/opt/traccar/data
+    networks:
+      - utnet
+
+  audio-bridge:
+    build: ./audio-bridge
+    container_name: ut-audio-bridge
+    restart: unless-stopped
+    ports:
+      - "8085:8085"   # Web-UI + API (Tracker & Eltern)
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - audio-data:/data
+    depends_on:
+      - traccar
+    networks:
+      - utnet
+
+volumes:
+  traccar-data:
+  audio-data:
+
+networks:
+  utnet:
+    driver: bridge
