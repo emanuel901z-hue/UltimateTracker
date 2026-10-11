@@ -85,8 +85,12 @@ curl -s "http://localhost:5055/?id=TEST123&lat=48.1372&lon=11.5756&batt=87&times
 
 ## 5. Eltern-UI & API
 
-- <http://localhost:8085> → Geräte-ID (IMEI) und Parent-Token eintragen,
+- Eltern-UI: <http://localhost:8085> → Geräte-ID (IMEI) und Parent-Token eintragen,
   Nachricht aufnehmen und senden; Suchmodus-Schalter.
+- Optional (Profil `findmy`): Google-Find-Hub-WebUI auf <http://localhost:4321>
+  (Zugangsdaten `WEBUI_USER`/`WEBUI_PASSWORD` aus `server/.env`),
+  Apple-Endpunkt `macless-haystack` auf Port 6176, Anisette auf 6969.
+  Details: [`findmy.md`](findmy.md).
 - Tracker-Endpunkte (mit `X-Auth-Token: <DEVICE_TOKEN>`):
   - `GET /api/v1/device/pending?device_id=<IMEI>`
   - `POST /api/v1/device/messages` (Multipart: `device_id`, `audio`)

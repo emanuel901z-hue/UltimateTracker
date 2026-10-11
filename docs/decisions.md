@@ -2,6 +2,22 @@
 
 Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung – Folgen.
 
+## D-011 – 2026-10-11 – Google-Pfad: WebUI als Standard, Microservice als Minimal-Option
+
+- **Entscheidung:** Für Google Find Hub läuft standardmäßig die
+  `google-findmy-webui` (Profil `findmy`, Port 4321). Der reine Microservice
+  bleibt als Profil `google-minimal` erhalten und baut jetzt aus dem
+  **Traccar-Fork** (`traccar/google-find-hub-sync`) statt aus einem Dritt-Fork.
+- **Begründung:** Die WebUI enthält den offenen Key-Rotations-Fix
+  (leonboe1/GoogleFindMyTools#114), bietet Geräte-/Schedule-Verwaltung, ein
+  Traccar-OsmAnd-Preset und Firmware-Build/-Flash im Browser – genau die
+  „Initialisieren und Auswerten“-Anforderungen. Der Traccar-Fork ist die
+  vertrauenswürdigste Minimal-Quelle, hat den Bug aber noch.
+- **Folgen:** `docs/findmy.md` beschreibt beide Wege plus Alternativen
+  (Traccar Relay, MQTT-Fork, go-findmy, ioBroker). WebUI braucht
+  `WEBUI_USER`/`WEBUI_PASSWORD` (Default: HTTP ohne Auth) und optional
+  `SECRETS_ENCRYPTION_KEY`.
+
 ## D-010 – 2026-10-11 – Geräte-Registry mit IMEI als Primär-ID
 
 - **Entscheidung:** Die Bridge führt eine Geräte-Registry (`id` = IMEI, dazu Name,

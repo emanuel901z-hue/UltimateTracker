@@ -47,11 +47,13 @@ Token-Header: `X-Auth-Token: <token>`.
 | Profil | Dienste | Zweck |
 |---|---|---|
 | (Standard) | `traccar`, `audio-bridge` | Ortung, Geofence, Sprachnachrichten, Eltern-UI |
-| `findmy` | `anisette`, `macless-haystack`, `google-findmy` | Find My (Apple/Google) – **experimentell**, siehe `../docs/findmy.md` |
+| `findmy` | `anisette`, `macless-haystack`, `google-findmy-webui` | Find My: Apple + Google-WebUI (Port **4321**) – **experimentell**, siehe `../docs/findmy.md` |
+| `google-minimal` | `google-findmy` | Nur Google-Microservice (Port **5500**), ohne WebUI – Minimal-Alternative |
 
 ```bash
 docker compose up -d                              # Standard
-docker compose --profile findmy up -d             # zusätzlich Find My
+docker compose --profile findmy up -d             # + Apple/Google Find My (empfohlen)
+docker compose --profile google-minimal up -d     # nur Google-Microservice (minimal)
 ```
 
 ## Daten

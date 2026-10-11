@@ -1,7 +1,13 @@
-# Gegenstück für Google Find Hub (ehem. Find My Device) – EXPERIMENTELL.
+# Gegenstück für Google Find Hub (ehem. Find My Device) – MINIMAL-VARIANTE.
 #
-# Basis: https://github.com/rolsch/google-find-hub-sync
-#   (Fork von leonboe1/GoogleFindMyTools; enthält microservice.py + Dockerfile)
+# Basis: https://github.com/traccar/google-find-hub-sync
+#   (Traccar-Organisation; Fork von leonboe1/GoogleFindMyTools, enthält
+#    microservice.py + Dockerfile)
+#
+# Bekannter Bug: Rotiert Google die E2EE-Owner-Keys, schlägt die Entschlüsselung
+# fehl (owner_key_version=-1). Fix ist als offener PR leonboe1/GoogleFindMyTools#114
+# vorhanden, aber nicht gemerged. Empfohlene Alternative mit Fix + Web-UI:
+# Profil "findmy" → google-findmy-webui (siehe docs/findmy.md).
 #
 # Wichtig:
 # - Die Erst-Authentifizierung braucht Google Chrome auf einem Desktop
@@ -22,7 +28,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-RUN git clone --depth 1 --branch "${GIT_REF}" https://github.com/rolsch/google-find-hub-sync.git . \
+RUN git clone --depth 1 --branch "${GIT_REF}" https://github.com/traccar/google-find-hub-sync.git . \
  && pip install --no-cache-dir -r requirements.txt
 
 ENV PYTHONUNBUFFERED=1 \

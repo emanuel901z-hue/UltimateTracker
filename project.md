@@ -206,9 +206,11 @@ Herstellerdokumentation geprüft (siehe `docs/hardware-review.md`).
   HTML5-Oberfläche bereit, hält die Nachrichten-Queue für den Poll des Trackers und
   führt die **Geräte-Registry** (IMEI ↔ MSISDN ↔ Name, Auto-Registrierung).
 - **Optional (Profil `findmy`, experimentell):** `anisette` + `macless-haystack`
-  (Apple Find My) und `google-findmy` (Google Find Hub). Positionen landen über
-  `/api/v1/findmy/locations` in der Bridge und werden optional an Traccar
-  weitergereicht. Details: [`docs/findmy.md`](docs/findmy.md).
+  (Apple Find My) und die **Google-Find-Hub-WebUI** (Port 4321: Geräteverwaltung,
+  Scheduling, Firmware-Build im Browser, Traccar-OsmAnd-Preset). Positionen können
+  direkt an Traccar oder über `/api/v1/findmy/locations` in die Bridge laufen.
+  Minimal-Alternative ohne WebUI: Profil `google-minimal` (Traccar-Fork).
+  Details: [`docs/findmy.md`](docs/findmy.md).
 - Hinweis: Audionachrichten lassen sich **nicht** in den Traccar-Event-Feed
   injizieren (keine API dafür). Die Bridge ist für Audio die führende Oberfläche;
   Traccar liefert Karte und Geofence-Ereignisse.

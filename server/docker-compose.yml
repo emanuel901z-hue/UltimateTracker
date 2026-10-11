@@ -67,12 +67,36 @@ services:
     networks:
       - utnet
 
+  google-findmy-webui:
+    # EMPFOHLENER Google-Find-Hub-Weg: Web-UI mit Key-Rotations-Fix (PR #114),
+    # Geräte-/Scheduling-Verwaltung, Traccar-Preset und Firmware-Build im Browser.
+    # Details: docs/findmy.md
+    image: ghcr.io/p6g9yhk6/googlefindmytools:latest
+    container_name: ut-google-findmy-webui
+    profiles: [findmy]
+    restart: unless-stopped
+    ports:
+      - "4321:4321"
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      # Basis-Auth aktivieren (dringend empfohlen, siehe docs/findmy.md):
+      HTTP_USER: ${WEBUI_USER:-}
+      HTTP_PASSWORD: ${WEBUI_PASSWORD:-}
+      # Verschlüsselung der Tokens at rest (jeder String; Verlust = neu einloggen):
+      SECRETS_ENCRYPTION_KEY: ${WEBUI_SECRETS_KEY:-}
+      GFMT_DATA_DIR: /data
+    volumes:
+      - google-findmy-data:/data
+    networks:
+      - utnet
+
   google-findmy:
-    # Google Find Hub (Find My Device): Microservice aus google-find-hub-sync
-    # Registrierung der ESP32-Tracker + Push der Standorte an die Bridge.
+    # MINIMAL-ALTERNATIVE (Profil "google-minimal"): reiner Microservice aus dem
+    # Traccar-Fork; kein Web-UI, aber schlanker. Bekannter Key-Rotations-Bug –
+    # dann auf die WebUI wechseln. Details: docs/findmy.md
     build: ./findmy-google
     container_name: ut-google-findmy
-    profiles: [findmy]
+    profiles: [google-minimal]
     restart: unless-stopped
     ports:
       - "5500:5500"
@@ -94,6 +118,7 @@ volumes:
   anisette-data:
   macless-data:
   google-findmy-auth:
+  google-findmy-data:
 
 networks:
   utnet:

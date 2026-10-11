@@ -16,7 +16,7 @@ Initialisierung (Keys/Geräteregistrierung) und die Auswertung – plus die Gren
 |---|---|---|
 | Offiziell für DIY? | nein (OpenHaystack) | nein (Community-Tools) |
 | Konto nötig | Apple-ID mit 2FA (**nur SMS-2FA**) | Google-Konto + Chrome (Desktop) |
-| Docker-Gegenstück | `anisette` + `macless-haystack` | `google-findmy` (Microservice) |
+| Docker-Gegenstück | `anisette` + `macless-haystack` | `google-findmy-webui` (empfohlen) bzw. `google-findmy` (minimal) |
 | Erst-Setup | interaktiv (Apple-ID-Login im Container) | interaktiv (Chrome-Login auf Desktop) |
 | Zuverlässigkeit | wackelig (Apple-Filter) | experimentell |
 | Abdeckung | sehr hoch (iPhone-Dichte) | hoch (Android-Dichte) |
@@ -58,27 +58,73 @@ Auswertung: Web-Frontend <https://dchristl.github.io/macless-haystack/>
 Den Endpunkt vor dem Exponieren per `config.ini` (`endpoint_user`/`endpoint_pass`)
 absichern.
 
-## 3. Google: google-findmy-Microservice
+## 3. Google: WebUI (empfohlen) oder Minimal-Microservice
+
+Hintergrund: Das Google-Gegenstück basiert auf `GoogleFindMyTools` und existiert in
+zwei Ausprägungen – **traccar/google-find-hub-sync** (Traccar-Organisation; Basis
+der Minimal-Variante) und die **GoogleFindMyToolsWebUi** (P6g9YHK6), die den offenen
+Fix für den Key-Rotations-Bug (leonboe1/GoogleFindMyTools#114) bereits enthält und
+zusätzlich Web-UI, Scheduling und Firmware-Build mitbringt.
+
+### 3a. WebUI – empfohlen (Profil `findmy`, Port 4321)
 
 ```bash
 cd server
-docker compose --profile findmy up -d google-findmy
+docker compose --profile findmy up -d google-findmy-webui
 ```
 
-Erst-Setup auf dem Desktop mit Chrome (einmalig):
+Dann <http://localhost:4321> → Config → „Sign in with Google“ (Chrome/Xvfb/noVNC
+werden beim ersten Login im Container nachinstalliert; der Login läuft direkt im
+Browser). Kernfunktionen:
 
-1. `git clone https://github.com/rolsch/google-find-hub-sync` (oder ZIP).
-2. `pip install -r requirements.txt`, dann `python main.py` → Chrome-Login;
-   Ergebnis: `Auth/secrets.json`.
-3. Datei ins Volume kopieren:
-   `docker cp Auth/secrets.json ut-google-findmy:/app/Auth/secrets.json`
-4. Optional im Tool: eigenen ESP32-Tracker registrieren (`r` drücken) und die
-   Firmware aus `ESP32Firmware/` flashen.
-5. Google-Anforderung: Auf einem Android-Gerät „Find My Device“ aktivieren
-   („Mit Netzwerk in allen Bereichen“), sonst fehlen die E2EE-Daten.
+- Geräteliste mit „Locate“/„Play sound“, **Poll-Schedule pro Gerät**
+- Ziele mit Presets: **Traccar (OsmAnd)**, Nextcloud PhoneTrack, GpsLogger,
+  OwnTracks, uLogger, Locus Map … plus generische HTTP-Ziele mit
+  `{{latitude}}`-Platzhaltern → auch unser Bridge-Ingest ist als Ziel nutzbar
+  (`POST http://audio-bridge:8085/api/v1/findmy/locations`)
+- **ESP32-Tracker aus der UI registrieren** und Firmware im Browser bauen/flashen
+  (Web Serial) – passt direkt zu den geplanten Beacon-„Mods“
+- Logs + Apprise-Benachrichtigungen (ntfy, Telegram, E-Mail …), Rate-Limiting,
+  `/metrics` (Prometheus)
 
-Der Microservice läuft auf Port 5500 (Bearer-Token = `GOOGLE_FINDMY_TOKEN`) und
-pusht Standorte an `PUSH_URL` → `http://audio-bridge:8085/api/v1/findmy/locations`.
+Sicherheit (Empfehlungen des Projekts): Default ist HTTP ohne Auth → unbedingt
+`WEBUI_USER`/`WEBUI_PASSWORD` setzen; optional `HTTPS_ENABLED=1` bzw. eigenes
+Zertifikat; `SECRETS_ENCRYPTION_KEY` für Verschlüsselung der Tokens at rest.
+Alle Daten liegen im Volume `google-findmy-data`.
+
+### 3b. Minimal-Microservice (Profil `google-minimal`, Port 5500)
+
+```bash
+cd server
+docker compose --profile google-minimal up -d google-findmy
+```
+
+Erst-Setup (Desktop mit Chrome, einmalig): `git clone
+https://github.com/traccar/google-find-hub-sync`, `pip install -r requirements.txt`,
+`python main.py` (Login + optional ESP32-Registrierung mit `r`), dann
+`docker cp Auth/secrets.json ut-google-findmy:/app/Auth/secrets.json`.
+Der Service pusht anschließend per `PUSH_URL` an die Bridge.
+
+**Bekannter Bug:** Rotiert Google die E2EE-Owner-Keys des Kontos, schlägt die
+Entschlüsselung fehl (Code fragt immer `owner_key_version=-1` an). Fix ist als
+offener PR leonboe1/GoogleFindMyTools#114 vorhanden, aber nicht gemerged →
+in diesem Fall auf 3a (WebUI) wechseln.
+
+### 3c. Weitere Anbindungen (nicht in unserem Stack verbaut)
+
+| Option | Ansatz | Wann sinnvoll |
+|---|---|---|
+| Traccar Relay (Android-App) | Offizielle App verbindet Find Hub mit Traccar | Wenn ein Handy dauerhaft online ist; braucht **Preview-Traccar** + `notificator.traccar.key` |
+| Home-Assistant-Integration (BSkando/GoogleFindMy-HA) | Geräte/Standorte als HA-Entitäten | Wenn Home Assistant die Zentrale ist |
+| MQTT-Fork (DominicWindisch) | Standorte → MQTT (Home-Assistant-Discovery) | Wenn MQTT im Haushalt läuft |
+| go-findmy (dylanmazurek) | Go-Binary, FCM-Echtzeit, MQTT-Publisher | Schlanker eigener Service, Go-Stack |
+
+*Hinweis:* Ein ioBroker-Adapter für Google Find Hub war nicht verifizierbar
+(ioBroker-Adapter existieren für Apple-Geräte, z. B. `ioBroker.apple-find-me`).
+
+**Google-Konto-Voraussetzung (alle Wege):** Auf einem Android-Gerät „Find My
+Device“ mit „Mit Netzwerk in allen Bereichen“ aktivieren, sonst fehlen die
+E2EE-Daten.
 
 ## 4. Ingest & Auswertung in der Bridge
 
@@ -121,5 +167,10 @@ entscheiden. Keine offiziellen APIs → Nutzung auf eigenes Risiko.
 - macless-haystack – <https://github.com/dchristl/macless-haystack>
 - OpenHaystack – <https://github.com/seemoo-lab/openhaystack>
 - Apple-Filterproblem – <https://github.com/seemoo-lab/openhaystack/issues/273>
-- google-find-hub-sync (Microservice) – <https://github.com/rolsch/google-find-hub-sync>
+- Traccar-Fork (Minimal-Variante) – <https://github.com/traccar/google-find-hub-sync>
+- GoogleFindMyToolsWebUi (empfohlen) – <https://github.com/P6g9YHK6/GoogleFindMyToolsWebUi>
 - GoogleFindMyTools (Original) – <https://github.com/leonboe1/GoogleFindMyTools>
+- Key-Rotations-Fix (offener PR) – <https://github.com/leonboe1/GoogleFindMyTools/pull/114>
+- Traccar Relay (Android) – <https://www.traccar.org/relay/>
+- MQTT-Fork – <https://github.com/DominicWindisch/googlefindmytools-homeassistant>
+- go-findmy – <https://github.com/dylanmazurek/go-findmy>
