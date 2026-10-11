@@ -26,6 +26,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/hardware-review.md` | Prüfbericht: verifizierte Annahmen, Risiken, Quellen |
 | `docs/architecture.md` | Systemarchitektur, Datenflüsse, Energiebudget |
 | `docs/measurement-plan.md` | Mess- und Testplan für die Inbetriebnahme |
+| `docs/bring-up.md` | Erste Schritte mit der Hardware (Tag 1, Sicherheit, Prüfungen) |
 | `docs/optimizations.md` | Optimierungs-Backlog (Server & Firmware, priorisiert) |
 | `docs/simulation.md` | Tests/Simulation ohne Hardware (Simulator, native Tests, QEMU) |
 | `docs/deployment.md` | Server-Deployment (WSL, Docker, Thin Client) |
@@ -34,7 +35,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/decisions.md` | Entscheidungsprotokoll (ADR-Kurzform) |
 | `firmware/` | ESP32-S3-Firmware (PlatformIO, Skelett) |
 | `server/` | Docker-Stack: Traccar + Audio-Bridge |
-| `scripts/` | WSL-Sync, Smoke-Test, Tracker-Simulator, Echo-Server, Backups |
+| `scripts/` | WSL-Sync, Smoke-Test, Tracker-Simulator, Echo-Server, Backups, Mess-Session |
 
 ## Schnellstart (Server)
 

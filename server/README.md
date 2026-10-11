@@ -39,8 +39,19 @@ docker compose logs -f audio-bridge
 | POST | `/api/v1/findmy/locations` | optional Token | Find-My-Ingest (Apple/Google) |
 | GET | `/api/v1/parent/findmy/locations` | Parent-Token | Find-My-Positionen |
 | POST | `/api/v1/traccar/events` | optional Token | Webhook-Empfänger |
+| GET | `/api/v1/parent/push/key` | Parent-Token | VAPID-Schlüssel für die PWA |
+| POST/DELETE | `/api/v1/parent/push/subscribe` | Parent-Token | Push-Abo registrieren/entfernen |
+| POST | `/api/v1/parent/push/test` | Parent-Token | Testbenachrichtigung senden |
+| GET/POST/DELETE | `/api/v1/parent/firmware[/{version}]` | Parent-Token | Firmware verwalten (OTA) |
+| GET | `/api/v1/device/firmware/latest?fw=` | Device-Token | OTA-Angebot |
+| GET | `/api/v1/device/firmware/{version}/download` | Device-Token | Firmware-Binary |
 
 Token-Header: `X-Auth-Token: <token>`.
+
+**Push/PWA:** Die Eltern-UI ist als PWA installierbar und kann Web-Push
+(„Auf diesem Gerät aktivieren“). Push benötigt eine **sichere Verbindung** –
+HTTPS über das Caddy-Profil (`--profile tls`) oder `localhost`.
+Zusätzlich zu Push können Apprise-Ziele (`APPRISE_URLS`) benachrichtigt werden.
 
 ## Compose-Profile
 

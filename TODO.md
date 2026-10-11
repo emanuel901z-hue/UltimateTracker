@@ -93,6 +93,8 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 - [x] A1 Healthchecks + Startreihenfolge im Compose *(2026-10-11)*
 - [x] A2 Versionen pinnen (Traccar 6.16.0, WebUI-Digest, Bridge-Commit) *(2026-10-11)*
 - [x] A4 Benachrichtigung bei neuer Nachricht (Apprise; `APPRISE_URLS` in `.env`) *(2026-10-11)*
+- [x] **Web-Push + PWA** (Service Worker, VAPID, Abo in der UI) *(2026-10-11)*
+- [x] Hardware-Phase vorbereitet: `docs/bring-up.md` + `scripts/new-measurement-session.sh` *(2026-10-11)*
 - [x] A6 Bridge-Härtung: WAL, Upload-Limit, Fail-fast, Retention *(2026-10-11)*
 - [x] A7 Backups (`scripts/backup-volumes.sh`) + Log-Rotation *(2026-10-11)*
 - [x] A8 CI für Server **und** Firmware (`.github/workflows/ci.yml`) *(2026-10-11)*

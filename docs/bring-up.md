@@ -1,0 +1,67 @@
+# Bring-up: die ersten Stunden mit der Hardware
+
+Reihenfolge für den Tag, an dem das Board ankommt. Ziel: erst **prüfen**, dann
+messen, dann entwickeln. Ablauf/Details: `docs/measurement-plan.md`,
+Messprotokoll: `scripts/new-measurement-session.sh`.
+
+## 0. Auspacken und prüfen (ohne Strom!)
+
+| Schritt | Worauf achten |
+|---|---|
+| Board-Revision | Rückseite: **„T-SIM7080G V1.0"** + PMU-Chip (AXP2101) → gilt unser Pinplan (`docs/pinout.md`) |
+| Lieferumfang | LTE-Antenne? **Aktive GNSS-Antenne**? (Falls nicht: nachbestellen, ohne gibt es keinen Fix) |
+| SIM-Karte | **Nano-SIM** (1NCE). Wichtig: **vor** dem Einschalten einlegen (LilyGO-Vorgabe) |
+| Sichtprüfung | Lötbrücken, verbogene Pins, Akku-Polster |
+| IO2 am Header? | Durchgangsprüfung/Ansehen: unser I2C-SDA-Plan nutzt IO1/IO2 (Fallback: IO10/IO11) |
+| Board-Maße | nachmessen (CAD-Grundlage), inkl. Höhe mit/ohne 18650-Halter |
+
+## 1. Akku vorbereiten (noch nicht einstecken)
+
+1. **Polung messen**: JST-Stecker des 103450-LiPo – Rot = Plus. Gegen das Board
+   (Pinbelegung) prüfen. Falsch gepolt = Boardschaden.
+2. Steckertyp prüfen (LilyGO liefert ein 2-Pin-Kabel mit; ggf. umcrimpen).
+3. Minuspol/Pluspol am Board-Lötpad bzw. Stecker markieren.
+
+## 2. Erstes Einschalten – nur über USB-C
+
+1. USB-C (der obere Anschluss) an den PC, **ohne** Akku.
+2. Seriellen Monitor öffnen (115200) – das Board meldet sich als USB-CDC.
+3. **Dev-Firmware flashen** (`pio run -e tsim7080g-s3-dev -t upload`) – der
+   Release-Build hat absichtlich kein USB-CDC (docs/esp32s3.md).
+4. Wenn der Upload hakt: BOOT halten → RST → RST los → BOOT los, erneut flashen.
+5. Erfolgskriterium: Der Sketch startet und gibt `[UT] Wake-Grund: …` aus.
+
+> **Merksatz:** USB-C = ESP32-S3 (Flashen/Seriell), Micro-USB = nur Modem-Firmware.
+
+## 3. Funktionstest ohne Akku (Stromversorgung über USB)
+
+| Test | Erwartung |
+|---|---|
+| Modem-AT | `AT` → `OK` (im Dev-Build per Serial-Konsole) |
+| SIM erkannt | `AT+CCID` liefert die ICCID |
+| Netz | `AT+CEREG?` → `0,1` (oder `0,5` Roaming) |
+| GNSS | Antenne angeschlossen, `AT+SGPIO=0,5,1,1`, dann `AT+CGNSPWR=1`, `AT+CGNSINF` → Fix |
+| PMU | Akkustand-Auslesung (später mit Akku) |
+
+## 4. Akku anschließen und M1 messen
+
+1. Board ausschalten, Akku einstecken (Polung geprüft!), Schalter auf ON.
+2. **Ruhestrom messen** (M1): USB-Strommessgerät bzw. Shunt/µCurrent in der
+   Akkuleitung. Erwartung laut LilyGO: 0,36–1,1 mA (N16R8 mit Octal-PSRAM).
+3. Werte ins Messprotokoll. Auffällig hoch? Prüfen: LEDs, PSRAM-Anteil,
+   PMU-Rails, ob das Mikrofon wirklich aus ist (Load-Switch!).
+
+## 5. Dann der Reihe nach
+
+M2 (I2S) → M3 (GNSS/LTE) → M4 (SMS) → M5 (Laden) → M6 (Ende-zu-Ende) →
+M7 (Antennen) → M8 (48-h-Laufzeit).
+
+Nach M1/M3 steht auch die Entscheidung für **B1 (Modem-Power-Modus)** an:
+`MODEM_POWER_MODE` in `firmware/include/config.h` bzw. per Provisioning setzen.
+
+## 6. Sicherheit (kurz)
+
+- LiPo nie tiefentladen lagern, nicht quetschen, nicht im geschlossenen TPU-Gehäuse laden ohne Aufsicht.
+- Antenne **immer** angeschlossen lassen, bevor das Modem sendet (sonst hohe Reflexionen/Erwärmung).
+- Board nicht auf leitfähige Unterlagen legen (Akku + offene Pads).
+- Beim Messen am Akku: Kurzschluss vermeiden, Shunt zuerst, dann einschalten.

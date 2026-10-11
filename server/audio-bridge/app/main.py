@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 AUDIO_DIR = DATA_DIR / "audio"
@@ -65,6 +65,7 @@ SEARCH_MODE_MINUTES = env_int("SEARCH_MODE_MINUTES", 30)
 MAX_UPLOAD_MB = env_float("MAX_UPLOAD_MB", 2.0)
 RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
 APPRISE_URLS = os.environ.get("APPRISE_URLS", "")
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@example.org")
 POLL_INTERVAL_S = env_int("POLL_INTERVAL_S", 900)
 SEARCH_POLL_INTERVAL_S = env_int("SEARCH_POLL_INTERVAL_S", 60)
 
@@ -146,6 +147,16 @@ def init_db() -> None:
                    size INTEGER NOT NULL,
                    notes TEXT NOT NULL DEFAULT '',
                    uploaded_at TEXT NOT NULL
+               )"""
+        )
+
+
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS push_subscriptions (
+                   endpoint TEXT PRIMARY KEY,
+                   p256dh TEXT NOT NULL,
+                   auth TEXT NOT NULL,
+                   created_at TEXT NOT NULL
                )"""
         )
 
@@ -303,6 +314,97 @@ def notify_async(title: str, body: str) -> None:
     except RuntimeError:
         return
     asyncio.create_task(asyncio.to_thread(notify, title, body))
+
+
+# --- Web-Push (VAPID, PWA) --------------------------------------------------
+
+
+def get_vapid_keys() -> tuple[str, str]:
+    """VAPID-Schlüssel aus dem Zustandsspeicher; beim ersten Aufruf erzeugen."""
+    private_pem = state_get("vapid_private_pem")
+    public_b64 = state_get("vapid_public_b64")
+    if private_pem and public_b64:
+        return private_pem, public_b64
+    try:
+        import base64
+
+        from cryptography.hazmat.primitives import serialization
+        from py_vapid import Vapid01
+    except ImportError as exc:
+        raise RuntimeError("pywebpush/py_vapid nicht installiert") from exc
+
+    vapid = Vapid01()
+    vapid.generate_keys()
+    private_pem = vapid.private_pem().decode()
+    raw = vapid.public_key.public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+    )
+    public_b64 = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+    state_set("vapid_private_pem", private_pem)
+    state_set("vapid_public_b64", public_b64)
+    return private_pem, public_b64
+
+
+def push_subscription_count() -> int:
+    with db() as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM push_subscriptions").fetchone()
+    return int(row["n"])
+
+
+def send_push(title: str, body: str) -> dict:
+    """Sendet eine Web-Push-Nachricht an alle registrierten Browser-Abos."""
+    try:
+        from pywebpush import WebPushException, webpush
+    except ImportError:
+        print("[push] pywebpush nicht installiert – übersprungen", flush=True)
+        return {"sent": 0, "removed": 0, "error": "pywebpush fehlt"}
+    try:
+        private_pem, _ = get_vapid_keys()
+    except Exception as exc:
+        print(f"[push] VAPID nicht verfügbar: {exc!r}", flush=True)
+        return {"sent": 0, "removed": 0, "error": str(exc)}
+
+    payload = json.dumps({"title": title, "body": body})
+    with db() as conn:
+        rows = conn.execute("SELECT endpoint, p256dh, auth FROM push_subscriptions").fetchall()
+
+    sent = 0
+    stale: list[str] = []
+    for row in rows:
+        info = {
+            "endpoint": row["endpoint"],
+            "keys": {"p256dh": row["p256dh"], "auth": row["auth"]},
+        }
+        try:
+            webpush(
+                subscription_info=info,
+                data=payload,
+                vapid_private_key=private_pem,
+                vapid_claims={"sub": VAPID_SUBJECT},
+                timeout=10,
+            )
+            sent += 1
+        except WebPushException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            print(f"[push] Fehler (HTTP {status}): {exc!r}", flush=True)
+            if status in (404, 410):
+                stale.append(row["endpoint"])  # Abo ist nicht mehr gültig
+        except Exception as exc:
+            print(f"[push] Fehler: {exc!r}", flush=True)
+
+    if stale:
+        with db() as conn:
+            for endpoint in stale:
+                conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+    return {"sent": sent, "removed": len(stale), "total": len(rows)}
+
+
+def push_async(title: str, body: str) -> None:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    asyncio.create_task(asyncio.to_thread(send_push, title, body))
 
 
 # --- Retention --------------------------------------------------------------
@@ -538,12 +640,83 @@ def healthz() -> dict:
         "findmy_forward": bool(TRACCAR_FORWARD_URL),
         "retention_days": RETENTION_DAYS,
         "notifications": bool(APPRISE_URLS),
+        "push_subscriptions": push_subscription_count(),
     }
 
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     return HTMLResponse((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/sw.js")
+def service_worker() -> Response:
+    """Service Worker für PWA + Web-Push (muss vom Root ausgeliefert werden)."""
+    return Response(
+        (STATIC_DIR / "sw.js").read_text(encoding="utf-8"),
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
+
+
+@app.get("/manifest.webmanifest")
+def manifest() -> Response:
+    return Response(
+        (STATIC_DIR / "manifest.webmanifest").read_text(encoding="utf-8"),
+        media_type="application/manifest+json",
+    )
+
+
+# --- Push-Verwaltung (Eltern) -----------------------------------------------
+
+
+@app.get("/api/v1/parent/push/key", dependencies=[Depends(require_parent)])
+def push_key() -> dict:
+    try:
+        _, public_b64 = get_vapid_keys()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Push nicht verfügbar: {exc}")
+    return {"key": public_b64, "subscriptions": push_subscription_count()}
+
+
+@app.post("/api/v1/parent/push/subscribe", dependencies=[Depends(require_parent)])
+async def push_subscribe(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    endpoint = str(body.get("endpoint") or "")
+    keys = body.get("keys") or {}
+    p256dh = str(keys.get("p256dh") or "")
+    auth = str(keys.get("auth") or "")
+    if not endpoint or not p256dh or not auth:
+        raise HTTPException(status_code=400, detail="endpoint/keys fehlen")
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO push_subscriptions(endpoint, p256dh, auth, created_at) VALUES(?, ?, ?, ?) "
+            "ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth",
+            (endpoint, p256dh, auth, now_iso()),
+        )
+    return {"subscribed": True, "subscriptions": push_subscription_count()}
+
+
+@app.delete("/api/v1/parent/push/subscribe", dependencies=[Depends(require_parent)])
+async def push_unsubscribe(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    endpoint = str(body.get("endpoint") or "")
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="endpoint fehlt")
+    with db() as conn:
+        conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+    return {"removed": endpoint, "subscriptions": push_subscription_count()}
+
+
+@app.post("/api/v1/parent/push/test", dependencies=[Depends(require_parent)])
+def push_test() -> dict:
+    return send_push("UltimateTracker", "Testbenachrichtigung – Push funktioniert.")
 
 
 # --- Tracker (Device) -------------------------------------------------------
@@ -651,6 +824,7 @@ async def device_upload(
     insert_message(msg_id, "in", device_id, raw, play if ok else raw, duration_ms)
     ensure_device(device_id)
     notify_async("Neue Sprachnachricht", f"Gerät {device_id} hat eine Nachricht gesendet.")
+    push_async("Neue Sprachnachricht", "Der Tracker hat eine Nachricht gesendet.")
     return {"id": msg_id, "converted": ok}
 
 
@@ -752,6 +926,7 @@ def set_search_mode(active: bool = Form(True), minutes: int | None = Form(None))
     state_set("search_mode_until", str(until))
     if active:
         notify_async("Suchmodus aktiv", f"Der Tracker piept jetzt {duration} Minuten lang.")
+        push_async("Suchmodus aktiv", f"Der Tracker piept jetzt {duration} Minuten lang.")
     return {
         "search_mode": active,
         "until": until,

@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.webmanifest">
 <title>UltimateTracker – Eltern</title>
 <style>
   :root { color-scheme: light dark; }
@@ -45,6 +48,19 @@
     <span id="status"></span>
   </div>
   <label><input type="checkbox" id="search"> Suchmodus aktiv (Tracker piept, pollt häufiger)</label>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Benachrichtigungen</h2>
+  <div class="muted" id="push-state">Status: –</div>
+  <div>
+    <button id="push-enable">Auf diesem Gerät aktivieren</button>
+    <button id="push-test">Test senden</button>
+  </div>
+  <div class="muted" style="margin-top:.4rem">
+    Hinweis: Push braucht eine sichere Verbindung (HTTPS oder localhost).
+    In der WSL-Instanz liefert das Caddy-Profil HTTPS (<code>docker compose --profile tls up -d</code>).
+  </div>
 </div>
 
 <h2>Geräte</h2>
@@ -222,6 +238,68 @@ async function loadFindMy() {
   }
 }
 
+// --- Benachrichtigungen (PWA + Web-Push) ---
+function pushStatus(text) { $('push-state').textContent = 'Status: ' + text; }
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; ++i) output[i] = raw.charCodeAt(i);
+  return output;
+}
+
+async function refreshPushState() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    pushStatus('vom Browser nicht unterstützt');
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    pushStatus(sub ? 'aktiv' : 'aus');
+  } catch (err) {
+    pushStatus('Fehler: ' + err.message);
+  }
+}
+
+$('push-enable').addEventListener('click', async () => {
+  if (!state.token) { pushStatus('bitte zuerst Token eintragen'); return; }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    pushStatus('vom Browser nicht unterstützt (HTTPS nötig)');
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') { pushStatus('Berechtigung abgelehnt'); return; }
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    const keyRes = await fetch('/api/v1/parent/push/key', { headers: headers() });
+    if (!keyRes.ok) { pushStatus('Schlüssel: HTTP ' + keyRes.status); return; }
+    const { key } = await keyRes.json();
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(key),
+    });
+    const res = await fetch('/api/v1/parent/push/subscribe', {
+      method: 'POST',
+      headers: { ...headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub),
+    });
+    pushStatus(res.ok ? 'aktiv' : 'Registrierung fehlgeschlagen: HTTP ' + res.status);
+  } catch (err) {
+    pushStatus('Fehler: ' + err.message);
+  }
+});
+
+$('push-test').addEventListener('click', async () => {
+  if (!state.token) { pushStatus('bitte zuerst Token eintragen'); return; }
+  const res = await fetch('/api/v1/parent/push/test', { method: 'POST', headers: headers() });
+  if (!res.ok) { pushStatus('Test: HTTP ' + res.status); return; }
+  const data = await res.json();
+  pushStatus('Test gesendet (aktiv: ' + data.sent + ', entfernt: ' + data.removed + ')');
+});
+
 async function loadStatus() {
   const box = $('status-body');
   if (!state.token || !state.device) { box.textContent = '– Gerät/Token wählen –'; return; }
@@ -253,6 +331,7 @@ $('refresh').addEventListener('click', () => { loadDevices(); load(); });
 
 loadDevices();
 load();
+refreshPushState();
 </script>
 </body>
 </html>

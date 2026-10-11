@@ -11,6 +11,8 @@ die aktuelle Basis läuft.
 | A1 Healthchecks + Startreihenfolge | ✅ umgesetzt |
 | A2 Versionen pinnen (Traccar 6.16.0, WebUI-Digest, Bridge-Commit) | ✅ umgesetzt |
 | A4 Benachrichtigungen (Apprise) | ✅ umgesetzt + getestet (Echo-Server) |
+| A4b **Web-Push + PWA** (VAPID, Service Worker, Abo-Verwaltung) | ✅ umgesetzt + getestet (Schlüssel, Abo, Versandpfad, Cleanup) |
+| Hardware-Phase vorbereitet: `docs/bring-up.md`, Mess-Session-Generator | ✅ |
 | A5 Sync-Endpunkt (`POST /api/v1/device/sync`) | ✅ Server-Seite umgesetzt + getestet; Firmware folgt (B4) |
 | A6 Bridge-Härtung (WAL, Upload-Limit, Fail-fast, Retention) | ✅ umgesetzt + getestet |
 | A7 Log-Rotation + Backup-Skript | ✅ umgesetzt (`scripts/backup-volumes.sh`) |

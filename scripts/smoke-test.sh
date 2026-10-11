@@ -107,5 +107,30 @@ curl -sf -H "X-Auth-Token: $DTOK" "$BASE/api/v1/device/firmware/latest?fw=9.9.9"
 curl -sf -X DELETE -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/firmware/9.9.9" | grep -q '"deleted":"9.9.9"' \
   && pass "Test-Firmware wieder entfernt" || fail "Aufräumen fehlgeschlagen"
 
+echo "14) Push (PWA/Web-Push)"
+KEYS=$(docker exec -i ut-audio-bridge python - <<'PY'
+import base64, os
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import serialization
+key = ec.generate_private_key(ec.SECP256R1())
+raw = key.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+print(base64.urlsafe_b64encode(raw).rstrip(b"=").decode())
+print(base64.urlsafe_b64encode(os.urandom(16)).rstrip(b"=").decode())
+PY
+)
+P256=$(printf '%s' "$KEYS" | sed -n 1p)
+AUTH=$(printf '%s' "$KEYS" | sed -n 2p)
+curl -sf -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/push/key" | grep -q '"key"' \
+  && pass "VAPID-Schlüssel verfügbar" || fail "Kein VAPID-Schlüssel"
+curl -sf -X POST -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+  -d "{\"endpoint\":\"https://example.invalid/push/smoke\",\"keys\":{\"p256dh\":\"$P256\",\"auth\":\"$AUTH\"}}" \
+  "$BASE/api/v1/parent/push/subscribe" | grep -q '"subscribed":true' \
+  && pass "Abo gespeichert (gültiges Schlüsselmaterial)" || fail "Abo fehlgeschlagen"
+curl -sf -X POST -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/push/test" | grep -q '"total":1' \
+  && pass "Versand durchlaufen (Ziel absichtlich unerreichbar)" || fail "Versand fehlgeschlagen"
+curl -sf -X DELETE -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+  -d '{"endpoint":"https://example.invalid/push/smoke"}' "$BASE/api/v1/parent/push/subscribe" | grep -q '"subscriptions":0' \
+  && pass "Abo wieder entfernt" || fail "Abo nicht entfernt"
+
 echo
 echo "Alle Smoke-Tests bestanden."

@@ -1,0 +1,18 @@
+{
+  "name": "UltimateTracker – Eltern",
+  "short_name": "UltimateTracker",
+  "description": "Sprachnachrichten, Status und Suchmodus für den Kinder-Tracker",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101418",
+  "theme_color": "#101418",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjMyIiBmaWxsPSIjMWYyOTM3Ii8+PGNpcmNsZSBjeD0iOTYiIGN5PSI4MCIgcj0iMjgiIGZpbGw9IiM2M2E0ZjEiLz48cGF0aCBkPSJNOTYgMTE2Yy0zMCAwLTU0IDIwLTU0IDQ0djhoMTA4di04YzAtMjQtMjQtNDQtNTQtNDR6IiBmaWxsPSIjNjNhNGYxIi8+PC9zdmc+",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
