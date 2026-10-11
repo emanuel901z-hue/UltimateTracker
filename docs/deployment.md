@@ -96,22 +96,38 @@ curl -s "http://localhost:5055/?id=TEST123&lat=48.1372&lon=11.5756&batt=87&times
   - `POST /api/v1/device/messages` (Multipart: `device_id`, `audio`)
   - `GET /api/v1/device/messages/{id}/audio`
 
-## 6. TLS (vor dem Produktiveinsatz!)
+## 6. TLS (Profil `tls`, vor dem Produktiveinsatz!)
 
-Die Ports sind unverschlüsselt. Reverse-Proxy davor (Skizze Caddy, als weiterer
-Dienst im Compose-Netz):
-
-```caddyfile
-tracker.example.org {
-    reverse_proxy audio-bridge:8085
-}
-traccar.example.org {
-    reverse_proxy traccar:8082
-}
+```bash
+cd ~/UltimateTracker/server
+# Hostnamen in .env setzen (SITE_AUDIO/SITE_TRACCAR/SITE_FINDMY, TLS_ARG)
+docker compose --profile tls up -d caddy
 ```
 
-Voraussetzung: Domain mit DNS-Eintrag auf den Host; Ports 80/443 freigeben.
-Danach die Container-Ports nicht mehr direkt veröffentlichen.
+**LAN-Betrieb (Default, `TLS_ARG=internal`):** Caddy erzeugt eine eigene CA.
+Einmalig das Root-Zertifikat exportieren und auf den Geräten (Handys der Eltern!)
+installieren und als vertrauenswürdig markieren:
+
+```bash
+docker compose --profile tls exec caddy cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
+```
+
+Die Hostnamen müssen auf den Server zeigen (Router-DNS oder hosts-Datei).
+Danach die Ports 8082/8085/4321 nicht mehr nach außen veröffentlichen.
+
+**Internet-Betrieb:** echte Domains in `SITE_*` eintragen, `TLS_ARG=du@example.org`
+setzen, Ports 80/443 freigeben – Caddy holt die Zertifikate automatisch.
+
+## 6b. Datenbank (PostgreSQL, Standard)
+
+Seit A10 läuft Traccar auf **PostgreSQL** (`postgres:16-alpine`), konfiguriert über
+Umgebungsvariablen (`CONFIG_USE_ENVIRONMENT_VARIABLES=true`, `DATABASE_*` in `.env`).
+Traccar legt Schema und Admin beim ersten Start selbst an – **der erste registrierte
+Benutzer wird Administrator** (siehe Abschnitt 4).
+
+H2-Fallback (nur wenn gewünscht): `DATABASE_DRIVER=org.h2.Driver`,
+`DATABASE_URL=jdbc:h2:./data/database`, `DATABASE_USER=sa`, `DATABASE_PASSWORD=` in
+`.env` setzen und den `postgres`-Dienst stoppen.
 
 ## 7. Backup & Umzug auf den Thin Client
 

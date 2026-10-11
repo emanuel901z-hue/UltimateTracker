@@ -40,10 +40,25 @@ ist `esp32-s3-devkitc-1` mit QIO-Flash und OPI-PSRAM konfiguriert.
 
 ## Aufbau
 
-| Datei | Inhalt |
+| Pfad | Inhalt |
 |---|---|
 | `include/pins.h` | Verbindliche Pin-Belegung (Quelle: `docs/pinout.md`) |
+| `include/config.h` | Tunables (Poll-Intervalle, Wake-Drossel **3 min**, Lautstärke, Modem-Modus) |
 | `src/main.cpp` | Einstiegspunkt, Wake-Logik-Skelett, TODOs |
+| `lib/tracker_core/` | **Plattformunabhängige Logik** (kein Arduino): IMA-ADPCM-Codec, Sync-Protokoll, Wake-/Poll-Policy, AGC, Ereignis-Ringpuffer |
+| `test/` | Host-Tests dieser Logik (Unity, `pio test -e native`) |
+
+## Tests (ohne Hardware)
+
+```bash
+pio test -e native      # braucht gcc/g++ auf dem Host
+# Unter Windows ohne MinGW in der WSL oder in der CI:
+wsl -d UltimateTracker -- bash -lc 'cd ~/UltimateTracker/firmware && pio test -e native'
+```
+
+Aktuell: **23 Tests** (ADPCM-Round-Trip inkl. SNR-Prüfung, Protokoll-Bauen/Parsen
+gegen das echte Bridge-Format, Wake-Drossel, Poll-Grenzen, AGC, Ringpuffer).
+Details: `../docs/simulation.md`.
 
 ## Nächste Schritte (nach Hardware-Lieferung)
 

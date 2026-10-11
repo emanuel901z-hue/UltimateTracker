@@ -92,8 +92,11 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 **Paket 2 – mit Hardware:** A5/C1 Sync-Endpunkt (ein Roundtrip pro Wake),
 B2 Motion-Wake-Drossel, B5 Audio-AGC/Lautstärke, B8 Feldstabilität, A9 Status-Dashboard
 
-**Paket 3 – vor Produktivbetrieb:** A3 TLS/Reverse-Proxy, B6 NVS-Provisioning,
-B7 OTA über LTE, A10 PostgreSQL statt H2
+**Paket 3 – vor Produktivbetrieb:** ~~A3 TLS/Reverse-Proxy~~ ✅ *(2026-10-11)*,
+B6 NVS-Provisioning, B7 OTA über LTE, ~~A10 PostgreSQL statt H2~~ ✅ *(2026-10-11)*
+- [x] Firmware-Logikmodule + 23 Host-Tests (`lib/tracker_core`, `pio test -e native`) *(2026-10-11)*
+- [ ] **(i) TLS aktivieren:** `SITE_*` in `.env` setzen, `docker compose --profile tls up -d caddy`,
+      Root-CA auf die Eltern-Handys importieren (`docs/deployment.md`, Abschnitt 6)
 
 ## G. Vor der Veröffentlichung
 

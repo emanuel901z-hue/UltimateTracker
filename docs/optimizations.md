@@ -16,8 +16,11 @@ die aktuelle Basis läuft.
 | A7 Log-Rotation + Backup-Skript | ✅ umgesetzt (`scripts/backup-volumes.sh`) |
 | A8 CI (GitHub Actions) | ✅ angelegt (Compose, Bridge, Smoke, Firmware) |
 | A9 Status-Dashboard (API + UI-Karte) | ✅ umgesetzt |
-| B2 Motion-Wake-Drossel **3 min** | ✅ Konstante in `firmware/include/config.h`; Logik folgt mit der Firmware |
-| A3 TLS, A10 PostgreSQL, B1, B3–B11 | ⏳ offen (nächste Pakete) |
+| A3 TLS-Reverse-Proxy (Caddy, Profil `tls`) | ✅ umgesetzt + getestet (HTTPS, Redirect, CA-Export) |
+| A10 PostgreSQL statt H2 | ✅ umgesetzt + getestet (Tabellen verifiziert, Admin neu angelegt) |
+| Firmware-Logik: ADPCM, Protokoll, Wake-Policy, AGC, Ring-Log | ✅ umgesetzt, **23 Host-Tests grün** (`pio test -e native`) |
+| B2 Motion-Wake-Drossel **3 min** | ✅ Konstante in `config.h` + Logik in `lib/tracker_core` (getestet) |
+| B1, B3, B5–B11 | ⏳ offen (nächste Pakete) |
 
 ## A. Server / Stack
 

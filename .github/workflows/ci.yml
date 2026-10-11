@@ -64,7 +64,7 @@ jobs:
         run: docker compose -f server/docker-compose.yml logs --tail 80
 
   firmware:
-    name: Firmware-Build
+    name: Firmware-Build + native Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +73,9 @@ jobs:
           python-version: "3.12"
       - name: PlatformIO installieren
         run: pip install platformio
-      - name: Bauen
+      - name: Bauen (ESP32-S3)
         working-directory: firmware
         run: pio run
+      - name: Host-Tests der Logik (ADPCM, Protokoll, Wake-Policy, …)
+        working-directory: firmware
+        run: pio test -e native

@@ -1,0 +1,37 @@
+# Caddyfile – TLS-Reverse-Proxy für den UltimateTracker-Stack.
+#
+# Betrieb:
+#   docker compose --profile tls up -d
+#
+# Konfiguration über server/.env (leer = Default aus docker-compose.yml):
+#   SITE_AUDIO   = Hostname der Eltern-UI/API      (Default: audio.localhost)
+#   SITE_TRACCAR = Hostname der Traccar-Web-UI     (Default: traccar.localhost)
+#   SITE_FINDMY  = Hostname der Google-WebUI       (Default: findmy.localhost)
+#   TLS_ARG      = "internal" (lokales Zertifikat, Default)
+#                  oder eine E-Mail-Adresse → Let's Encrypt (echte Domain, Ports 80/443)
+#
+# LAN-Betrieb (Default): Caddy erzeugt eine eigene CA. Einmalig das Root-Zertifikat
+# exportieren und auf den Geräten (Handy der Eltern!) installieren:
+#   docker compose --profile tls exec caddy cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
+# Hostnamen müssen auf den Server zeigen (Router-DNS oder hosts-Datei).
+#
+# Internet-Betrieb: echte Domains in SITE_* eintragen, TLS_ARG=du@example.org,
+# Ports 80/443 freigeben – Caddy holt die Zertifikate automatisch.
+
+{$SITE_AUDIO:audio.localhost} {
+	tls {$TLS_ARG:internal}
+	encode zstd gzip
+	reverse_proxy audio-bridge:8085
+}
+
+{$SITE_TRACCAR:traccar.localhost} {
+	tls {$TLS_ARG:internal}
+	encode zstd gzip
+	reverse_proxy traccar:8082
+}
+
+{$SITE_FINDMY:findmy.localhost} {
+	tls {$TLS_ARG:internal}
+	encode zstd gzip
+	reverse_proxy google-findmy-webui:4321
+}

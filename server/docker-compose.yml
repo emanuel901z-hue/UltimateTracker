@@ -8,6 +8,28 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  postgres:
+    # Produktiv-Datenbank (A10). H2-Fallback: DATABASE_* in server/.env auf die
+    # H2-Werte setzen und diesen Dienst stoppen (siehe .env.example).
+    image: postgres:16-alpine
+    container_name: ut-postgres
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_DB: traccar
+      POSTGRES_USER: ${POSTGRES_USER:-traccar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in server/.env gesetzt sein}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-traccar} -d traccar"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - utnet
+
   traccar:
     # Version gepinnt (A2). Update: Version ändern + `docker compose pull traccar`.
     image: traccar/traccar:6.16.0
@@ -17,9 +39,19 @@ services:
     ports:
       - "8082:8082"   # Web-UI
       - "5055:5055"   # OsmAnd-Protokoll (Tracker-Uploads)
+    environment:
+      # Datenbank per Umgebungsvariablen (überschreibt traccar.xml, A10)
+      CONFIG_USE_ENVIRONMENT_VARIABLES: "true"
+      DATABASE_DRIVER: ${DATABASE_DRIVER:-org.postgresql.Driver}
+      DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/traccar}
+      DATABASE_USER: ${DATABASE_USER:-traccar}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD muss in server/.env gesetzt sein}
     volumes:
       - ./traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro
       - traccar-data:/opt/traccar/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8082/api/server || exit 1"]
       interval: 30s
@@ -52,6 +84,34 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    networks:
+      - utnet
+
+  # ---------------------------------------------------------------------------
+  # Optionales Profil "tls": Caddy als TLS-Reverse-Proxy (A3).
+  # Start: docker compose --profile tls up -d
+  # Danach die Ports 8082/8085/4321 nicht mehr nach außen veröffentlichen.
+  # Details: docs/deployment.md (Abschnitt TLS)
+  # ---------------------------------------------------------------------------
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ut-caddy
+    profiles: [tls]
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_AUDIO: ${SITE_AUDIO:-audio.localhost}
+      SITE_TRACCAR: ${SITE_TRACCAR:-traccar.localhost}
+      SITE_FINDMY: ${SITE_FINDMY:-findmy.localhost}
+      TLS_ARG: ${TLS_ARG:-internal}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
     networks:
       - utnet
 
@@ -178,8 +238,11 @@ services:
       - utnet
 
 volumes:
+  postgres-data:
   traccar-data:
   audio-data:
+  caddy-data:
+  caddy-config:
   anisette-data:
   macless-data:
   findmy-bridge-data:

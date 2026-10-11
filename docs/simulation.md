@@ -45,4 +45,17 @@ sondern aus drei pragmatischen Bausteinen, die sofort funktionieren.
 | Tracker-Simulator | `scripts/simulate-tracker.py` | Server-Stack ohne Hardware testen |
 | Smoke-Test | `scripts/smoke-test.sh` | API-/Stack-Regression |
 | Echo-Server | `scripts/dev-echo-server.py` | Benachrichtigungen/Webhooks lokal prüfen |
-| CI | `.github/workflows/ci.yml` | Compose-Config, Bridge-Compile, Firmware-Build, Smoke-Test |
+| **Host-Tests der Firmware-Logik** | `firmware/lib/tracker_core` + `firmware/test/` | ADPCM-Codec, Sync-Protokoll, Wake-Policy, AGC, Ring-Log – **23 Tests** |
+| CI | `.github/workflows/ci.yml` | Compose-Config, Bridge-Compile, Smoke-Test, Firmware-Build **und** native Tests |
+
+**Native Tests ausführen** (braucht gcc/g++ auf dem Host; unter Windows läuft es
+in der WSL, in der CI auf ubuntu-latest):
+
+```bash
+wsl -d UltimateTracker -- bash -lc 'cd ~/UltimateTracker/firmware && pio test -e native'
+```
+
+Aufbau: `firmware/lib/tracker_core` enthält **plattformunabhängige** Logik
+(kein Arduino-Header), `firmware/src` den Arduino-Teil. Damit ist die Logik
+schnell und ohne Hardware testbar – der Modem-Mock (Punkt 3 oben) ist der
+nächste Ausbauschritt.
