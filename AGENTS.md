@@ -15,10 +15,17 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   Vorlage: `server/.env.example`.
 - Beim SIM7080G sind **GNSS und LTE hardwarebedingt nicht gleichzeitig** nutzbar
   (sequenzielle Abläufe planen).
+- **ESP32-S3-Eigenheiten beachten** (`docs/esp32s3.md`): Wake nur über RTC-GPIOs
+  0–21; interne Pull-ups sind im Deep Sleep aus (Taster braucht den externen
+  100-kΩ-Pull-up); im Release-Build **kein** `ARDUINO_USB_CDC_ON_BOOT=1` (Board
+  startet sonst am Akku nicht); kein DAC → Audio nur über I2S.
 - **Geräte-ID ist die IMEI** (Bridge-Registry, `docs/sms.md`); MSISDN nur für den
   optionalen SMS-Pfad mitführen.
 - Find My (Apple/Google) ist **experimentell** und läuft im Compose-Profil `findmy`
   (`docs/findmy.md`) – nicht als stabilen Pfad voraussetzen.
+- `firmware/lib/tracker_core` muss **C++11-kompatibel** bleiben (der Arduino-Build
+  nutzt `gnu++11`); die Host-Tests laufen bewusst mit demselben Standard
+  (`pio test -e native`), damit Abweichungen auffallen.
 - Zahlen (Datenraten, Ströme) immer aus `docs/hardware-review.md` bzw.
   `docs/architecture.md` übernehmen, nicht neu schätzen.
 

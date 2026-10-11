@@ -22,6 +22,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `TODO.md` | **Konsolidierte offene Aufgaben** (Start hier, wenn es losgeht) |
 | `project.md` | Projektübersicht: Hardware, Verdrahtung, Systemlogik (Hauptdokument) |
 | `docs/pinout.md` | Verbindliche GPIO-Belegung (T-SIM7080G-S3 V1.0) |
+| `docs/esp32s3.md` | ESP32-S3-Eigenheiten (Wake, Pull-ups, USB-CDC, PSRAM, Emulation) |
 | `docs/hardware-review.md` | Prüfbericht: verifizierte Annahmen, Risiken, Quellen |
 | `docs/architecture.md` | Systemarchitektur, Datenflüsse, Energiebudget |
 | `docs/measurement-plan.md` | Mess- und Testplan für die Inbetriebnahme |

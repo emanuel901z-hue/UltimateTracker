@@ -27,7 +27,7 @@ Boards (Fotos), ESP32-S3-Datasheet. Prüfbericht: `docs/hardware-review.md`.
 | I2C SDA (LIS3DH) | **1** | I/O | Kamera-I2C, Pull-ups vorhanden |
 | I2C SCL (LIS3DH) | **2** | I/O | dito; falls IO2 nicht am Header: IO10/IO11 verwenden |
 | LIS3DH INT1 (Wake) | **14** | IN | RTC-GPIO, Deep-Sleep-Wake (EXT1) |
-| PTT-Taster (Wake) | **9** | IN | RTC-GPIO; 100 k Pull-up + 100 nF gegen GND |
+| PTT-Taster (Wake) | **9** | IN | RTC-GPIO; **externer 100-kΩ-Pull-up zwingend** (interne Pull-ups sind im Deep Sleep aus, siehe `docs/esp32s3.md`) + 100 nF gegen GND |
 | I2S BCLK (Mic + Amp) | **16** | OUT | geteilte Clock, Full-Duplex |
 | I2S WS/LRC (Mic + Amp) | **17** | OUT | dito |
 | I2S DIN → MAX98357A | **47** | OUT | |

@@ -29,6 +29,17 @@ pio device monitor      # serielle Ausgabe (115200)
 Board: `T-SIM7080G-S3 V1.0` (ESP32-S3-WROOM-1 **N16R8**). In `platformio.ini`
 ist `esp32-s3-devkitc-1` mit QIO-Flash und OPI-PSRAM konfiguriert.
 
+> **ESP32-S3-Eigenheiten** (RTC-GPIOs, Pull-ups im Sleep, USB-CDC, PSRAM-Strom,
+> Emulationsgrenzen): siehe [`../docs/esp32s3.md`](../docs/esp32s3.md).
+
+## Umgebungen
+
+| Env | Zweck | Besonderheit |
+|---|---|---|
+| `tsim7080g-s3` (Default) | **Release/Akkubetrieb** | `ARDUINO_USB_CDC_ON_BOOT=0`, keine Debug-Ausgabe – sonst startet das Board am Akku nicht (S3 wartet auf USB-Host!) |
+| `tsim7080g-s3-dev` | Entwicklung am USB | CDC + `LOGF`-Ausgabe aktiv |
+| `native` | Host-Tests der Logik | braucht gcc/g++ auf dem Host |
+
 > **Wichtig:** Die Platform `espressif32@6.13.0` liefert Arduino-Core 2.x
 > (ESP-IDF 4.4) – dort existiert der **neue** I2S-Treiber (`esp_driver_i2s`,
 > Full-Duplex) noch nicht. Für die Audio-Pipeline entweder den Legacy-Treiber

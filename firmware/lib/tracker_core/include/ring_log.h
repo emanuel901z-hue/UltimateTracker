@@ -25,9 +25,14 @@ enum class LogEvent : uint8_t {
 };
 
 struct LogEntry {
-  uint32_t uptime_s = 0;
-  LogEvent event = LogEvent::Boot;
-  int16_t value = 0;  // z. B. Akkustand, Dauer, Fehlercode
+  uint32_t uptime_s;
+  LogEvent event;
+  int16_t value;  // z. B. Akkustand, Dauer, Fehlercode
+
+  // Explizite Konstruktoren: der Arduino-Build nutzt C++11, dort sind
+  // Default-Member-Initialisierer kein Aggregat (kein LogEntry{a,b,c}).
+  LogEntry() : uptime_s(0), event(LogEvent::Boot), value(0) {}
+  LogEntry(uint32_t uptime, LogEvent ev, int16_t val) : uptime_s(uptime), event(ev), value(val) {}
 };
 
 class RingLog {

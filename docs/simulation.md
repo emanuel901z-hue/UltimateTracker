@@ -8,7 +8,7 @@ sondern aus drei pragmatischen Bausteinen, die sofort funktionieren.
 
 | Ansatz | Deckt ab | Deckt **nicht** ab |
 |---|---|---|
-| **QEMU** (Espressif-Fork) | CPU/RAM/Flash, UART, Timer, NVS, Partitionen/OTA-Abläufe, Panic-Handling, teils WLAN (virtuelles Netdev) | I2S-Audio, LTE-Modem, GNSS, echte BLE-Peripherie |
+| **QEMU** (Espressif-Fork) | CPU (Dual-Core), UART, Timer, NVS, Partitionen/OTA-Abläufe, Panic-Handling, **PSRAM (QPI/OPI)**, Krypto-Beschleuniger, **Netzwerk über emuliertes Ethernet** | **WLAN**/Bluetooth, USB, **I2S**, I2C, LEDC (beim S3), GPIO-Matrix, ADC/DAC, LTE-Modem, GNSS – vollständige Matrix: `docs/esp32s3.md` |
 | **Wokwi** (Online-Simulator) | ESP32/S3-Boards, Buttons, einige I2C-Sensoren, Displays | I2S-Mikrofon/Verstärker, SIM7080G, GNSS |
 | **Renode** | v. a. andere Architekturen; ESP32-S3-Support unvollständig | s. o. |
 | **Host-native Tests** (PlatformIO `native` + Unity) | **reine Logik**: ADPCM-Codec, Protokoll-JSON, Zustandsmaschine, Config/NVS-Abstraktion | alles Hardwarenahe |

@@ -12,11 +12,17 @@
 namespace tracker {
 
 struct Position {
-  bool valid = false;
-  double latitude = 0.0;
-  double longitude = 0.0;
-  float hdop = 0.0f;
-  uint32_t epoch_s = 0;
+  bool valid;
+  double latitude;
+  double longitude;
+  float hdop;
+  uint32_t epoch_s;
+
+  // Explizite Konstruktoren: der Arduino-Build nutzt C++11, dort sind
+  // Default-Member-Initialisierer kein Aggregat.
+  Position() : valid(false), latitude(0.0), longitude(0.0), hdop(0.0f), epoch_s(0) {}
+  Position(bool isValid, double lat, double lon, float hdopValue, uint32_t timestamp)
+      : valid(isValid), latitude(lat), longitude(lon), hdop(hdopValue), epoch_s(timestamp) {}
 };
 
 struct SyncRequest {

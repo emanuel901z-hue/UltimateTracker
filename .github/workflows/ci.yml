@@ -73,9 +73,9 @@ jobs:
           python-version: "3.12"
       - name: PlatformIO installieren
         run: pip install platformio
-      - name: Bauen (ESP32-S3)
+      - name: Bauen (Release + Dev-Env)
         working-directory: firmware
-        run: pio run
+        run: pio run -e tsim7080g-s3 -e tsim7080g-s3-dev
       - name: Host-Tests der Logik (ADPCM, Protokoll, Wake-Policy, …)
         working-directory: firmware
         run: pio test -e native

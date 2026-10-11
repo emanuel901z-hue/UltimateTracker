@@ -46,6 +46,9 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 
 ## C. Firmware (`firmware/`)
 
+- [x] ESP32-S3-Eigenheiten geprüft + dokumentiert (`docs/esp32s3.md`) *(2026-10-11)*
+      → Release-Env ohne USB-CDC (startet sonst am Akku nicht), externer PTT-Pull-up
+      zwingend, Ring-Log in RTC-Speicher, QEMU-Erwartungen korrigiert
 - [ ] LIS3DH: I2C-Init, Schwellwert-Interrupt, EXT1-Wake
 - [ ] PMU AXP2101: TS-Pin-Detection aus, Akkustand lesen, Ladestrom setzen
 - [ ] I2S-Pipeline (8 kHz/16 Bit/IMA-ADPCM) + LEDC-Piezo (gegenphasig)
