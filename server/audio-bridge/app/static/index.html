@@ -6,37 +6,61 @@
 <title>UltimateTracker – Eltern</title>
 <style>
   :root { color-scheme: light dark; }
-  body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 44rem; padding: 1rem; }
+  body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 46rem; padding: 1rem; }
   h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 1.6rem; }
   label { display: block; margin: .4rem 0; }
-  input[type=text], input[type=password] { width: 100%; padding: .4rem; }
-  button { padding: .5rem .9rem; margin-right: .4rem; }
+  input[type=text], input[type=password], select { width: 100%; padding: .4rem; }
+  button { padding: .5rem .9rem; margin: .2rem .4rem .2rem 0; }
+  .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: end; }
+  .row > * { flex: 1 1 8rem; }
   #status { margin-left: .4rem; opacity: .8; }
   ul { list-style: none; padding: 0; }
   li { border-top: 1px solid #8884; padding: .5rem 0; }
   audio { display: block; margin-top: .3rem; width: 100%; }
+  .muted { opacity: .7; font-size: .9rem; }
+  .card { border: 1px solid #8884; border-radius: .5rem; padding: .7rem; margin: .5rem 0; }
 </style>
 </head>
 <body>
 <h1>UltimateTracker – Eltern</h1>
 
-<label>Gerät (Tracker-ID / IMEI)
-  <input id="device" type="text" placeholder="z. B. 860000000000000" autocomplete="off">
-</label>
 <label>Parent-Token
   <input id="token" type="password" autocomplete="off">
 </label>
+<label>Gerät (Tracker-ID / IMEI)
+  <select id="device"><option value="">– bitte Token eingeben –</option></select>
+</label>
 
-<div>
-  <button id="rec">Aufnahme starten</button>
-  <button id="send" disabled>Senden</button>
-  <span id="status"></span>
+<div class="card">
+  <h2 style="margin-top:0">Sprachnachricht senden</h2>
+  <div>
+    <button id="rec">Aufnahme starten</button>
+    <button id="send" disabled>Senden</button>
+    <span id="status"></span>
+  </div>
+  <label><input type="checkbox" id="search"> Suchmodus aktiv (Tracker piept, pollt häufiger)</label>
 </div>
 
-<label><input type="checkbox" id="search"> Suchmodus aktiv (Tracker piept, pollt häufiger)</label>
+<h2>Geräte</h2>
+<div id="devices"></div>
+<div class="card">
+  <div class="row">
+    <div><label>ID / IMEI <input id="d-id" type="text" placeholder="z. B. 860000000000000"></label></div>
+    <div><label>Name <input id="d-name" type="text" placeholder="z. B. Tracker Kinderzimmer"></label></div>
+  </div>
+  <div class="row">
+    <div><label>MSISDN / Rufnummer <input id="d-msisdn" type="text" placeholder="+49…"></label></div>
+    <div><label>Notizen <input id="d-notes" type="text"></label></div>
+  </div>
+  <button id="d-save">Gerät speichern</button>
+</div>
+
+<h2>Find My (Apple / Google)</h2>
+<div id="findmy"></div>
+<button id="refresh">Alles aktualisieren</button>
 
 <h2>Nachrichten</h2>
-<button id="refresh">Aktualisieren</button>
 <ul id="list"></ul>
 
 <script>
@@ -49,24 +73,66 @@ const state = {
   blob: null,
 };
 
-$('device').value = state.device;
 $('token').value = state.token;
-$('device').addEventListener('input', (e) => {
-  state.device = e.target.value.trim();
-  localStorage.setItem('ut_device', state.device);
-});
 $('token').addEventListener('input', (e) => {
   state.token = e.target.value.trim();
   localStorage.setItem('ut_token', state.token);
+  loadDevices();
 });
 
 function setStatus(text) { $('status').textContent = text; }
+function headers() { return { 'X-Auth-Token': state.token }; }
+function fmt(iso) { try { return new Date(iso).toLocaleString(); } catch { return iso; } }
 
-$('rec').addEventListener('click', async () => {
-  if (state.recorder && state.recorder.state === 'recording') {
-    state.recorder.stop();
-    return;
+// --- Geräte ---
+async function loadDevices() {
+  if (!state.token) return;
+  const res = await fetch('/api/v1/parent/devices', { headers: headers() });
+  if (!res.ok) { setStatus('Geräte: HTTP ' + res.status); return; }
+  const data = await res.json();
+  const sel = $('device');
+  sel.innerHTML = '';
+  for (const d of data.devices) {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = (d.name || d.id) + (d.imei && d.imei !== d.id ? ' (' + d.imei + ')' : '');
+    sel.appendChild(opt);
   }
+  if (!data.devices.length) sel.innerHTML = '<option value="">– kein Gerät angelegt –</option>';
+  sel.value = state.device || (data.devices[0] && data.devices[0].id) || '';
+  state.device = sel.value;
+
+  const box = $('devices');
+  box.innerHTML = '';
+  for (const d of data.devices) {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.textContent = (d.name || d.id) + ' – ID: ' + d.id +
+      (d.imei ? ' – IMEI: ' + d.imei : '') + (d.msisdn ? ' – MSISDN: ' + d.msisdn : '') +
+      (d.notes ? ' – ' + d.notes : '');
+    box.appendChild(div);
+  }
+}
+$('device').addEventListener('change', (e) => {
+  state.device = e.target.value;
+  localStorage.setItem('ut_device', state.device);
+  load();
+});
+
+$('d-save').addEventListener('click', async () => {
+  const id = $('d-id').value.trim();
+  if (!id || !state.token) { setStatus('ID und Token nötig.'); return; }
+  const body = { name: $('d-name').value.trim(), msisdn: $('d-msisdn').value.trim(), notes: $('d-notes').value.trim(), imei: id };
+  const res = await fetch('/api/v1/parent/devices/' + encodeURIComponent(id), {
+    method: 'PUT', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  setStatus(res.ok ? 'Gerät gespeichert.' : 'Speichern: HTTP ' + res.status);
+  if (res.ok) { $('d-id').value = $('d-name').value = $('d-msisdn').value = $('d-notes').value = ''; loadDevices(); }
+});
+
+// --- Aufnahme ---
+$('rec').addEventListener('click', async () => {
+  if (state.recorder && state.recorder.state === 'recording') { state.recorder.stop(); return; }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     state.chunks = [];
@@ -83,9 +149,7 @@ $('rec').addEventListener('click', async () => {
     rec.start();
     $('rec').textContent = 'Stopp';
     setStatus('Aufnahme läuft …');
-  } catch (err) {
-    setStatus('Mikrofon nicht verfügbar: ' + err.message);
-  }
+  } catch (err) { setStatus('Mikrofon nicht verfügbar: ' + err.message); }
 });
 
 $('send').addEventListener('click', async () => {
@@ -95,57 +159,68 @@ $('send').addEventListener('click', async () => {
   fd.append('device_id', state.device);
   fd.append('audio', state.blob, 'message.webm');
   setStatus('Sende …');
-  const res = await fetch('/api/v1/parent/messages', {
-    method: 'POST',
-    headers: { 'X-Auth-Token': state.token },
-    body: fd,
-  });
+  const res = await fetch('/api/v1/parent/messages', { method: 'POST', headers: headers(), body: fd });
   if (res.ok) {
     setStatus('Gesendet – der Tracker holt die Nachricht beim nächsten Poll.');
-    state.blob = null;
-    $('send').disabled = true;
-    load();
-  } else {
-    setStatus('Fehler: HTTP ' + res.status);
-  }
+    state.blob = null; $('send').disabled = true; load();
+  } else { setStatus('Fehler: HTTP ' + res.status); }
 });
 
 $('search').addEventListener('change', async (e) => {
   if (!state.token) { setStatus('Bitte Token angeben.'); return; }
   const fd = new FormData();
   fd.append('active', e.target.checked ? 'true' : 'false');
-  const res = await fetch('/api/v1/parent/search-mode', {
-    method: 'POST',
-    headers: { 'X-Auth-Token': state.token },
-    body: fd,
-  });
+  const res = await fetch('/api/v1/parent/search-mode', { method: 'POST', headers: headers(), body: fd });
   setStatus(res.ok ? (e.target.checked ? 'Suchmodus aktiv.' : 'Suchmodus beendet.') : 'Fehler: HTTP ' + res.status);
 });
 
-$('refresh').addEventListener('click', load);
-
-async function load() {
-  if (!state.token) { setStatus('Token fehlt.'); return; }
-  const res = await fetch('/api/v1/parent/messages', { headers: { 'X-Auth-Token': state.token } });
-  if (!res.ok) { setStatus('Liste: HTTP ' + res.status); return; }
+// --- Listen ---
+async function loadMessages() {
+  if (!state.token) return;
+  const res = await fetch('/api/v1/parent/messages', { headers: headers() });
+  if (!res.ok) { setStatus('Nachrichten: HTTP ' + res.status); return; }
   const data = await res.json();
   const list = $('list');
   list.innerHTML = '';
   for (const m of data.messages) {
     const li = document.createElement('li');
-    const when = new Date(m.created_at).toLocaleString();
-    li.textContent = when + ' – ' + (m.direction === 'in' ? 'vom Tracker' : 'an Tracker') + ' (' + m.status + ')';
+    li.textContent = fmt(m.created_at) + ' – ' + (m.direction === 'in' ? 'vom Tracker' : 'an Tracker') + ' (' + m.status + ')';
     const audio = document.createElement('audio');
     audio.controls = true;
-    fetch(m.audio_url, { headers: { 'X-Auth-Token': state.token } })
+    fetch(m.audio_url, { headers: headers() })
       .then((r) => r.blob())
       .then((b) => { audio.src = URL.createObjectURL(b); })
       .catch(() => {});
     li.appendChild(audio);
     list.appendChild(li);
   }
+  if (!data.messages.length) list.innerHTML = '<li class="muted">Noch keine Nachrichten.</li>';
 }
 
+async function loadFindMy() {
+  if (!state.token) return;
+  const res = await fetch('/api/v1/parent/findmy/locations?limit=10', { headers: headers() });
+  const box = $('findmy');
+  if (!res.ok) { box.innerHTML = '<div class="muted">Find My: HTTP ' + res.status + '</div>'; return; }
+  const data = await res.json();
+  box.innerHTML = '';
+  if (!data.locations.length) {
+    box.innerHTML = '<div class="muted">Keine Find-My-Positionen. Profil „findmy“ starten und Beacon registrieren (docs/findmy.md).</div>';
+    return;
+  }
+  for (const l of data.locations) {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.textContent = l.provider + ' / ' + l.beacon_id + ' – ' + l.latitude.toFixed(5) + ', ' + l.longitude.toFixed(5) +
+      (l.accuracy ? ' (±' + l.accuracy + ')' : '') + ' – ' + fmt(l.received_at);
+    box.appendChild(div);
+  }
+}
+
+function load() { loadMessages(); loadFindMy(); }
+$('refresh').addEventListener('click', () => { loadDevices(); load(); });
+
+loadDevices();
 load();
 </script>
 </body>

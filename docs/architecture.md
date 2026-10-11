@@ -83,6 +83,9 @@ messages(id TEXT PK, direction TEXT CHECK(in|out), device_id TEXT,
 Status-Werte: `new` → `delivered` (Downlink) bzw. `new` → `read` (Uplink, optional).
 Dateien liegen unter `DATA_DIR/audio/<id>.<ext>`.
 
+Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes) und
+`findmy_locations` (provider, beacon_id, lat/lon, accuracy, reported_at, raw).
+
 ### 3.2 Endpunkte
 
 | Methode | Pfad | Auth | Zweck |
@@ -94,13 +97,35 @@ Dateien liegen unter `DATA_DIR/audio/<id>.<ext>`.
 | GET | `/api/v1/device/messages/{id}/audio` | Device-Token | Downlink-Datei, markiert als zugestellt |
 | POST | `/api/v1/parent/messages` | Parent-Token | Sprachnachricht der Eltern |
 | GET | `/api/v1/parent/messages` | Parent-Token | Liste (JSON) |
-| POST | `/api/v1/parent/search-mode` | Parent-Token | Suchmodus setzen/beenden |
+| GET | `/api/v1/parent/search-mode` | Parent-Token | Suchmodus setzen/beenden |
+| GET | `/api/v1/parent/devices` | Parent-Token | Geräte-Registry (IMEI ↔ MSISDN ↔ Name) |
+| PUT | `/api/v1/parent/devices/{id}` | Parent-Token | Gerät anlegen/ändern |
+| DELETE | `/api/v1/parent/devices/{id}` | Parent-Token | Gerät löschen |
+| POST | `/api/v1/findmy/locations` | optional Token | Find-My-Ingest (Apple/Google, tolerant) |
+| GET | `/api/v1/parent/findmy/locations` | Parent-Token | letzte Find-My-Positionen |
 | POST | `/api/v1/traccar/events` | optional Token | Webhook-Empfänger (Traccar) |
 
 ### 3.3 Suchmodus
 
 `search-mode` ist ein einfacher Schalter (Datei/DB-Flag mit Ablaufzeit, z. B. 30 min).
 `/pending` liefert ihn mit; der Tracker verkürzt daraufhin sein Poll-Intervall.
+
+### 3.4 Geräte-Identitäten (IMEI, MSISDN, Beacon-IDs)
+
+- **Primär-ID des Trackers = IMEI** (per `AT+GSN`): identisch in Traccar (OsmAnd `id=`)
+  und in der Bridge (`device_id`).
+- **MSISDN** (1NCE-Rufnummer) wird in der Registry mitgeführt – für den optionalen
+  SMS-Pfad (`docs/sms.md`).
+- **Beacon-IDs** (Apple/Google) sind eigene Geräte für Find-My-Positionen.
+- Unbekannte Geräte legt die Bridge automatisch an (analog Traccar
+  `database.registerUnknown`); Pflege über die Eltern-UI/API.
+
+### 3.5 Find My (optional, Profil `findmy`)
+
+Externe Gegenstücke pushen Standorte an `/api/v1/findmy/locations` (tolerantes
+Schema, Roh-JSON wird mitgespeichert). Bei gesetztem `TRACCAR_FORWARD_URL` wird
+jede Position als OsmAnd-Position an Traccar gereicht (eigenes Gerät je Beacon).
+Setup und Grenzen: `docs/findmy.md`.
 
 ## 4. Traccar
 

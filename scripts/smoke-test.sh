@@ -31,6 +31,7 @@ PY
 
 pass() { echo "  OK   - $1"; }
 fail() { echo "  FAIL - $1"; exit 1; }
+info() { echo "  INFO - $1"; }
 
 echo "1) Health"
 curl -sf "$BASE/healthz" | grep -q '"status":"ok"' && pass "Bridge erreichbar" || fail "Bridge nicht erreichbar"
@@ -65,6 +66,29 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' "$WEB")
 
 echo "9) Traccar OsmAnd-Position"
 curl -sf "$TRACCAR/?id=TEST123&lat=48.1372&lon=11.5756&batt=87&timestamp=$(date +%s)" >/dev/null && pass "Position akzeptiert" || fail "Position abgelehnt"
+
+echo "10) Geräte-Registry (IMEI/MSISDN)"
+curl -sf -X PUT -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+  -d '{"name":"Testtracker","imei":"TEST123","msisdn":"+491700000000","notes":"Smoke-Test"}' \
+  "$BASE/api/v1/parent/devices/TEST123" | grep -q '"id":"TEST123"' && pass "Gerät gespeichert" || fail "Geräte-Upsert fehlgeschlagen"
+curl -sf -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/devices" | grep -q '"TEST123"' && pass "Gerät in Liste" || fail "Gerät fehlt in Liste"
+
+echo "11) Find-My-Ingest (Apple/Google-Gegenstück)"
+FM=$(curl -sf -X POST -H 'Content-Type: application/json' \
+  -d '{"provider":"apple","beacon_id":"BEACON-TEST","lat":48.1372,"lon":11.5756,"timestamp":1770000000}' \
+  "$BASE/api/v1/findmy/locations")
+echo "$FM" | grep -q '"stored":1' && pass "Position gespeichert" || fail "Ingest fehlgeschlagen: $FM"
+curl -sf -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/findmy/locations?limit=5" | grep -q 'BEACON-TEST' && pass "Position in Liste" || fail "Position fehlt in Liste"
+if echo "$FM" | grep -q '"forwarded":1'; then
+  pass "Position an Traccar weitergeleitet"
+else
+  info "Traccar-Forwarding aus oder nicht erreichbar (TRACCAR_FORWARD_URL prüfen)"
+fi
+
+echo "12) Find-My-Toleranz (unbekanntes Format)"
+curl -sf -X POST -H 'Content-Type: application/json' \
+  -d '{"source":"google","id":"BEACON-G2","latitude":48.15,"longitude":11.6,"time":"2026-10-11T12:00:00Z"}' \
+  "$BASE/api/v1/findmy/locations" | grep -q '"stored":1' && pass "Alternatives Schema akzeptiert" || fail "Toleranter Ingest fehlgeschlagen"
 
 echo
 echo "Alle Smoke-Tests bestanden."

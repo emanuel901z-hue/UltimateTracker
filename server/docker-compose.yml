@@ -32,9 +32,68 @@ services:
     networks:
       - utnet
 
+  # ---------------------------------------------------------------------------
+  # Optionales Profil "findmy": Gegenstücke für Apple Find My (OpenHaystack)
+  # und Google Find Hub (Find My Device) – beide EXPERIMENTELL.
+  # Start:   docker compose --profile findmy up -d
+  # Details: docs/findmy.md
+  # ---------------------------------------------------------------------------
+
+  anisette:
+    # Apple-Authentifizierung (Anisette-Daten) für macless-haystack
+    image: dadoum/anisette-v3-server:latest
+    container_name: ut-anisette
+    profiles: [findmy]
+    restart: unless-stopped
+    ports:
+      - "6969:6969"
+    volumes:
+      - anisette-data:/home/Alcoholic/.config/anisette-v3
+    networks:
+      - utnet
+
+  macless-haystack:
+    # Apple-Find-My-Endpoint: Registrierung, Key-Generierung, Abruf der Standortberichte
+    image: christld/macless-haystack:latest
+    container_name: ut-macless-haystack
+    profiles: [findmy]
+    restart: unless-stopped
+    ports:
+      - "6176:6176"
+    volumes:
+      - macless-data:/app/endpoint/data
+    depends_on:
+      - anisette
+    networks:
+      - utnet
+
+  google-findmy:
+    # Google Find Hub (Find My Device): Microservice aus google-find-hub-sync
+    # Registrierung der ESP32-Tracker + Push der Standorte an die Bridge.
+    build: ./findmy-google
+    container_name: ut-google-findmy
+    profiles: [findmy]
+    restart: unless-stopped
+    ports:
+      - "5500:5500"
+    environment:
+      AUTH_TOKEN: ${GOOGLE_FINDMY_TOKEN:-change-me-google-token}
+      PUSH_URL: http://audio-bridge:8085/api/v1/findmy/locations
+      HOST: 0.0.0.0
+      PORT: "5500"
+    volumes:
+      - google-findmy-auth:/app/Auth
+    depends_on:
+      - audio-bridge
+    networks:
+      - utnet
+
 volumes:
   traccar-data:
   audio-data:
+  anisette-data:
+  macless-data:
+  google-findmy-auth:
 
 networks:
   utnet:

@@ -1,4 +1,4 @@
-"""Audio-Bridge – Sprachnachrichten zwischen Tracker und Eltern-Web-UI.
+"""Audio-Bridge – Sprachnachrichten, Geräte-Registry und Find-My-Ingest.
 
 Endpunkte und Datenmodell: docs/architecture.md (Abschnitt 3).
 Konfiguration über Umgebungsvariablen (siehe server/.env.example).
@@ -13,11 +13,13 @@ import shutil
 import sqlite3
 import subprocess
 import time
+import urllib.parse
+import urllib.request
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
@@ -29,11 +31,16 @@ STATIC_DIR = Path(__file__).parent / "static"
 DEVICE_TOKEN = os.environ.get("DEVICE_TOKEN", "")
 PARENT_TOKEN = os.environ.get("PARENT_TOKEN", "")
 WEBHOOK_TOKEN = os.environ.get("TRACCAR_WEBHOOK_TOKEN", "")
+FINDMY_TOKEN = os.environ.get("FINDMY_TOKEN", "")
+TRACCAR_FORWARD_URL = os.environ.get("TRACCAR_FORWARD_URL", "")
 SEARCH_MODE_MINUTES = int(os.environ.get("SEARCH_MODE_MINUTES", "30"))
 
 # Zielformate (siehe docs/decisions.md D-002: 8 kHz mono, IMA-ADPCM für den Tracker)
 FMT_DEVICE = ["-c:a", "adpcm_ima_wav", "-ar", "8000", "-ac", "1"]
 FMT_PARENT = ["-c:a", "libmp3lame", "-b:a", "48k", "-ar", "8000", "-ac", "1"]
+
+
+# --- Datenbank --------------------------------------------------------------
 
 
 def db() -> sqlite3.Connection:
@@ -60,6 +67,33 @@ def init_db() -> None:
                )"""
         )
         conn.execute("CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS devices (
+                   id TEXT PRIMARY KEY,
+                   name TEXT NOT NULL DEFAULT '',
+                   imei TEXT NOT NULL DEFAULT '',
+                   msisdn TEXT NOT NULL DEFAULT '',
+                   notes TEXT NOT NULL DEFAULT '',
+                   created_at TEXT NOT NULL
+               )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS findmy_locations (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   provider TEXT NOT NULL,
+                   beacon_id TEXT NOT NULL,
+                   latitude REAL NOT NULL,
+                   longitude REAL NOT NULL,
+                   accuracy REAL,
+                   reported_at TEXT,
+                   received_at TEXT NOT NULL,
+                   raw TEXT
+               )"""
+        )
+
+
+def now_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 def state_get(key: str) -> str | None:
@@ -82,6 +116,18 @@ def search_mode_active() -> bool:
     return bool(until) and float(until) > time.time()
 
 
+def ensure_device(device_id: str) -> None:
+    """Unbekannte Geräte automatisch anlegen (analog Traccar registerUnknown)."""
+    with db() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO devices(id, name, created_at) VALUES(?, ?, ?)",
+            (device_id, device_id, now_iso()),
+        )
+
+
+# --- Auth -------------------------------------------------------------------
+
+
 def token_ok(expected: str, provided: str | None) -> bool:
     return bool(expected) and provided is not None and secrets.compare_digest(expected, provided)
 
@@ -94,6 +140,9 @@ def require_device(x_auth_token: str | None = Header(default=None)) -> None:
 def require_parent(x_auth_token: str | None = Header(default=None)) -> None:
     if not token_ok(PARENT_TOKEN, x_auth_token):
         raise HTTPException(status_code=401, detail="Ungültiges Parent-Token")
+
+
+# --- Audio-Hilfsfunktionen --------------------------------------------------
 
 
 def convert(src: Path, dst: Path, fmt: list[str]) -> bool:
@@ -125,16 +174,125 @@ def insert_message(
         conn.execute(
             "INSERT INTO messages(id, direction, device_id, created_at, raw_file, play_file, duration_ms) "
             "VALUES(?, ?, ?, ?, ?, ?, ?)",
+            (msg_id, direction, device_id, now_iso(), raw.name, play.name, duration_ms),
+        )
+
+
+# --- Find-My-Hilfsfunktionen ------------------------------------------------
+
+LAT_KEYS = ("latitude", "lat", "latDeg", "lat_deg", "y")
+LON_KEYS = ("longitude", "lon", "lng", "long", "lonDeg", "lon_deg", "x")
+ID_KEYS = ("beacon_id", "beaconId", "device_id", "deviceId", "id", "identifier", "accessory_id", "name")
+TIME_KEYS = ("reported_at", "reportedAt", "timestamp", "time", "date", "lastUpdate", "last_seen")
+ACC_KEYS = ("accuracy", "acc", "horizontalAccuracy", "hdop")
+PROVIDER_KEYS = ("provider", "source", "network")
+
+
+def _pick(item: dict, keys: tuple[str, ...]):
+    for key in keys:
+        if key in item and item[key] not in (None, ""):
+            return item[key]
+    return None
+
+
+def _to_epoch(value) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if text.isdigit():
+            return int(text)
+        for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return int(time.mktime(time.strptime(text, fmt)))
+            except ValueError:
+                continue
+    return None
+
+
+def extract_location(item: dict) -> dict | None:
+    """Tolerante Extraktion: das Payload-Format externer Find-My-Tools ist nicht dokumentiert."""
+    lat = _pick(item, LAT_KEYS)
+    lon = _pick(item, LON_KEYS)
+    if lat is None or lon is None:
+        return None
+    try:
+        latitude, longitude = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None
+    accuracy = _pick(item, ACC_KEYS)
+    try:
+        accuracy = float(accuracy) if accuracy is not None else None
+    except (TypeError, ValueError):
+        accuracy = None
+    beacon_id = _pick(item, ID_KEYS)
+    reported = _pick(item, TIME_KEYS)
+    return {
+        "provider": str(_pick(item, PROVIDER_KEYS) or "unknown").lower(),
+        "beacon_id": str(beacon_id) if beacon_id else "unknown",
+        "latitude": latitude,
+        "longitude": longitude,
+        "accuracy": accuracy,
+        "reported_at": str(reported) if reported is not None else None,
+        "reported_epoch": _to_epoch(reported),
+    }
+
+
+def insert_findmy(loc: dict, raw: dict) -> None:
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO findmy_locations(provider, beacon_id, latitude, longitude, accuracy, "
+            "reported_at, received_at, raw) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                msg_id,
-                direction,
-                device_id,
-                time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                raw.name,
-                play.name,
-                duration_ms,
+                loc["provider"],
+                loc["beacon_id"],
+                loc["latitude"],
+                loc["longitude"],
+                loc["accuracy"],
+                loc["reported_at"],
+                now_iso(),
+                json.dumps(raw, ensure_ascii=False),
             ),
         )
+
+
+def sanitize_device_id(value: str) -> str:
+    """Traccar akzeptiert in Geräte-IDs keine Bindestriche/Sonderzeichen.
+
+    Für das Forwarding wird die Beacon-ID auf ASCII-Buchstaben, Ziffern, '.' und '_'
+    reduziert. Die Original-ID bleibt in der Bridge erhalten (Spalte beacon_id).
+    """
+    cleaned = "".join(ch for ch in value if ch.isascii() and (ch.isalnum() or ch in "._"))
+    return cleaned or "unknown"
+
+
+def forward_to_traccar(loc: dict) -> bool:
+    """Reicht Find-My-Positionen als OsmAnd-Position an Traccar weiter (eigenes Gerät je Beacon)."""
+    if not TRACCAR_FORWARD_URL:
+        return False
+    params = {
+        "id": sanitize_device_id(loc["beacon_id"]),
+        "lat": loc["latitude"],
+        "lon": loc["longitude"],
+        "timestamp": loc.get("reported_epoch") or int(time.time()),
+    }
+    if loc.get("accuracy"):
+        params["hdop"] = loc["accuracy"]
+    url = TRACCAR_FORWARD_URL.rstrip("/") + "/?" + urllib.parse.urlencode(params)
+    try:
+        with urllib.request.urlopen(url, timeout=10) as response:
+            if not (200 <= response.status < 300):
+                print(f"[findmy] Traccar-Forward HTTP {response.status}: {url}", flush=True)
+                return False
+            return True
+    except Exception as exc:  # Diagnose: Fehler nicht still verschlucken
+        print(f"[findmy] Traccar-Forward fehlgeschlagen ({type(exc).__name__}: {exc}) {url}", flush=True)
+        return False
+
+
+# --- App --------------------------------------------------------------------
 
 
 @asynccontextmanager
@@ -143,12 +301,16 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="UltimateTracker Audio-Bridge", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="UltimateTracker Audio-Bridge", version="0.2.0", lifespan=lifespan)
 
 
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"status": "ok", "search_mode": search_mode_active()}
+    return {
+        "status": "ok",
+        "search_mode": search_mode_active(),
+        "findmy_forward": bool(TRACCAR_FORWARD_URL),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -171,12 +333,14 @@ async def device_upload(
     play = AUDIO_DIR / f"{msg_id}.mp3"
     ok = convert(raw, play, FMT_PARENT)
     insert_message(msg_id, "in", device_id, raw, play if ok else raw, duration_ms)
+    ensure_device(device_id)
     return {"id": msg_id, "converted": ok}
 
 
 @app.get("/api/v1/device/pending", dependencies=[Depends(require_device)])
 def device_pending(device_id: str) -> dict:
     """Nächste Nachricht + Suchmodus-Status für den Tracker-Poll."""
+    ensure_device(device_id)
     with db() as conn:
         row = conn.execute(
             "SELECT id FROM messages WHERE direction = 'out' AND device_id = ? AND status = 'new' "
@@ -216,6 +380,7 @@ async def parent_upload(device_id: str = Form(...), audio: UploadFile = File(...
     play = AUDIO_DIR / f"{msg_id}.wav"
     ok = convert(raw, play, FMT_DEVICE)
     insert_message(msg_id, "out", device_id, raw, play if ok else raw, None)
+    ensure_device(device_id)
     return {"id": msg_id, "converted": ok}
 
 
@@ -268,6 +433,96 @@ def set_search_mode(active: bool = Form(True), minutes: int | None = Form(None))
     return {"search_mode": active, "until": until, "minutes": duration if active else 0}
 
 
+# --- Geräte-Registry (Identitäten: IMEI ↔ MSISDN ↔ Name) --------------------
+
+
+@app.get("/api/v1/parent/devices", dependencies=[Depends(require_parent)])
+def devices_list() -> dict:
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM devices ORDER BY created_at").fetchall()
+    return {"devices": [dict(r) for r in rows]}
+
+
+@app.put("/api/v1/parent/devices/{device_id}", dependencies=[Depends(require_parent)])
+async def device_upsert(device_id: str, request: Request) -> dict:
+    """Gerät anlegen/aktualisieren. Body: {"name": "...", "imei": "...", "msisdn": "...", "notes": "..."}"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON-Objekt erwartet")
+    fields = {key: str(body.get(key, "") or "") for key in ("name", "imei", "msisdn", "notes")}
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO devices(id, name, imei, msisdn, notes, created_at) VALUES(?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET name = excluded.name, imei = excluded.imei, "
+            "msisdn = excluded.msisdn, notes = excluded.notes",
+            (device_id, fields["name"] or device_id, fields["imei"], fields["msisdn"], fields["notes"], now_iso()),
+        )
+    return {"id": device_id, **fields}
+
+
+@app.delete("/api/v1/parent/devices/{device_id}", dependencies=[Depends(require_parent)])
+def device_delete(device_id: str) -> dict:
+    with db() as conn:
+        conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+    return {"deleted": device_id}
+
+
+# --- Find My (Apple / Google) ----------------------------------------------
+
+
+@app.post("/api/v1/findmy/locations")
+async def findmy_ingest(request: Request, x_auth_token: str | None = Header(default=None)) -> dict:
+    """Ingest für Find-My-Positionen (Apple/Google-Gegenstücke).
+
+    Tolerantes Schema: akzeptiert Einzelobjekt oder Liste; erkennt gängige
+    Feldnamen (lat/latitude, lon/lng/longitude, id/beacon_id/device_id, ...).
+    Optionaler Token: FINDMY_TOKEN (leer = offen; Endpunkt dann nur intern erreichbar halten).
+    """
+    if FINDMY_TOKEN and not token_ok(FINDMY_TOKEN, x_auth_token):
+        raise HTTPException(status_code=401, detail="Ungültiges Find-My-Token")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    items = payload if isinstance(payload, list) else [payload]
+    stored = 0
+    forwarded = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        loc = extract_location(item)
+        if loc is None:
+            continue
+        insert_findmy(loc, item)
+        stored += 1
+        if forward_to_traccar(loc):
+            forwarded += 1
+    return {"stored": stored, "forwarded": forwarded}
+
+
+@app.get("/api/v1/parent/findmy/locations", dependencies=[Depends(require_parent)])
+def findmy_list(provider: str | None = None, beacon_id: str | None = None, limit: int = 20) -> dict:
+    sql = "SELECT provider, beacon_id, latitude, longitude, accuracy, reported_at, received_at FROM findmy_locations"
+    where: list[str] = []
+    args: list = []
+    if provider:
+        where.append("provider = ?")
+        args.append(provider)
+    if beacon_id:
+        where.append("beacon_id = ?")
+        args.append(beacon_id)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY id DESC LIMIT ?"
+    args.append(max(1, min(limit, 200)))
+    with db() as conn:
+        rows = conn.execute(sql, args).fetchall()
+    return {"locations": [dict(r) for r in rows]}
+
+
 # --- Traccar-Webhook --------------------------------------------------------
 
 
@@ -276,7 +531,7 @@ def traccar_events(payload: dict, x_auth_token: str | None = Header(default=None
     """Empfänger für Traccar `event.forward` (Geofence/Alarm/Status)."""
     if WEBHOOK_TOKEN and not token_ok(WEBHOOK_TOKEN, x_auth_token):
         raise HTTPException(status_code=401, detail="Ungültiges Webhook-Token")
-    entry = {"received_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "payload": payload}
+    entry = {"received_at": now_iso(), "payload": payload}
     with EVENTS_LOG.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return {"ok": True}

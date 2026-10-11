@@ -35,9 +35,24 @@ docker compose logs -f audio-bridge
 | POST | `/api/v1/parent/messages` | Parent-Token | Sprachnachricht aufnehmen |
 | GET | `/api/v1/parent/messages` | Parent-Token | Nachrichtenliste |
 | POST | `/api/v1/parent/search-mode` | Parent-Token | Suchmodus setzen |
+| GET/PUT/DELETE | `/api/v1/parent/devices[/{id}]` | Parent-Token | Geräte-Registry (IMEI/MSISDN) |
+| POST | `/api/v1/findmy/locations` | optional Token | Find-My-Ingest (Apple/Google) |
+| GET | `/api/v1/parent/findmy/locations` | Parent-Token | Find-My-Positionen |
 | POST | `/api/v1/traccar/events` | optional Token | Webhook-Empfänger |
 
 Token-Header: `X-Auth-Token: <token>`.
+
+## Compose-Profile
+
+| Profil | Dienste | Zweck |
+|---|---|---|
+| (Standard) | `traccar`, `audio-bridge` | Ortung, Geofence, Sprachnachrichten, Eltern-UI |
+| `findmy` | `anisette`, `macless-haystack`, `google-findmy` | Find My (Apple/Google) – **experimentell**, siehe `../docs/findmy.md` |
+
+```bash
+docker compose up -d                              # Standard
+docker compose --profile findmy up -d             # zusätzlich Find My
+```
 
 ## Daten
 

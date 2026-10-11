@@ -127,9 +127,11 @@ Herstellerdokumentation geprüft (siehe `docs/hardware-review.md`).
   versorgt werden, sonst ist kein Fix möglich.
 - Upload via LTE-M per OsmAnd-Protokoll (HTTP-GET) an Traccar; bevorzugt LTE-M
   (deutlich kürzere Latenz als NB-IoT). Akkustand wird mitgesendet (`batt`).
-- Find-My-Beacons (Apple/Google) sind **nicht** Teil des Prototyps: Google FMD ist
-  für DIY nicht offen, Apple/OpenHaystack ist seit 2025 unzuverlässig, und im Deep
-  Sleep kann der ESP32 nicht advertisen. Option später: separater Always-on-Chip.
+- Find-My-Beacons (Apple/Google) sind **optional** (Compose-Profil `findmy`,
+  siehe `docs/findmy.md`): Apple über `anisette` + `macless-haystack`, Google über
+  einen Community-Microservice. Positionen laufen tolerant in die Bridge
+  (`/api/v1/findmy/locations`) und optional weiter an Traccar (eigenes Gerät je
+  Beacon). Bleibt experimentell; der Beacon-Dauerbetrieb (Strom) ist separat zu lösen.
 
 ### 3.3 Zwei-Wege-Sprachkanal (Push-to-Talk)
 
@@ -163,6 +165,8 @@ Herstellerdokumentation geprüft (siehe `docs/hardware-review.md`).
   **erst auf dem Breadboard verifizieren**, dann ggf. als Zusatzpfad aktivieren.
 - Der Modem-RI liegt auf GPIO 3 und ist als Wake-Reserve vorgesehen (nur nutzbar,
   solange das Modem registriert bleibt – kostet Ruhestrom).
+- Identitäten (IMEI/MSISDN/Beacon-IDs), SMS-Pfade und die Kommando-Spezifikation:
+  [`docs/sms.md`](docs/sms.md).
 
 ## 4. Software- & Server-Architektur
 
@@ -199,7 +203,12 @@ Herstellerdokumentation geprüft (siehe `docs/hardware-review.md`).
   Geräte werden automatisch registriert (`database.registerUnknown`).
 - **audio-bridge:** FastAPI/Python-Service im selben Docker-Netz. Verwaltet
   Sprach-Uploads beider Richtungen, konvertiert mit ffmpeg, stellt den Eltern eine
-  HTML5-Oberfläche bereit und hält die Nachrichten-Queue für den Poll des Trackers.
+  HTML5-Oberfläche bereit, hält die Nachrichten-Queue für den Poll des Trackers und
+  führt die **Geräte-Registry** (IMEI ↔ MSISDN ↔ Name, Auto-Registrierung).
+- **Optional (Profil `findmy`, experimentell):** `anisette` + `macless-haystack`
+  (Apple Find My) und `google-findmy` (Google Find Hub). Positionen landen über
+  `/api/v1/findmy/locations` in der Bridge und werden optional an Traccar
+  weitergereicht. Details: [`docs/findmy.md`](docs/findmy.md).
 - Hinweis: Audionachrichten lassen sich **nicht** in den Traccar-Event-Feed
   injizieren (keine API dafür). Die Bridge ist für Audio die führende Oberfläche;
   Traccar liefert Karte und Geofence-Ereignisse.
@@ -251,6 +260,8 @@ periodischer GNSS-Upload-Zyklus ≈ 1,2 mA Durchschnittsstrom.
 | 6 | PSM/TAU-Latenz der 1NCE-SIM | Messung M3/M7 |
 | 7 | Gehäusemaße (Board 111 × 32 × 20 mm) | CAD nach Nachmessung |
 | 8 | Lizenz für die Veröffentlichung | Entscheiden (MIT/GPL/CERN-OHL) |
+| 9 | Find My: Apple-Filter/Google-Experiment kann brechen | Auswertung im Stack vorbereitet; Fallback bleibt GNSS |
+| 10 | SMS-Pfad (Messung M4) | Kommandos spezifiziert in `docs/sms.md`; erst nach Test aktivieren |
 
 ## 8. Implementierungs-Roadmap
 
@@ -271,4 +282,6 @@ periodischer GNSS-Upload-Zyklus ≈ 1,2 mA Durchschnittsstrom.
 - [`docs/architecture.md`](docs/architecture.md) – Architektur & Datenflüsse
 - [`docs/measurement-plan.md`](docs/measurement-plan.md) – Mess- und Testplan
 - [`docs/deployment.md`](docs/deployment.md) – Server-Deployment
+- [`docs/findmy.md`](docs/findmy.md) – Apple/Google Find My (Gegenstücke, Setup)
+- [`docs/sms.md`](docs/sms.md) – Identitäten (IMEI/MSISDN) und SMS-Pfad
 - [`docs/decisions.md`](docs/decisions.md) – Entscheidungsprotokoll

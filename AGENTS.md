@@ -15,6 +15,10 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   Vorlage: `server/.env.example`.
 - Beim SIM7080G sind **GNSS und LTE hardwarebedingt nicht gleichzeitig** nutzbar
   (sequenzielle Abläufe planen).
+- **Geräte-ID ist die IMEI** (Bridge-Registry, `docs/sms.md`); MSISDN nur für den
+  optionalen SMS-Pfad mitführen.
+- Find My (Apple/Google) ist **experimentell** und läuft im Compose-Profil `findmy`
+  (`docs/findmy.md`) – nicht als stabilen Pfad voraussetzen.
 - Zahlen (Datenraten, Ströme) immer aus `docs/hardware-review.md` bzw.
   `docs/architecture.md` übernehmen, nicht neu schätzen.
 
