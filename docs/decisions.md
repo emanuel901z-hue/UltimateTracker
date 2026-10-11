@@ -2,6 +2,21 @@
 
 Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung – Folgen.
 
+## D-012 – 2026-10-11 – Apple-Pfad: automatische Traccar-Bridge statt manueller Auswertung
+
+- **Entscheidung:** `findmy-bridge` (jannisko/findmy-traccar-bridge, findmy.py) läuft
+  im Profil `findmy` und synchronisiert die Standorte der DIY-/OpenHaystack-Beacons
+  automatisch nach Traccar. `anisette` bleibt Auth-Dienst; `macless-haystack` bleibt
+  für Key-Generierung und optionale Web-UI.
+- **Begründung:** Die bisherige Apple-Auswertung war manuell/skriptbasiert. Geprüfte
+  Alternativen: `traccar/apple-find-my-sync` ist ein **nativer macOS-Service**
+  (unbrauchbar für Linux/Docker); `nikita-skakun/apple-find-my-sync` ist AirTag-first
+  (DIY nur „planned“) und braucht macOS-Bootstrap. Nur die jannisko-Bridge unterstützt
+  DIY-Beacons ohne Mac.
+- **Folgen:** `APPLE_BEACON_KEYS` + `APPLE_POLL_INTERVAL` in `server/.env`;
+  interaktive Erst-Initialisierung der Bridge; Ban-Risiko dokumentiert
+  (Default 1 Abfrage/Stunde). Details: `docs/findmy.md`.
+
 ## D-011 – 2026-10-11 – Google-Pfad: WebUI als Standard, Microservice als Minimal-Option
 
 - **Entscheidung:** Für Google Find Hub läuft standardmäßig die

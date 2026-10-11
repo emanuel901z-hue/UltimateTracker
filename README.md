@@ -19,6 +19,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 
 | Pfad | Inhalt |
 |---|---|
+| `TODO.md` | **Konsolidierte offene Aufgaben** (Start hier, wenn es losgeht) |
 | `project.md` | Projektübersicht: Hardware, Verdrahtung, Systemlogik (Hauptdokument) |
 | `docs/pinout.md` | Verbindliche GPIO-Belegung (T-SIM7080G-S3 V1.0) |
 | `docs/hardware-review.md` | Prüfbericht: verifizierte Annahmen, Risiken, Quellen |

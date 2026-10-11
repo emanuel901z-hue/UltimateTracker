@@ -47,7 +47,7 @@ Token-Header: `X-Auth-Token: <token>`.
 | Profil | Dienste | Zweck |
 |---|---|---|
 | (Standard) | `traccar`, `audio-bridge` | Ortung, Geofence, Sprachnachrichten, Eltern-UI |
-| `findmy` | `anisette`, `macless-haystack`, `google-findmy-webui` | Find My: Apple + Google-WebUI (Port **4321**) – **experimentell**, siehe `../docs/findmy.md` |
+| `findmy` | `anisette`, `findmy-bridge`, `macless-haystack`, `google-findmy-webui` | Find My: Apple (automatisch → Traccar) + Google-WebUI (Port **4321**) – **experimentell**, siehe `../docs/findmy.md` |
 | `google-minimal` | `google-findmy` | Nur Google-Microservice (Port **5500**), ohne WebUI – Minimal-Alternative |
 
 ```bash

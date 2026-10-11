@@ -67,6 +67,32 @@ services:
     networks:
       - utnet
 
+  findmy-bridge:
+    # Apple → Traccar: automatische Synchronisation von OpenHaystack-/DIY-Beacons
+    # über findmy.py (nutzt den anisette-Dienst). Echte AirTags brauchen zusätzlich
+    # eine macOS-Key-Extraktion. Erst-Einrichtung interaktiv (siehe docs/findmy.md).
+    # Hinweis: 1 Abfrage/Stunde (Default) gilt als account-sicher.
+    build: https://github.com/jannisko/findmy-traccar-bridge.git
+    container_name: ut-findmy-bridge
+    profiles: [findmy]
+    # Ohne APPLE_BEACON_KEYS beendet sich der Dienst sauber (Exit 0) → kein
+    # Endlos-Neustart; echte Abstürze werden bis zu 3× wiederholt.
+    restart: on-failure:3
+    environment:
+      BRIDGE_TRACCAR_SERVER: http://traccar:5055
+      BRIDGE_PRIVATE_KEYS: ${APPLE_BEACON_KEYS:-}
+      BRIDGE_POLL_INTERVAL: ${APPLE_POLL_INTERVAL:-3600}
+      BRIDGE_LOGGING_LEVEL: INFO
+      # Optional (je nach Bridge-Version/Fork): eigener Anisette-Dienst statt Default
+      BRIDGE_ANISETTE_SERVER: http://anisette:6969
+    volumes:
+      - findmy-bridge-data:/bridge/data
+    depends_on:
+      - anisette
+      - traccar
+    networks:
+      - utnet
+
   google-findmy-webui:
     # EMPFOHLENER Google-Find-Hub-Weg: Web-UI mit Key-Rotations-Fix (PR #114),
     # Geräte-/Scheduling-Verwaltung, Traccar-Preset und Firmware-Build im Browser.
@@ -117,6 +143,7 @@ volumes:
   audio-data:
   anisette-data:
   macless-data:
+  findmy-bridge-data:
   google-findmy-auth:
   google-findmy-data:
 

@@ -16,7 +16,7 @@ Initialisierung (Keys/Geräteregistrierung) und die Auswertung – plus die Gren
 |---|---|---|
 | Offiziell für DIY? | nein (OpenHaystack) | nein (Community-Tools) |
 | Konto nötig | Apple-ID mit 2FA (**nur SMS-2FA**) | Google-Konto + Chrome (Desktop) |
-| Docker-Gegenstück | `anisette` + `macless-haystack` | `google-findmy-webui` (empfohlen) bzw. `google-findmy` (minimal) |
+| Docker-Gegenstück | `findmy-bridge` (automatisch) + `anisette` + `macless-haystack` (Keys/UI) | `google-findmy-webui` (empfohlen) bzw. `google-findmy` (minimal) |
 | Erst-Setup | interaktiv (Apple-ID-Login im Container) | interaktiv (Chrome-Login auf Desktop) |
 | Zuverlässigkeit | wackelig (Apple-Filter) | experimentell |
 | Abdeckung | sehr hoch (iPhone-Dichte) | hoch (Android-Dichte) |
@@ -25,38 +25,64 @@ Initialisierung (Keys/Geräteregistrierung) und die Auswertung – plus die Gren
 **nicht** advertisen → entweder Wake-Zyklen (1–3 mA Durchschnitt) oder ein
 separater Always-on-Chip (z. B. ST17H66, µA-Bereich). Siehe `docs/decisions.md` D-009.
 
-## 2. Apple: macless-haystack + Anisette
+## 2. Apple: automatische Bridge (empfohlen) + Key-Tooling
+
+Drei Bausteine arbeiten zusammen:
+
+| Baustein | Aufgabe |
+|---|---|
+| `anisette` | Apple-Authentifizierung (Anisette-Daten), wird von der Bridge genutzt |
+| **`findmy-bridge`** (findmy.py) | **Automatisch**: holt die Standorte der DIY-/OpenHaystack-Beacons und pusht sie in Traccar (OsmAnd, Port 5055) |
+| `macless-haystack` | Key-Generierung (`generate_keys.py`) und optional Web-UI für manuelle Sicht |
+
+### 2a. Bridge starten und initialisieren
 
 ```bash
 cd server
-docker compose --profile findmy up -d anisette macless-haystack
+docker compose --profile findmy up -d anisette findmy-bridge
+# Einmalig interaktiv (Apple-ID + SMS-2FA); bis dahin bleibt die Bridge idle:
+docker compose --profile findmy exec findmy-bridge .venv/bin/findmy-traccar-bridge-init
 ```
 
-Erst-Registrierung (einmalig, interaktiv):
+Konfiguration über `server/.env`: `APPLE_BEACON_KEYS` (Private Keys der Beacons,
+kommasepariert) und `APPLE_POLL_INTERVAL` (Default 3600 s).
+**Ban-Risiko:** Apple mag häufige Abfragen nicht – 1 Abfrage/30 min gilt als
+„relativ sicher“, das Default (1/h) ist bewusst konservativ. Ein Zweit-Account
+ist empfehlenswert.
+
+### 2b. Keys erzeugen und Beacons flashen
+
+1. `generate_keys.py` aus den macless-haystack-Releases laden.
+2. Keypair erzeugen → liefert `*_devices.json` (Frontend) und die
+   Base64-Keys: **Advertising-Key** in die Beacon-Firmware, **Private Key** in
+   `APPLE_BEACON_KEYS`.
+3. ESP32-Firmware (macless-haystack/OpenHaystack) mit dem Advertising-Key flashen –
+   oder ST17H66-Clones als separaten Always-on-Beacon nutzen.
+
+### 2c. macless-haystack-Web-UI (optional, manuelle Sicht)
 
 ```bash
+docker compose --profile findmy up -d macless-haystack
+# Erst-Registrierung (falls noch nicht geschehen):
 docker compose stop macless-haystack
-docker compose run --rm macless-haystack   # fragt Apple-ID, Passwort, SMS-2FA
-# Erfolg: "serving at port 6176 over HTTP"
+docker compose run --rm macless-haystack    # Apple-ID, Passwort, SMS-2FA
 docker compose up -d macless-haystack
 ```
 
-Hinweise aus dem Projekt-FAQ: neue Apple-IDs brauchen ggf. Zahlungsmethode/Daten
-(„account score“); zu viele Geräte im Account stören den Login; `auth.json` liegt
-im Volume `macless-data` und kann gesichert/ausgetauscht werden.
-
-Keys + Firmware:
-
-1. `generate_keys.py` aus den macless-haystack-Releases laden.
-2. Keypair erzeugen → liefert `*_devices.json` (fürs Frontend) und die
-   Base64-Advertising-Keys für die Firmware.
-3. ESP32-Firmware aus dem Repo mit dem Key flashen (oder OpenHaystack-kompatible
-   Firmware, z. B. für ST17H66-Clones).
-
 Auswertung: Web-Frontend <https://dchristl.github.io/macless-haystack/>
-(Endpunkt `http://<host>:6176` eintragen, `*_devices.json` importieren).
-Den Endpunkt vor dem Exponieren per `config.ini` (`endpoint_user`/`endpoint_pass`)
-absichern.
+(Endpunkt `http://<host>:6176`, `*_devices.json` importieren). Vor dem Exponieren
+per `config.ini` (`endpoint_user`/`endpoint_pass`) absichern. FAQ-Hinweise: neue
+Apple-IDs brauchen ggf. Zahlungsmethode/Daten; zu viele Geräte im Account stören
+den Login.
+
+### 2d. Verworfene Alternativen (geprüft)
+
+| Projekt | Warum nicht |
+|---|---|
+| `traccar/apple-find-my-sync` | **Nativer macOS-Service** (Swift) – für Linux/Docker unbrauchbar |
+| `nikita-skakun/apple-find-my-sync` | Headless-Linux-Service, aber **AirTag-first** (DIY/OpenHaystack „planned“) + macOS-Bootstrap |
+| `hass-FindMy` | Home-Assistant-Integration – wir nutzen Traccar, nicht HA |
+| Node.js-Bibliotheken (`findmy.js`) | Kein Traccar-Bezug; Bridge deckt den Fall ab |
 
 ## 3. Google: WebUI (empfohlen) oder Minimal-Microservice
 
@@ -164,10 +190,14 @@ entscheiden. Keine offiziellen APIs → Nutzung auf eigenes Risiko.
 
 ## 7. Quellen
 
-- macless-haystack – <https://github.com/dchristl/macless-haystack>
+- macless-haystack (Keys + UI) – <https://github.com/dchristl/macless-haystack>
 - OpenHaystack – <https://github.com/seemoo-lab/openhaystack>
 - Apple-Filterproblem – <https://github.com/seemoo-lab/openhaystack/issues/273>
-- Traccar-Fork (Minimal-Variante) – <https://github.com/traccar/google-find-hub-sync>
+- Apple→Traccar-Bridge (empfohlen) – <https://github.com/jannisko/findmy-traccar-bridge>
+- findmy.py (Bibliothek) – <https://github.com/malmeloo/FindMy.py>
+- traccar/apple-find-my-sync (macOS-only) – <https://github.com/traccar/apple-find-my-sync>
+- nikita-skakun/apple-find-my-sync (AirTag-first) – <https://github.com/nikita-skakun/apple-find-my-sync>
+- Traccar-Fork (Google, Minimal-Variante) – <https://github.com/traccar/google-find-hub-sync>
 - GoogleFindMyToolsWebUi (empfohlen) – <https://github.com/P6g9YHK6/GoogleFindMyToolsWebUi>
 - GoogleFindMyTools (Original) – <https://github.com/leonboe1/GoogleFindMyTools>
 - Key-Rotations-Fix (offener PR) – <https://github.com/leonboe1/GoogleFindMyTools/pull/114>
