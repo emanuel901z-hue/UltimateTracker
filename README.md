@@ -25,6 +25,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/hardware-review.md` | Prüfbericht: verifizierte Annahmen, Risiken, Quellen |
 | `docs/architecture.md` | Systemarchitektur, Datenflüsse, Energiebudget |
 | `docs/measurement-plan.md` | Mess- und Testplan für die Inbetriebnahme |
+| `docs/optimizations.md` | Optimierungs-Backlog (Server & Firmware, priorisiert) |
 | `docs/deployment.md` | Server-Deployment (WSL, Docker, Thin Client) |
 | `docs/findmy.md` | Apple/Google Find My: Gegenstücke, Setup, Grenzen (experimentell) |
 | `docs/sms.md` | Identitäten (IMEI/MSISDN) und SMS-Pfad |

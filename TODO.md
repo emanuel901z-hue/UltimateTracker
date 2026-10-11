@@ -76,7 +76,23 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 - [ ] SMS-Gateway evaluieren (nur falls M4 erfolgreich und Server-SMS gewünscht)
 - [ ] Traccar Relay (Android) evaluieren (braucht Preview-Traccar + `notificator.traccar.key`)
 
-## F. Vor der Veröffentlichung
+## F. Optimierungen (Backlog – Details in [`docs/optimizations.md`](docs/optimizations.md))
+
+**Paket 1 – sofort, ohne Hardware:**
+- [ ] A1 Healthchecks + Startreihenfolge im Compose
+- [ ] A2 Versionen pinnen (Traccar, WebUI-Image, Bridge-Commit)
+- [ ] A4 Benachrichtigung bei neuer Nachricht (Apprise/ntfy)
+- [ ] A6 Bridge-Härtung: WAL, Upload-Limit, Fail-fast, Retention
+- [ ] A7 Backups + Log-Rotation
+- [ ] A8 CI für Server **und** Firmware (GitHub Actions)
+
+**Paket 2 – mit Hardware:** A5/C1 Sync-Endpunkt (ein Roundtrip pro Wake),
+B2 Motion-Wake-Drossel, B5 Audio-AGC/Lautstärke, B8 Feldstabilität, A9 Status-Dashboard
+
+**Paket 3 – vor Produktivbetrieb:** A3 TLS/Reverse-Proxy, B6 NVS-Provisioning,
+B7 OTA über LTE, A10 PostgreSQL statt H2
+
+## G. Vor der Veröffentlichung
 
 - [ ] `LICENSE` anlegen
 - [ ] Secrets-Check der Historie (`git log -p | grep -iE "token|password"`)

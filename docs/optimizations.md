@@ -1,0 +1,171 @@
+# Optimierungen – Backlog (Server & Firmware)
+
+Stand 2026-10-11. Priorisiert nach Nutzen/Aufwand. „Nutzen“ = Betriebssicherheit,
+Batterielaufzeit, Wartbarkeit oder Eltern-UX. Nichts hiervon ist ein Blocker –
+die aktuelle Basis läuft.
+
+## A. Server / Stack
+
+### A1 – Healthchecks & Startreihenfolge · klein · hoch
+Compose hat bisher nur `depends_on` (nur Startreihenfolge, keine Bereitschaft).
+Folge: Find-My-Forwarding und Bridge-Aufrufe können ins Leere laufen.
+**Umsetzung:** `healthcheck` für `traccar` (`GET /api/server`) und `audio-bridge`
+(`GET /healthz`), dann `depends_on: {traccar: {condition: service_healthy}}`.
+
+### A2 – Versionen pinnen · klein · hoch
+`traccar:latest`, `ghcr.io/...:latest`, `python:3.12-slim` und der Bridge-`GIT_REF`
+sind ungepinnt → ein Rebuild kann morgen etwas anderes bauen.
+**Umsetzung:** Tags/Digests festschreiben, `GIT_REF` auf einen Commit setzen;
+Renovate/Dependabot (A8) übernimmt Updates als PRs.
+
+### A3 – TLS / Reverse-Proxy · mittel · **Pflicht vor Produktivbetrieb**
+Aktuell HTTP ohne Verschlüsselung für Kinder-Audio und Positionen.
+**Umsetzung:** Caddy-Dienst im Compose (`caddy:2` + `Caddyfile`), Let's Encrypt
+für eine Domain oder interne CA; danach Container-Ports nicht mehr nach außen
+veröffentlichen. Skizze liegt in `docs/deployment.md`.
+
+### A4 – Benachrichtigung bei neuer Nachricht · klein · hoch
+Eltern erfahren neue Audio-Nachrichten nur beim Öffnen der UI.
+**Umsetzung:** `APPRISE_URL` in der Bridge (ntfy/Telegram/Pushover/E-Mail) und im
+`device_upload`-Pfad auslösen; optional Web-Push (VAPID) für die UI.
+Hinweis: Die Google-WebUI bringt Apprise bereits mit – wir nutzen es nur für Audio.
+
+### A5 – Ein kombinierter Sync-Endpunkt + server-getriebenes Poll-Intervall · mittel · hoch
+Heute: pro Wake bis zu 3 Funk-Roundtrips (Position → Traccar, `/pending`, ggf.
+Download). Jeder Roundtrip kostet auf NB-IoT/LTE-M Sekunden und Energie.
+**Umsetzung:** `POST /api/v1/device/sync` mit Body
+`{device_id, battery, wake_reason, position?, fw}` →
+Antwort `{search_mode, next_poll_s, message?{id,url,format}, config?, ota?}`.
+Die Bridge reicht die Position intern an Traccar weiter (Funktion existiert schon
+für Find My). **Ein** Attach, **ein** Request pro Wake. Alte Endpunkte bleiben
+für Kompatibilität erhalten.
+
+### A6 – Bridge-Härtung · klein · mittel
+- SQLite **WAL** aktivieren (`PRAGMA journal_mode=WAL`) – weniger Locking bei parallelen Requests.
+- **Upload-Limit** (z. B. 2 MB) gegen versehentliche Riesen-Uploads.
+- **Fail-fast**: Start verweigern, wenn `DEVICE_TOKEN`/`PARENT_TOKEN` leer oder `change-me`.
+- **Retention**: Nachrichten/Audiodateien älter als N Tage löschen (Cron im Container).
+- Uplink-Nachrichten nach dem Anhören auf `read` setzen (UI zeigt sonst ewig „new“).
+
+### A7 – Backups & Log-Rotation · klein · mittel
+**Umsetzung:** `logging: {options: {max-size: "10m", max-file: "3"}}` für alle
+Dienste; Backup-Skript (oder `offen/docker-volume-backup`) täglich, Ablage auf
+dem Thin Client/NAS. Restore einmal testen.
+
+### A8 – CI für Server **und** Firmware · mittel · mittel
+GitHub Actions: `docker compose config`-Validierung, `python -m py_compile`,
+`pio run` (Firmware-Build) + `scripts/smoke-test.sh` gegen den lokalen Stack.
+Verhindert Bitrot und macht das Repo veröffentlichungsfähig.
+
+### A9 – Eltern-UI: Status-Dashboard + PWA · mittel · hoch
+Heute muss man für Position Traccar und für Audio die Bridge getrennt öffnen.
+**Umsetzung:** Bridge speichert die zuletzt gemeldeten Positionen (kommt mit A5
+ohnehin) und zeigt eine Karte „letzte Position, Akkustand, letzte Nachricht,
+Suchmodus“; als PWA installierbar (Manifest + Service Worker) – damit auch
+Push-Benachrichtigungen (A4) möglich.
+
+### A10 – Traccar: PostgreSQL statt H2 · mittel · mittel
+H2 als Datei-DB ist bei Stromausfall korruptionsgefährdet (Thin Client!).
+**Umsetzung:** `postgres:16`-Dienst + `database.*`-Einträge in `traccar.xml`
+(Driver/URL/User/Passwort aus `.env`). Dazu `database.registerUnknown` im
+Produktivbetrieb abschalten und Geräte explizit anlegen.
+
+### A11 – Feinschliff (klein)
+- Per-Geräte-Token statt eines gemeinsamen `DEVICE_TOKEN` (Leak-Eingrenzung).
+- Uptime-Überwachung (z. B. Uptime-Kuma) für 8082/8085/4321 mit Alarm per Apprise.
+- 1NCE-Datenvolumen im Blick behalten (Portal-Alarm).
+
+## B. Firmware
+
+### B1 – Modem-Power-Gating · mittel · **größter Batteriehebel**
+Drei Betriebsarten, messbar in M1/M3:
+1. **PSM** (heute geplant): wenige µA, aber lange Erreichbarkeitslücken.
+2. **eDRX registriert**: schnell erreichbar (RI-Wake möglich), kostet ~0,5–1 mA.
+3. **Modem komplett aus** (PWRKEY GPIO 41 bzw. PMU-Rail DC3/BLDO2 per I2C):
+   spart auch die PSM-Leckströme, kostet pro Wake einen vollen Network-Attach.
+**Empfehlung:** Variante 3 als Default, Variante 2 nur im Suchmodus.
+
+### B2 – Motion-Wake-Drossel · klein · hoch
+Kinder bewegen sich ständig → ohne Drossel entstehen Wake-Stürme.
+**Umsetzung:** Mindest-Schlafzeit nach einem Bewegungs-Push (z. B. 3–5 min),
+N aufeinanderfolgende Schwellwert-Treffer abwarten, Schwellwert/Dauer im LIS3DH
+tunen (Start: ~200 mg, 2 Samples). Im Suchmodus deaktivieren.
+
+### B3 – GNSS: Hot-Start & Almanach · klein · mittel
+Erster Fix ist teuer. **Umsetzung:** nach dem ersten Fix `AT+CGNSHOT` (Hot Start)
+für Folge-Wakes nutzen, Almanach gelegentlich per `AT+CGNSXTRA` aktualisieren,
+Antennen-Power (`AT+SGPIO=0,5,1,1`) nur während des Fixes an lassen.
+
+### B4 – Server-getriebenes Poll-Intervall umsetzen · klein (paired mit A5)
+Die Bridge liefert `next_poll_s`; die Firmware nutzt es für den nächsten Timer-Wake.
+Vorteil: Intervalländerungen (Nacht, Suchmodus, Akku) ohne Reflash.
+
+### B5 – Audio-Qualität & Lautstärke · klein–mittel · hoch
+- **AGC/Verstärkung** vor der ADPCM-Kodierung (INMP441 ist leise) → deutlich
+  bessere Verständlichkeit; simpel als Peak-Normalisierung.
+- **MAX98357A-GAIN-Pin** auf 15 dB (statt Default 9 dB) → lautere Wiedergabe;
+  Modul-Pads prüfen. Für Kinderohren Lautstärke begrenzen.
+- Optional **VAD** (Sprachaktivität): Stille trimmen → kürzere Uploads.
+
+### B6 – Provisioning in NVS statt Compile-Time · mittel · hoch
+Tokens/Server-URL/Intervalle/Volume in `Preferences` (NVS) speichern;
+Einrichtung per USB-Serial (JSON-Kommando, nur in den ersten Sekunden nach Boot).
+Danach: kein Reflash mehr für Konfigurationsänderungen.
+
+### B7 – OTA-Update über LTE · mittel · hoch
+Bei einem Gerät am Kind ist Zerlegen zum Flashen keine Option.
+16 MB Flash bieten Platz für zwei App-Slots (`default_16MB` → OTA-Partitionen).
+**Umsetzung:** Bridge stellt `/api/v1/device/firmware/latest` (Binär + SHA256 +
+Version) bereit; Firmware lädt nach dem Poll, schreibt mit `Update`, prüft Hash,
+rebootet, Rollback bei Fehlschlag.
+
+### B8 – Feldstabilität · klein · hoch
+- Brownout-Detector aktiv lassen, **Reset-Grund** und Zähler in NVS loggen.
+- Task-Watchdog aktivieren; Modem-TX-Stromspitzen mit 470 µF abfangen (BOM ✓).
+- **Ringpuffer-Log** (letzte ~20 Ereignisse) in NVS → bei Problemen auslesbar
+  oder mit dem nächsten Sync hochladen.
+
+### B9 – Low-Battery-Verhalten · klein · mittel
+Akkustand über AXP2101 lesen; unter ~15 %: Poll-Intervall verlängern, Audio-Uplink
+weiter erlauben, Wiedergabe begrenzen, Akkustand als `batt` mitsenden (Traccar
+zeigt ihn bereits an).
+
+### B10 – Struktur & Toolchain · mittel · mittel
+- Modem-Code in eigenen Task mit Mutex (TinyGSM ist blockierend), Audio-Task
+  getrennt; klare Zustandsmaschine (Skelett vorhanden).
+- **Arduino-Core 3.x (pioarduino)** evaluieren: neuer I2S-Treiber (Full-Duplex)
+  ist sauberer als der Legacy-Treiber; Aufwand einmalig, Risiko klein.
+
+### B11 – Selbsttest beim Boot (POST) · klein · mittel
+Modem-AT, GNSS-Antennenstrom, I2S-Loopback, Akku, Reset-Grund prüfen und als
+Attribut im ersten Sync mitsenden – spart Fehlersuche im Feld.
+
+## C. Gemeinsames Protokoll (Firmware ↔ Bridge)
+
+### C1 – Ein Roundtrip pro Wake
+Siehe A5/B4: Position, Konfiguration, Nachrichten und OTA-Info in **einem**
+Request/Antwort-Paar.
+
+### C2 – Konfiguration vom Server
+Poll-Intervall, Suchmodus, Lautstärke, Log-Level – alles im Sync-Response;
+Firmware wendet es an und meldet die aktive Konfiguration zurück.
+
+### C3 – Versions-Handshake
+Firmware sendet `fw`-Version + Feature-Flags; Bridge antwortet mit `min_fw` und
+Feature-Liste. Ältere Firmware fällt automatisch auf die alten Endpunkte zurück
+(Abwärtskompatibilität bleibt erhalten).
+
+## Empfehlung: „Paket 1“ (sofort umsetzbar, ohne Hardware)
+
+| Punkt | Warum jetzt |
+|---|---|
+| A1 Healthchecks | verhindert stille Forwarding-Fehler |
+| A2 Versionen pinnen | reproduzierbare Deployments vor dem Umzug |
+| A6 Bridge-Härtung | WAL, Limits, Fail-fast, Retention – kleine Eingriffe, große Wirkung |
+| A7 Backups + Log-Rotation | einmal einrichten, dauerhaft Ruhe |
+| A4 Benachrichtigungen | größter UX-Gewinn für die Eltern |
+| A8 CI | hält Server + Firmware baubar |
+
+„Paket 2“ (mit Hardware): A5+C1 (Sync-Endpunkt), B2 (Wake-Drossel), B5 (Audio),
+B8 (Feldstabilität), A9 (Status-Dashboard).
+„Paket 3“ (vor Produktivbetrieb): A3 (TLS), B6 (NVS), B7 (OTA), A10 (PostgreSQL).
