@@ -7,11 +7,12 @@
 
 #include <Arduino.h>
 #include "esp_sleep.h"
+#include "config.h"
 #include "pins.h"
 
-// Poll-Intervall für Server-Abfragen (Normalbetrieb); Suchmodus wird vom
-// Server signalisiert und verkürzt das Intervall auf 30–60 s.
-static constexpr uint64_t POLL_INTERVAL_US = 15ULL * 60ULL * 1000000ULL;
+// Poll-Intervall für Server-Abfragen (Normalbetrieb); der Server kann es per
+// /sync überschreiben (next_poll_s), Suchmodus verkürzt es zusätzlich.
+static constexpr uint64_t POLL_INTERVAL_US = static_cast<uint64_t>(POLL_INTERVAL_S_DEFAULT) * 1000000ULL;
 
 enum class WakeReason { Cold, Motion, Ptt, Timer, ModemRi };
 

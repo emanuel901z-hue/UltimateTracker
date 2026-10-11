@@ -83,21 +83,25 @@ messages(id TEXT PK, direction TEXT CHECK(in|out), device_id TEXT,
 Status-Werte: `new` → `delivered` (Downlink) bzw. `new` → `read` (Uplink, optional).
 Dateien liegen unter `DATA_DIR/audio/<id>.<ext>`.
 
-Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes) und
-`findmy_locations` (provider, beacon_id, lat/lon, accuracy, reported_at, raw).
+Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes),
+`findmy_locations` (provider, beacon_id, lat/lon, accuracy, reported_at, raw) und
+`positions` (Tracker-Positionen inkl. Akkustand für das Status-Dashboard).
 
 ### 3.2 Endpunkte
 
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
 | GET | `/healthz` | – | Healthcheck |
-| GET | `/` | – | Eltern-Web-UI (Recorder + Liste) |
+| GET | `/` | – | Eltern-Web-UI (Status, Recorder, Geräte, Liste) |
+| POST | `/api/v1/device/sync` | Device-Token | **Kombinierter Sync** (A5): Position rein; Nachricht, `next_poll_s`, Suchmodus raus |
 | POST | `/api/v1/device/messages` | Device-Token | Audio-Uplink des Trackers |
-| GET | `/api/v1/device/pending` | Device-Token | nächste Nachricht + Suchmodus-Flag |
+| GET | `/api/v1/device/pending` | Device-Token | Kompatibilitäts-Endpunkt (ältere Firmware) |
 | GET | `/api/v1/device/messages/{id}/audio` | Device-Token | Downlink-Datei, markiert als zugestellt |
 | POST | `/api/v1/parent/messages` | Parent-Token | Sprachnachricht der Eltern |
 | GET | `/api/v1/parent/messages` | Parent-Token | Liste (JSON) |
-| GET | `/api/v1/parent/search-mode` | Parent-Token | Suchmodus setzen/beenden |
+| GET | `/api/v1/parent/status` | Parent-Token | Status-Dashboard (Position, Akku, Nachrichten, Poll) |
+| POST | `/api/v1/parent/search-mode` | Parent-Token | Suchmodus setzen/beenden |
+| POST | `/api/v1/parent/maintenance/cleanup` | Parent-Token | Retention manuell auslösen |
 | GET | `/api/v1/parent/devices` | Parent-Token | Geräte-Registry (IMEI ↔ MSISDN ↔ Name) |
 | PUT | `/api/v1/parent/devices/{id}` | Parent-Token | Gerät anlegen/ändern |
 | DELETE | `/api/v1/parent/devices/{id}` | Parent-Token | Gerät löschen |

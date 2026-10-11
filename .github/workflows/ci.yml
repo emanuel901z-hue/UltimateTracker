@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compose:
+    name: Compose-Konfiguration (alle Profile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: .env vorbereiten
+        run: cp server/.env.example server/.env
+      - name: Profile validieren
+        working-directory: server
+        run: |
+          docker compose config -q
+          docker compose --profile findmy config -q
+          docker compose --profile google-minimal config -q
+
+  bridge:
+    name: Bridge (Syntax + Import)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m py_compile server/audio-bridge/app/main.py
+
+  smoke:
+    name: Smoke-Test gegen den Stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: .env mit Test-Tokens
+        run: |
+          cp server/.env.example server/.env
+          sed -i 's/change-me-device-token/test-device-token/; s/change-me-parent-token/test-parent-token/' server/.env
+      - name: Stack starten
+        working-directory: server
+        run: docker compose up -d --build
+      - name: Auf Bereitschaft warten
+        run: |
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:8085/healthz >/dev/null && \
+               curl -sf -o /dev/null http://localhost:8082/api/server; then
+              echo "Stack bereit nach $((i * 5)) s"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Stack nicht bereit – Logs:"; docker compose -f server/docker-compose.yml logs --tail 60
+          exit 1
+      - name: Smoke-Test ausführen
+        run: bash scripts/smoke-test.sh
+        env:
+          SERVER_DIR: ${{ github.workspace }}/server
+      - name: Simulator ausführen
+        run: python3 scripts/simulate-tracker.py --cycles 2 --send-audio --env server/.env
+      - name: Logs bei Fehlern
+        if: failure()
+        run: docker compose -f server/docker-compose.yml logs --tail 80
+
+  firmware:
+    name: Firmware-Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: PlatformIO installieren
+        run: pip install platformio
+      - name: Bauen
+        working-directory: firmware
+        run: pio run

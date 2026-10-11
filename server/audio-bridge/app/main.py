@@ -1,4 +1,4 @@
-"""Audio-Bridge – Sprachnachrichten, Geräte-Registry und Find-My-Ingest.
+"""Audio-Bridge – Sprachnachrichten, Geräte-Registry, Find-My-Ingest und Sync.
 
 Endpunkte und Datenmodell: docs/architecture.md (Abschnitt 3).
 Konfiguration über Umgebungsvariablen (siehe server/.env.example).
@@ -6,6 +6,7 @@ Konfiguration über Umgebungsvariablen (siehe server/.env.example).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import secrets
@@ -17,6 +18,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -28,12 +30,41 @@ DB_PATH = DATA_DIR / "bridge.sqlite3"
 EVENTS_LOG = DATA_DIR / "events.jsonl"
 STATIC_DIR = Path(__file__).parent / "static"
 
+
+def env_int(name: str, default: int) -> int:
+    """Zahlen-Env robust lesen: leer/unbrauchbar ⇒ Default (statt Crash)."""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        print(f"[config] {name}={raw!r} ungültig – nutze Default {default}", flush=True)
+        return default
+
+
+def env_float(name: str, default: float) -> float:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"[config] {name}={raw!r} ungültig – nutze Default {default}", flush=True)
+        return default
+
+
 DEVICE_TOKEN = os.environ.get("DEVICE_TOKEN", "")
 PARENT_TOKEN = os.environ.get("PARENT_TOKEN", "")
 WEBHOOK_TOKEN = os.environ.get("TRACCAR_WEBHOOK_TOKEN", "")
 FINDMY_TOKEN = os.environ.get("FINDMY_TOKEN", "")
 TRACCAR_FORWARD_URL = os.environ.get("TRACCAR_FORWARD_URL", "")
-SEARCH_MODE_MINUTES = int(os.environ.get("SEARCH_MODE_MINUTES", "30"))
+SEARCH_MODE_MINUTES = env_int("SEARCH_MODE_MINUTES", 30)
+MAX_UPLOAD_MB = env_float("MAX_UPLOAD_MB", 2.0)
+RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
+APPRISE_URLS = os.environ.get("APPRISE_URLS", "")
+POLL_INTERVAL_S = env_int("POLL_INTERVAL_S", 900)
+SEARCH_POLL_INTERVAL_S = env_int("SEARCH_POLL_INTERVAL_S", 60)
 
 # Zielformate (siehe docs/decisions.md D-002: 8 kHz mono, IMA-ADPCM für den Tracker)
 FMT_DEVICE = ["-c:a", "adpcm_ima_wav", "-ar", "8000", "-ac", "1"]
@@ -44,7 +75,7 @@ FMT_PARENT = ["-c:a", "libmp3lame", "-b:a", "48k", "-ar", "8000", "-ac", "1"]
 
 
 def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -53,6 +84,7 @@ def init_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     with db() as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(
             """CREATE TABLE IF NOT EXISTS messages (
                    id TEXT PRIMARY KEY,
@@ -90,6 +122,19 @@ def init_db() -> None:
                    raw TEXT
                )"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS positions (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   device_id TEXT NOT NULL,
+                   latitude REAL NOT NULL,
+                   longitude REAL NOT NULL,
+                   accuracy REAL,
+                   battery REAL,
+                   source TEXT NOT NULL DEFAULT 'tracker',
+                   reported_at TEXT,
+                   received_at TEXT NOT NULL
+               )"""
+        )
 
 
 def now_iso() -> str:
@@ -116,12 +161,35 @@ def search_mode_active() -> bool:
     return bool(until) and float(until) > time.time()
 
 
+def next_poll_seconds(battery: float | None = None) -> int:
+    """Server-getriebenes Poll-Intervall (docs/optimizations.md A5/B4)."""
+    if search_mode_active():
+        return SEARCH_POLL_INTERVAL_S
+    if battery is not None and battery < 15:
+        return POLL_INTERVAL_S * 2
+    return POLL_INTERVAL_S
+
+
 def ensure_device(device_id: str) -> None:
     """Unbekannte Geräte automatisch anlegen (analog Traccar registerUnknown)."""
     with db() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO devices(id, name, created_at) VALUES(?, ?, ?)",
             (device_id, device_id, now_iso()),
+        )
+
+
+def validate_config() -> None:
+    """Fail-fast: klare Meldung statt stiller 401-Fehler (docs/optimizations.md A6)."""
+    problems = []
+    for name, value in (("DEVICE_TOKEN", DEVICE_TOKEN), ("PARENT_TOKEN", PARENT_TOKEN)):
+        if not value or value.startswith("change-me"):
+            problems.append(name)
+    if problems:
+        raise RuntimeError(
+            "Konfiguration unvollständig: "
+            + ", ".join(problems)
+            + " sind leer oder noch Platzhalter – server/.env prüfen (Vorlage: .env.example)."
         )
 
 
@@ -160,10 +228,24 @@ def convert(src: Path, dst: Path, fmt: list[str]) -> bool:
         return False
 
 
-def store_upload(upload: UploadFile, msg_id: str) -> Path:
+async def store_upload(upload: UploadFile, msg_id: str) -> Path:
+    """Speichert den Upload mit Größenlimit (docs/optimizations.md A6)."""
+    limit = int(MAX_UPLOAD_MB * 1024 * 1024)
     path = AUDIO_DIR / f"{msg_id}-raw"
+    size = 0
     with path.open("wb") as fh:
-        shutil.copyfileobj(upload.file, fh)
+        while True:
+            chunk = await upload.read(64 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > limit:
+                fh.close()
+                path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413, detail=f"Upload zu groß (>{MAX_UPLOAD_MB} MB)"
+                )
+            fh.write(chunk)
     return path
 
 
@@ -178,7 +260,72 @@ def insert_message(
         )
 
 
-# --- Find-My-Hilfsfunktionen ------------------------------------------------
+# --- Benachrichtigungen (Apprise) -------------------------------------------
+
+
+def notify(title: str, body: str) -> None:
+    """Sendet eine Benachrichtigung über die konfigurierten APPRISE_URLS."""
+    if not APPRISE_URLS:
+        return
+    try:
+        import apprise  # lokal importiert, damit Apprise optional bleibt
+    except ImportError:
+        print("[notify] apprise nicht installiert – Benachrichtigung übersprungen", flush=True)
+        return
+    ap = apprise.Apprise()
+    for url in APPRISE_URLS.split(","):
+        url = url.strip()
+        if url:
+            ap.add(url)
+    try:
+        ok = ap.notify(title=title, body=body)
+        print(f"[notify] {title}: {'ok' if ok else 'fehlgeschlagen'}", flush=True)
+    except Exception as exc:  # Benachrichtigungsfehler dürfen nie den Request killen
+        print(f"[notify] Fehler: {exc!r}", flush=True)
+
+
+def notify_async(title: str, body: str) -> None:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    asyncio.create_task(asyncio.to_thread(notify, title, body))
+
+
+# --- Retention --------------------------------------------------------------
+
+
+def run_cleanup() -> dict:
+    """Löscht Nachrichten/Audiodateien älter als RETENTION_DAYS (0 = aus)."""
+    if RETENTION_DAYS <= 0:
+        return {"removed": 0, "retention_days": 0, "disabled": True}
+    cutoff = time.time() - RETENTION_DAYS * 86400
+    removed = 0
+    with db() as conn:
+        rows = conn.execute("SELECT id, raw_file, play_file, created_at FROM messages").fetchall()
+        for row in rows:
+            epoch = _to_epoch(row["created_at"])
+            if epoch is None or epoch >= cutoff:
+                continue
+            for name in (row["raw_file"], row["play_file"]):
+                (AUDIO_DIR / name).unlink(missing_ok=True)
+            conn.execute("DELETE FROM messages WHERE id = ?", (row["id"],))
+            removed += 1
+    return {"removed": removed, "retention_days": RETENTION_DAYS}
+
+
+async def retention_loop() -> None:
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            result = await asyncio.to_thread(run_cleanup)
+            if result.get("removed"):
+                print(f"[retention] {result}", flush=True)
+        except Exception as exc:
+            print(f"[retention] Fehler: {exc!r}", flush=True)
+
+
+# --- Find-My- und Positions-Hilfsfunktionen ---------------------------------
 
 LAT_KEYS = ("latitude", "lat", "latDeg", "lat_deg", "y")
 LON_KEYS = ("longitude", "lon", "lng", "long", "lonDeg", "lon_deg", "x")
@@ -204,11 +351,13 @@ def _to_epoch(value) -> int | None:
         text = value.strip()
         if text.isdigit():
             return int(text)
-        for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
-            try:
-                return int(time.mktime(time.strptime(text, fmt)))
-            except ValueError:
-                continue
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return int(parsed.timestamp())
     return None
 
 
@@ -258,18 +407,36 @@ def insert_findmy(loc: dict, raw: dict) -> None:
         )
 
 
+def insert_position(device_id: str, loc: dict, battery: float | None, source: str) -> None:
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO positions(device_id, latitude, longitude, accuracy, battery, source, "
+            "reported_at, received_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                device_id,
+                loc["latitude"],
+                loc["longitude"],
+                loc.get("accuracy"),
+                battery,
+                source,
+                loc.get("reported_at"),
+                now_iso(),
+            ),
+        )
+
+
 def sanitize_device_id(value: str) -> str:
     """Traccar akzeptiert in Geräte-IDs keine Bindestriche/Sonderzeichen.
 
-    Für das Forwarding wird die Beacon-ID auf ASCII-Buchstaben, Ziffern, '.' und '_'
-    reduziert. Die Original-ID bleibt in der Bridge erhalten (Spalte beacon_id).
+    Für das Forwarding wird die ID auf ASCII-Buchstaben, Ziffern, '.' und '_'
+    reduziert. Die Original-ID bleibt in der Bridge erhalten.
     """
     cleaned = "".join(ch for ch in value if ch.isascii() and (ch.isalnum() or ch in "._"))
     return cleaned or "unknown"
 
 
 def forward_to_traccar(loc: dict) -> bool:
-    """Reicht Find-My-Positionen als OsmAnd-Position an Traccar weiter (eigenes Gerät je Beacon)."""
+    """Reicht Positionen als OsmAnd-Position an Traccar weiter."""
     if not TRACCAR_FORWARD_URL:
         return False
     params = {
@@ -284,11 +451,11 @@ def forward_to_traccar(loc: dict) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
             if not (200 <= response.status < 300):
-                print(f"[findmy] Traccar-Forward HTTP {response.status}: {url}", flush=True)
+                print(f"[forward] Traccar HTTP {response.status}: {url}", flush=True)
                 return False
             return True
     except Exception as exc:  # Diagnose: Fehler nicht still verschlucken
-        print(f"[findmy] Traccar-Forward fehlgeschlagen ({type(exc).__name__}: {exc}) {url}", flush=True)
+        print(f"[forward] Traccar-Forward fehlgeschlagen ({type(exc).__name__}: {exc}) {url}", flush=True)
         return False
 
 
@@ -297,11 +464,16 @@ def forward_to_traccar(loc: dict) -> bool:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    validate_config()
     init_db()
-    yield
+    task = asyncio.create_task(retention_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
 
 
-app = FastAPI(title="UltimateTracker Audio-Bridge", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="UltimateTracker Audio-Bridge", version="0.3.0", lifespan=lifespan)
 
 
 @app.get("/healthz")
@@ -310,6 +482,8 @@ def healthz() -> dict:
         "status": "ok",
         "search_mode": search_mode_active(),
         "findmy_forward": bool(TRACCAR_FORWARD_URL),
+        "retention_days": RETENTION_DAYS,
+        "notifications": bool(APPRISE_URLS),
     }
 
 
@@ -321,6 +495,82 @@ def index() -> HTMLResponse:
 # --- Tracker (Device) -------------------------------------------------------
 
 
+@app.post("/api/v1/device/sync", dependencies=[Depends(require_device)])
+async def device_sync(request: Request) -> dict:
+    """Kombinierter Sync (docs/optimizations.md A5): Position rein, alles andere raus.
+
+    Body: {device_id, battery?, wake_reason?, fw?, position?{lat,lon,hdop,ts}}
+    Antwort: {server_time, search_mode, next_poll_s, message?, config, min_fw}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON-Objekt erwartet")
+    device_id = str(body.get("device_id") or "").strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id fehlt")
+    ensure_device(device_id)
+
+    battery = body.get("battery")
+    try:
+        battery = float(battery) if battery is not None else None
+    except (TypeError, ValueError):
+        battery = None
+
+    position = body.get("position")
+    if isinstance(position, dict):
+        loc = {
+            "provider": "tracker",
+            "beacon_id": device_id,
+            "latitude": None,
+            "longitude": None,
+            "accuracy": position.get("hdop"),
+            "reported_at": position.get("ts"),
+            "reported_epoch": _to_epoch(position.get("ts")),
+        }
+        try:
+            loc["latitude"] = float(position.get("lat"))
+            loc["longitude"] = float(position.get("lon"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="position.lat/position.lon ungültig")
+        insert_position(device_id, loc, battery, source="tracker")
+        forward_to_traccar(loc)
+        if battery is not None and battery < 15:
+            notify_async(
+                "Tracker-Akku niedrig",
+                f"Gerät {device_id}: nur noch {battery:.0f} % Akku.",
+            )
+
+    with db() as conn:
+        row = conn.execute(
+            "SELECT id, play_file, duration_ms FROM messages "
+            "WHERE direction = 'out' AND device_id = ? AND status = 'new' "
+            "ORDER BY created_at LIMIT 1",
+            (device_id,),
+        ).fetchone()
+    message = None
+    if row is not None:
+        path = AUDIO_DIR / row["play_file"]
+        message = {
+            "id": row["id"],
+            "url": f"/api/v1/device/messages/{row['id']}/audio",
+            "format": (path.suffix.lstrip(".") or "bin"),
+            "size": path.stat().st_size if path.exists() else None,
+            "duration_ms": row["duration_ms"],
+        }
+
+    return {
+        "server_time": now_iso(),
+        "search_mode": search_mode_active(),
+        "next_poll_s": next_poll_seconds(battery),
+        "message": message,
+        "config": {"audio_volume": None, "log_level": None},
+        "min_fw": None,
+    }
+
+
 @app.post("/api/v1/device/messages", dependencies=[Depends(require_device)])
 async def device_upload(
     device_id: str = Form(...),
@@ -329,17 +579,18 @@ async def device_upload(
 ) -> dict:
     """Audio-Uplink des Trackers (IMA-ADPCM-WAV) → für Eltern nach MP3 konvertiert."""
     msg_id = uuid.uuid4().hex[:12]
-    raw = store_upload(audio, msg_id)
+    raw = await store_upload(audio, msg_id)
     play = AUDIO_DIR / f"{msg_id}.mp3"
     ok = convert(raw, play, FMT_PARENT)
     insert_message(msg_id, "in", device_id, raw, play if ok else raw, duration_ms)
     ensure_device(device_id)
+    notify_async("Neue Sprachnachricht", f"Gerät {device_id} hat eine Nachricht gesendet.")
     return {"id": msg_id, "converted": ok}
 
 
 @app.get("/api/v1/device/pending", dependencies=[Depends(require_device)])
 def device_pending(device_id: str) -> dict:
-    """Nächste Nachricht + Suchmodus-Status für den Tracker-Poll."""
+    """Kompatibilitäts-Endpunkt (ältere Firmware); /sync ist der neue Weg."""
     ensure_device(device_id)
     with db() as conn:
         row = conn.execute(
@@ -351,6 +602,7 @@ def device_pending(device_id: str) -> dict:
         "message_id": row["id"] if row else None,
         "download_url": f"/api/v1/device/messages/{row['id']}/audio" if row else None,
         "search_mode": search_mode_active(),
+        "next_poll_s": next_poll_seconds(),
     }
 
 
@@ -376,7 +628,7 @@ def device_download(message_id: str) -> FileResponse:
 async def parent_upload(device_id: str = Form(...), audio: UploadFile = File(...)) -> dict:
     """Sprachnachricht der Eltern (Browser: Opus/WebM) → IMA-ADPCM-WAV für den Tracker."""
     msg_id = uuid.uuid4().hex[:12]
-    raw = store_upload(audio, msg_id)
+    raw = await store_upload(audio, msg_id)
     play = AUDIO_DIR / f"{msg_id}.wav"
     ok = convert(raw, play, FMT_DEVICE)
     insert_message(msg_id, "out", device_id, raw, play if ok else raw, None)
@@ -415,8 +667,10 @@ def parent_list(device_id: str | None = None, limit: int = 50) -> dict:
 def parent_audio(message_id: str) -> FileResponse:
     with db() as conn:
         row = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Unbekannte Nachricht")
+        if row is None:
+            raise HTTPException(status_code=404, detail="Unbekannte Nachricht")
+        if row["direction"] == "in" and row["status"] == "new":
+            conn.execute("UPDATE messages SET status = 'read' WHERE id = ?", (message_id,))
     path = AUDIO_DIR / row["play_file"]
     if not path.exists():
         raise HTTPException(status_code=410, detail="Datei fehlt")
@@ -430,7 +684,54 @@ def set_search_mode(active: bool = Form(True), minutes: int | None = Form(None))
     duration = minutes if minutes else SEARCH_MODE_MINUTES
     until = time.time() + duration * 60 if active else 0
     state_set("search_mode_until", str(until))
-    return {"search_mode": active, "until": until, "minutes": duration if active else 0}
+    if active:
+        notify_async("Suchmodus aktiv", f"Der Tracker piept jetzt {duration} Minuten lang.")
+    return {
+        "search_mode": active,
+        "until": until,
+        "minutes": duration if active else 0,
+        "next_poll_s": next_poll_seconds(),
+    }
+
+
+@app.get("/api/v1/parent/status", dependencies=[Depends(require_parent)])
+def parent_status(device_id: str) -> dict:
+    """Komprimierte Statusansicht für die Eltern-UI (docs/optimizations.md A9)."""
+    with db() as conn:
+        device = conn.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        position = conn.execute(
+            "SELECT * FROM positions WHERE device_id = ? ORDER BY id DESC LIMIT 1", (device_id,)
+        ).fetchone()
+        message = conn.execute(
+            "SELECT id, direction, created_at, status FROM messages WHERE device_id = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (device_id,),
+        ).fetchone()
+        pending = conn.execute(
+            "SELECT COUNT(*) AS n FROM messages WHERE device_id = ? AND direction = 'out' "
+            "AND status = 'new'",
+            (device_id,),
+        ).fetchone()["n"]
+        beacon = conn.execute(
+            "SELECT provider, beacon_id, latitude, longitude, received_at FROM findmy_locations "
+            "ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    battery = position["battery"] if position else None
+    return {
+        "device": dict(device) if device else None,
+        "last_position": dict(position) if position else None,
+        "last_message": dict(message) if message else None,
+        "pending_messages": pending,
+        "search_mode": search_mode_active(),
+        "next_poll_s": next_poll_seconds(battery),
+        "last_beacon": dict(beacon) if beacon else None,
+    }
+
+
+@app.post("/api/v1/parent/maintenance/cleanup", dependencies=[Depends(require_parent)])
+def maintenance_cleanup() -> dict:
+    """Retention manuell auslösen (docs/optimizations.md A6)."""
+    return run_cleanup()
 
 
 # --- Geräte-Registry (Identitäten: IMEI ↔ MSISDN ↔ Name) --------------------

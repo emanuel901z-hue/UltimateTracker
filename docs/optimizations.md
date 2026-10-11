@@ -4,6 +4,21 @@ Stand 2026-10-11. Priorisiert nach Nutzen/Aufwand. „Nutzen“ = Betriebssicher
 Batterielaufzeit, Wartbarkeit oder Eltern-UX. Nichts hiervon ist ein Blocker –
 die aktuelle Basis läuft.
 
+## Umsetzungsstand (2026-10-11)
+
+| Punkt | Status |
+|---|---|
+| A1 Healthchecks + Startreihenfolge | ✅ umgesetzt |
+| A2 Versionen pinnen (Traccar 6.16.0, WebUI-Digest, Bridge-Commit) | ✅ umgesetzt |
+| A4 Benachrichtigungen (Apprise) | ✅ umgesetzt + getestet (Echo-Server) |
+| A5 Sync-Endpunkt (`POST /api/v1/device/sync`) | ✅ Server-Seite umgesetzt + getestet; Firmware folgt (B4) |
+| A6 Bridge-Härtung (WAL, Upload-Limit, Fail-fast, Retention) | ✅ umgesetzt + getestet |
+| A7 Log-Rotation + Backup-Skript | ✅ umgesetzt (`scripts/backup-volumes.sh`) |
+| A8 CI (GitHub Actions) | ✅ angelegt (Compose, Bridge, Smoke, Firmware) |
+| A9 Status-Dashboard (API + UI-Karte) | ✅ umgesetzt |
+| B2 Motion-Wake-Drossel **3 min** | ✅ Konstante in `firmware/include/config.h`; Logik folgt mit der Firmware |
+| A3 TLS, A10 PostgreSQL, B1, B3–B11 | ⏳ offen (nächste Pakete) |
+
 ## A. Server / Stack
 
 ### A1 – Healthchecks & Startreihenfolge · klein · hoch
@@ -85,9 +100,36 @@ Drei Betriebsarten, messbar in M1/M3:
    spart auch die PSM-Leckströme, kostet pro Wake einen vollen Network-Attach.
 **Empfehlung:** Variante 3 als Default, Variante 2 nur im Suchmodus.
 
+**Welche Informationen für die Entscheidung nötig sind:**
+
+*Aus Schaltplan/Board (LilyGO-Schematic bzw. beim Auspacken prüfen):*
+1. Hängt der Modem-Zweig an einer **schaltbaren PMU-Rail**? (Power-Domain-Tabelle
+   nennt DC3/BLDO2 für GPS/Modem.) Welche Rail versorgt Modemkern, welche die
+   GNSS-Antenne?
+2. Ist **PWRKEY (GPIO 41)** für `AT+CPOWD=1`/Power-Cycle nutzbar und reagiert das
+   Modem darauf sauber?
+3. Bleibt die **Level-Shift-Rail BLDO1** an? (LilyGO warnt: BLDO1 nicht abschalten.)
+
+*Messungen (M1/M3):*
+4. Ruhestrom in allen drei Modi (Modem aus / PSM / eDRX registriert).
+5. Dauer **und** Energie pro Wake-Zyklus je Modus (voller Attach vs. PSM-Wake vs. eDRX-Wake).
+6. Welche **TAU-/eDRX-Werte** vergibt das 1NCE-Netz real (`AT+CPSMS?`, `AT+CEDRXS?`)
+   ⇒ tatsächliche Erreichbarkeitslatenz.
+
+*Anforderungen (deine Vorgaben):*
+7. **Erreichbarkeitslatenz:** Wie schnell muss eine Eltern-Aktion (Suchmodus/Nachricht)
+   ankommen? (≤ 1 min ⇒ eDRX bzw. 1-min-Poll; ≤ 15 min ⇒ PSM + Poll; „egal“ ⇒ Modem aus.)
+8. **Akku-Ziel:** Tage oder Wochen?
+9. Wird der **RI-/SMS-Wake** gebraucht? (setzt registriertes Modem voraus.)
+10. Nutzungsprofil: täglich unterwegs oder nur gelegentlich?
+
+*Vorbereitung im Code:* Alle drei Modi werden hinter einer NVS-Option implementiert
+plus ein Mess-Harness, das pro Wake Dauer/Energie loggt. Dann ist die Entscheidung
+nach M1/M3 nur noch ein Konfigurationswert.
+
 ### B2 – Motion-Wake-Drossel · klein · hoch
 Kinder bewegen sich ständig → ohne Drossel entstehen Wake-Stürme.
-**Umsetzung:** Mindest-Schlafzeit nach einem Bewegungs-Push (z. B. 3–5 min),
+**Umsetzung (Vorgabe: maximal 3 Minuten):** Mindest-Schlafzeit nach einem Bewegungs-Push **3 min** (`MOTION_MIN_SLEEP_S = 180`),
 N aufeinanderfolgende Schwellwert-Treffer abwarten, Schwellwert/Dauer im LIS3DH
 tunen (Start: ~200 mg, 2 Samples). Im Suchmodus deaktivieren.
 

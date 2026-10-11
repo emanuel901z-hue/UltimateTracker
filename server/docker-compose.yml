@@ -1,17 +1,31 @@
 name: ultimatetracker
 
+# Zentrale Log-Rotation (docs/optimizations.md A7)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   traccar:
-    # TODO: Version pinnen, sobald eine Referenzversion verifiziert ist.
-    image: traccar/traccar:latest
+    # Version gepinnt (A2). Update: Version ändern + `docker compose pull traccar`.
+    image: traccar/traccar:6.16.0
     container_name: ut-traccar
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8082:8082"   # Web-UI
       - "5055:5055"   # OsmAnd-Protokoll (Tracker-Uploads)
     volumes:
       - ./traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro
       - traccar-data:/opt/traccar/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8082/api/server || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - utnet
 
@@ -19,6 +33,7 @@ services:
     build: ./audio-bridge
     container_name: ut-audio-bridge
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8085:8085"   # Web-UI + API (Tracker & Eltern)
     env_file:
@@ -29,6 +44,14 @@ services:
       - audio-data:/data
     depends_on:
       - traccar
+    healthcheck:
+      test:
+        ["CMD", "python", "-c",
+         "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/healthz')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - utnet
 
@@ -40,30 +63,16 @@ services:
   # ---------------------------------------------------------------------------
 
   anisette:
-    # Apple-Authentifizierung (Anisette-Daten) für macless-haystack
+    # Apple-Authentifizierung (Anisette-Daten) für die Find-My-Bridge
     image: dadoum/anisette-v3-server:latest
     container_name: ut-anisette
     profiles: [findmy]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "6969:6969"
     volumes:
       - anisette-data:/home/Alcoholic/.config/anisette-v3
-    networks:
-      - utnet
-
-  macless-haystack:
-    # Apple-Find-My-Endpoint: Registrierung, Key-Generierung, Abruf der Standortberichte
-    image: christld/macless-haystack:latest
-    container_name: ut-macless-haystack
-    profiles: [findmy]
-    restart: unless-stopped
-    ports:
-      - "6176:6176"
-    volumes:
-      - macless-data:/app/endpoint/data
-    depends_on:
-      - anisette
     networks:
       - utnet
 
@@ -72,12 +81,14 @@ services:
     # über findmy.py (nutzt den anisette-Dienst). Echte AirTags brauchen zusätzlich
     # eine macOS-Key-Extraktion. Erst-Einrichtung interaktiv (siehe docs/findmy.md).
     # Hinweis: 1 Abfrage/Stunde (Default) gilt als account-sicher.
-    build: https://github.com/jannisko/findmy-traccar-bridge.git
+    # Commit gepinnt (A2); Update: neuen Commit-Hash von GitHub übernehmen.
+    build: https://github.com/jannisko/findmy-traccar-bridge.git#4e4ae2535d024470cfa6e12a0a60f91d5ccee54a
     container_name: ut-findmy-bridge
     profiles: [findmy]
     # Ohne APPLE_BEACON_KEYS beendet sich der Dienst sauber (Exit 0) → kein
     # Endlos-Neustart; echte Abstürze werden bis zu 3× wiederholt.
     restart: on-failure:3
+    logging: *default-logging
     environment:
       BRIDGE_TRACCAR_SERVER: http://traccar:5055
       BRIDGE_PRIVATE_KEYS: ${APPLE_BEACON_KEYS:-}
@@ -88,19 +99,39 @@ services:
     volumes:
       - findmy-bridge-data:/bridge/data
     depends_on:
+      anisette:
+        condition: service_started
+      traccar:
+        condition: service_healthy
+    networks:
+      - utnet
+
+  macless-haystack:
+    # Apple-Find-My-Endpoint: Key-Generierung und optionale Web-UI (manuelle Sicht)
+    image: christld/macless-haystack:latest
+    container_name: ut-macless-haystack
+    profiles: [findmy]
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "6176:6176"
+    volumes:
+      - macless-data:/app/endpoint/data
+    depends_on:
       - anisette
-      - traccar
     networks:
       - utnet
 
   google-findmy-webui:
     # EMPFOHLENER Google-Find-Hub-Weg: Web-UI mit Key-Rotations-Fix (PR #114),
     # Geräte-/Scheduling-Verwaltung, Traccar-Preset und Firmware-Build im Browser.
+    # Digest gepinnt (A2); Update: `docker pull` + neuen Digest übernehmen.
     # Details: docs/findmy.md
-    image: ghcr.io/p6g9yhk6/googlefindmytools:latest
+    image: ghcr.io/p6g9yhk6/googlefindmytools@sha256:bda31fda3d0dcd1e25666742b97259b4ad72ab7605e86c5c017659ae4397c093
     container_name: ut-google-findmy-webui
     profiles: [findmy]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "4321:4321"
     environment:
@@ -113,6 +144,12 @@ services:
       GFMT_DATA_DIR: /data
     volumes:
       - google-findmy-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:4321/health || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - utnet
 
@@ -124,6 +161,7 @@ services:
     container_name: ut-google-findmy
     profiles: [google-minimal]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "5500:5500"
     environment:
@@ -134,7 +172,8 @@ services:
     volumes:
       - google-findmy-auth:/app/Auth
     depends_on:
-      - audio-bridge
+      audio-bridge:
+        condition: service_healthy
     networks:
       - utnet
 

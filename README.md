@@ -26,13 +26,14 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/architecture.md` | Systemarchitektur, Datenflüsse, Energiebudget |
 | `docs/measurement-plan.md` | Mess- und Testplan für die Inbetriebnahme |
 | `docs/optimizations.md` | Optimierungs-Backlog (Server & Firmware, priorisiert) |
+| `docs/simulation.md` | Tests/Simulation ohne Hardware (Simulator, native Tests, QEMU) |
 | `docs/deployment.md` | Server-Deployment (WSL, Docker, Thin Client) |
 | `docs/findmy.md` | Apple/Google Find My: Gegenstücke, Setup, Grenzen (experimentell) |
 | `docs/sms.md` | Identitäten (IMEI/MSISDN) und SMS-Pfad |
 | `docs/decisions.md` | Entscheidungsprotokoll (ADR-Kurzform) |
 | `firmware/` | ESP32-S3-Firmware (PlatformIO, Skelett) |
 | `server/` | Docker-Stack: Traccar + Audio-Bridge |
-| `scripts/` | Hilfsskripte (Repo → WSL synchronisieren) |
+| `scripts/` | WSL-Sync, Smoke-Test, Tracker-Simulator, Echo-Server, Backups |
 
 ## Schnellstart (Server)
 

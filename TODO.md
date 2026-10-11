@@ -62,9 +62,9 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 
 - [ ] **TLS/Reverse-Proxy** (Caddy-Skizze in `docs/deployment.md`) + Ports schließen
 - [ ] **Eltern-Benachrichtigung** bei neuer Nachricht (ntfy/Telegram/Apprise/Web-Push)
-- [ ] Audio-Retention/Cleanup implementieren (z. B. Löschen nach 30 Tagen)
+- [x] Audio-Retention/Cleanup implementieren (Standard 30 Tage, `RETENTION_DAYS`) *(2026-10-11)*
 - [ ] Traccar: Geofence + Benachrichtigungen einrichten
-- [ ] Backup-Zeitplan für Volumes (`docs/deployment.md`, Abschnitt 7)
+- [x] Backup-Skript für Volumes (`scripts/backup-volumes.sh`) *(2026-10-11)*
 - [ ] macless-haystack absichern (`endpoint_user`/`endpoint_pass`), falls exponiert
 - [ ] Umzug auf den Thin Client (`docs/deployment.md`, Abschnitt 7)
 
@@ -79,12 +79,15 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 ## F. Optimierungen (Backlog – Details in [`docs/optimizations.md`](docs/optimizations.md))
 
 **Paket 1 – sofort, ohne Hardware:**
-- [ ] A1 Healthchecks + Startreihenfolge im Compose
-- [ ] A2 Versionen pinnen (Traccar, WebUI-Image, Bridge-Commit)
-- [ ] A4 Benachrichtigung bei neuer Nachricht (Apprise/ntfy)
-- [ ] A6 Bridge-Härtung: WAL, Upload-Limit, Fail-fast, Retention
-- [ ] A7 Backups + Log-Rotation
-- [ ] A8 CI für Server **und** Firmware (GitHub Actions)
+- [x] A1 Healthchecks + Startreihenfolge im Compose *(2026-10-11)*
+- [x] A2 Versionen pinnen (Traccar 6.16.0, WebUI-Digest, Bridge-Commit) *(2026-10-11)*
+- [x] A4 Benachrichtigung bei neuer Nachricht (Apprise; `APPRISE_URLS` in `.env`) *(2026-10-11)*
+- [x] A6 Bridge-Härtung: WAL, Upload-Limit, Fail-fast, Retention *(2026-10-11)*
+- [x] A7 Backups (`scripts/backup-volumes.sh`) + Log-Rotation *(2026-10-11)*
+- [x] A8 CI für Server **und** Firmware (`.github/workflows/ci.yml`) *(2026-10-11)*
+- [x] A5 Sync-Endpunkt (Server) + A9 Status-Dashboard *(2026-10-11)*
+- [ ] **(i) `APPRISE_URLS` mit echtem Ziel füllen** (ntfy/Telegram/Mail – Beispiel in `.env.example`)
+- [ ] **(i) Backup-Cron einrichten** (Beispielzeile in `scripts/backup-volumes.sh`)
 
 **Paket 2 – mit Hardware:** A5/C1 Sync-Endpunkt (ein Roundtrip pro Wake),
 B2 Motion-Wake-Drossel, B5 Audio-AGC/Lautstärke, B8 Feldstabilität, A9 Status-Dashboard

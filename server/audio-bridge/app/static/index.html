@@ -32,6 +32,11 @@
   <select id="device"><option value="">– bitte Token eingeben –</option></select>
 </label>
 
+<div class="card" id="status-card">
+  <h2 style="margin-top:0">Status</h2>
+  <div id="status-body" class="muted">– keine Daten –</div>
+</div>
+
 <div class="card">
   <h2 style="margin-top:0">Sprachnachricht senden</h2>
   <div>
@@ -217,7 +222,33 @@ async function loadFindMy() {
   }
 }
 
-function load() { loadMessages(); loadFindMy(); }
+async function loadStatus() {
+  const box = $('status-body');
+  if (!state.token || !state.device) { box.textContent = '– Gerät/Token wählen –'; return; }
+  const res = await fetch('/api/v1/parent/status?device_id=' + encodeURIComponent(state.device),
+                          { headers: headers() });
+  if (!res.ok) { box.textContent = 'Status: HTTP ' + res.status; return; }
+  const s = await res.json();
+  const pos = s.last_position;
+  const parts = [];
+  parts.push('Akkustand: ' + (pos && pos.battery != null ? pos.battery.toFixed(0) + ' %' : 'unbekannt'));
+  parts.push('letzte Position: ' + (pos ? pos.latitude.toFixed(5) + ', ' + pos.longitude.toFixed(5) +
+             ' (' + fmt(pos.received_at) + ')' : 'noch keine'));
+  parts.push('nächster Poll: ' + s.next_poll_s + ' s' + (s.search_mode ? ' (Suchmodus aktiv)' : ''));
+  parts.push('Nachrichten in Warteschlange: ' + s.pending_messages);
+  if (s.last_message) {
+    parts.push('letzte Nachricht: ' + (s.last_message.direction === 'in' ? 'vom Tracker' : 'an Tracker') +
+               ' (' + fmt(s.last_message.created_at) + ')');
+  }
+  if (s.last_beacon) {
+    parts.push('letzter Beacon: ' + s.last_beacon.provider + ' / ' + s.last_beacon.beacon_id +
+               ' – ' + s.last_beacon.latitude.toFixed(5) + ', ' + s.last_beacon.longitude.toFixed(5) +
+               ' (' + fmt(s.last_beacon.received_at) + ')');
+  }
+  box.innerHTML = parts.map((p) => '<div>' + p + '</div>').join('');
+}
+
+function load() { loadStatus(); loadMessages(); loadFindMy(); }
 $('refresh').addEventListener('click', () => { loadDevices(); load(); });
 
 loadDevices();
