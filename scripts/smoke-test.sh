@@ -90,5 +90,22 @@ curl -sf -X POST -H 'Content-Type: application/json' \
   -d '{"source":"google","id":"BEACON-G2","latitude":48.15,"longitude":11.6,"time":"2026-10-11T12:00:00Z"}' \
   "$BASE/api/v1/findmy/locations" | grep -q '"stored":1' && pass "Alternatives Schema akzeptiert" || fail "Toleranter Ingest fehlgeschlagen"
 
+echo "13) Firmware/OTA (B7)"
+head -c 1024 /dev/zero > "$TMP/fw.bin"
+curl -sf -X POST -H "X-Auth-Token: $PTOK" -F version=9.9.9 -F notes=Smoke-Test \
+  -F firmware=@"$TMP/fw.bin" "$BASE/api/v1/parent/firmware" | grep -q '"version":"9.9.9"' \
+  && pass "Firmware hochgeladen" || fail "Firmware-Upload fehlgeschlagen"
+curl -sf -H "X-Auth-Token: $DTOK" "$BASE/api/v1/device/firmware/latest?fw=0.1.0" | grep -q '"update":true' \
+  && pass "Update-Angebot für alte Version" || fail "Kein Update-Angebot"
+curl -sf -X POST -H "X-Auth-Token: $DTOK" -H 'Content-Type: application/json' \
+  -d '{"device_id":"TEST123","fw":"0.1.0"}' "$BASE/api/v1/device/sync" | grep -q '"ota":{' \
+  && pass "OTA-Angebot im Sync enthalten" || fail "OTA fehlt im Sync"
+SIZE=$(curl -sf -H "X-Auth-Token: $DTOK" "$BASE/api/v1/device/firmware/9.9.9/download" | wc -c)
+[ "$SIZE" = "1024" ] && pass "Download liefert 1024 Bytes" || fail "Download-Größe: $SIZE"
+curl -sf -H "X-Auth-Token: $DTOK" "$BASE/api/v1/device/firmware/latest?fw=9.9.9" | grep -q '"update":false' \
+  && pass "Aktuelle Version bekommt kein Angebot" || fail "Angebot trotz aktueller Version"
+curl -sf -X DELETE -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/firmware/9.9.9" | grep -q '"deleted":"9.9.9"' \
+  && pass "Test-Firmware wieder entfernt" || fail "Aufräumen fehlgeschlagen"
+
 echo
 echo "Alle Smoke-Tests bestanden."

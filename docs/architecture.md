@@ -102,6 +102,11 @@ Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes),
 | GET | `/api/v1/parent/status` | Parent-Token | Status-Dashboard (Position, Akku, Nachrichten, Poll) |
 | POST | `/api/v1/parent/search-mode` | Parent-Token | Suchmodus setzen/beenden |
 | POST | `/api/v1/parent/maintenance/cleanup` | Parent-Token | Retention manuell auslösen |
+| POST | `/api/v1/parent/firmware` | Parent-Token | Firmware-Binary hochladen (Version, SHA256 serverseitig) |
+| GET | `/api/v1/parent/firmware` | Parent-Token | Firmware-Liste |
+| DELETE | `/api/v1/parent/firmware/{version}` | Parent-Token | Firmware-Version entfernen |
+| GET | `/api/v1/device/firmware/latest?fw=` | Device-Token | OTA-Angebot (`update: true/false`) |
+| GET | `/api/v1/device/firmware/{version}/download` | Device-Token | Firmware-Binary |
 | GET | `/api/v1/parent/devices` | Parent-Token | Geräte-Registry (IMEI ↔ MSISDN ↔ Name) |
 | PUT | `/api/v1/parent/devices/{id}` | Parent-Token | Gerät anlegen/ändern |
 | DELETE | `/api/v1/parent/devices/{id}` | Parent-Token | Gerät löschen |

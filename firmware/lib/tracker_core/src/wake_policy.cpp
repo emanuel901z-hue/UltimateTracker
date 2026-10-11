@@ -26,4 +26,14 @@ uint32_t sanitize_poll_interval(uint32_t server_value, const WakeSettings& setti
   return server_value;
 }
 
+const char* wake_reason_name(WakeReason reason) {
+  switch (reason) {
+    case WakeReason::Motion: return "motion";
+    case WakeReason::Ptt: return "ptt";
+    case WakeReason::ModemRi: return "modem_ri";
+    case WakeReason::Timer: return "timer";
+    default: return "cold";
+  }
+}
+
 }  // namespace tracker

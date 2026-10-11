@@ -33,4 +33,7 @@ uint32_t next_sleep_seconds(WakeReason reason, float battery_percent, bool searc
 // Vom Server geliefertes Poll-Intervall auf sinnvolle Grenzen begrenzen.
 uint32_t sanitize_poll_interval(uint32_t server_value, const WakeSettings& settings);
 
+// Name des Wake-Grunds für das Sync-Protokoll ("motion", "ptt", "timer", ...).
+const char* wake_reason_name(WakeReason reason);
+
 }  // namespace tracker

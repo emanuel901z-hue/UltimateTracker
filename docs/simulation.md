@@ -19,12 +19,13 @@ sondern aus drei pragmatischen Bausteinen, die sofort funktionieren.
 
 1. **Tracker-Simulator** – `scripts/simulate-tracker.py` spielt den Tracker gegen
    den echten Stack (Sync, Audio-Upload, Poll, Suchmodus, Positionsmeldung).
-   Sofort nutzbar; testet die Server-Seite vollständig.
-2. **Host-native Unit-Tests** (`pio test -e native`) für reine Logik: ADPCM
-   Round-Trip, Protokoll-Parsing, Zustandsübergänge – läuft in Sekunden.
-3. **Modem-Mock:** `IModem`-Interface mit TinyGSM-Implementierung **und** Mock
-   (skriptbasierte AT-Antworten) → Wake-Zyklus auf Host/QEMU testbar.
-4. **QEMU** für OTA-/Partitions-/NVS-Abläufe (sinnvoll ab B7/OTA).
+   Sofort nutzbar; testet die Server-Seite vollständig. ✅ vorhanden
+2. **Host-native Unit-Tests** (`pio test -e native`): ADPCM, Protokoll, Wake-Policy,
+   AGC, Ring-Log, GNSS-Parser, Provisioning, OTA-Prüfung. ✅ 53 Tests
+3. **Modem-Mock + Wake-Zyklus** (`IModem`, `MockModem`, `wake_cycle`): der komplette
+   Zyklus (GNSS → Sync → Download → Schlafentscheidung) läuft ohne Hardware,
+   inklusive Fehlerfällen (kein Fix, Sync 500, Download 404, kein Netz, Suchmodus). ✅
+4. **QEMU** für OTA-/Partitions-/NVS-Abläufe (sinnvoll, sobald das Flash-Schreiben steht).
 5. **Günstiges ESP32-S3-Devkit** (5–10 €, z. B. ESP32-S3-DevKitC-1) als
    Hardware-Ersatz für I2S-/BLE-/PMU-Experimente **jetzt**: Der Firmware-Code ist
    nahezu identisch, nur das Modem ist beim LilyGO-Board anders verdrahtet.
@@ -43,10 +44,10 @@ sondern aus drei pragmatischen Bausteinen, die sofort funktionieren.
 | Werkzeug | Pfad | Zweck |
 |---|---|---|
 | Tracker-Simulator | `scripts/simulate-tracker.py` | Server-Stack ohne Hardware testen |
-| Smoke-Test | `scripts/smoke-test.sh` | API-/Stack-Regression |
+| Smoke-Test | `scripts/smoke-test.sh` | API-/Stack-Regression (13 Gruppen, inkl. OTA) |
 | Echo-Server | `scripts/dev-echo-server.py` | Benachrichtigungen/Webhooks lokal prüfen |
-| **Host-Tests der Firmware-Logik** | `firmware/lib/tracker_core` + `firmware/test/` | ADPCM-Codec, Sync-Protokoll, Wake-Policy, AGC, Ring-Log – **23 Tests** |
-| CI | `.github/workflows/ci.yml` | Compose-Config, Bridge-Compile, Smoke-Test, Firmware-Build **und** native Tests |
+| **Host-Tests der Firmware-Logik** | `firmware/lib/tracker_core` + `firmware/test/` | **53 Tests**: ADPCM, Protokoll, Wake-Policy, AGC, Ring-Log, GNSS, Provisioning, OTA, **Wake-Zyklus mit Modem-Mock** |
+| CI | `.github/workflows/ci.yml` | Compose-Config, Bridge-Compile, Smoke-Test, Firmware-Build (beide Envs) **und** native Tests |
 
 **Native Tests ausführen** (braucht gcc/g++ auf dem Host; unter Windows läuft es
 in der WSL, in der CI auf ubuntu-latest):

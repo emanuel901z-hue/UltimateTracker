@@ -8,6 +8,12 @@
 
 #include <cstdint>
 
+// Firmware-Version (geht im Sync an den Server, steuert OTA-Angebote)
+static constexpr const char* FIRMWARE_VERSION = "0.1.0";
+
+// Maximale Firmware-Größe für OTA-Downloads (Bytes)
+static constexpr uint32_t OTA_MAX_SIZE_BYTES = 2u * 1024u * 1024u;
+
 // --- Poll-Intervalle (Sekunden) ---
 static constexpr uint32_t POLL_INTERVAL_S_DEFAULT = 900;   // 15 min
 static constexpr uint32_t POLL_INTERVAL_S_SEARCH = 60;     // Suchmodus

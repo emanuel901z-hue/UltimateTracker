@@ -26,6 +26,9 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
 - `firmware/lib/tracker_core` muss **C++11-kompatibel** bleiben (der Arduino-Build
   nutzt `gnu++11`); die Host-Tests laufen bewusst mit demselben Standard
   (`pio test -e native`), damit Abweichungen auffallen.
+- **Schichten trennen:** neue Ablauflogik gehört nach `firmware/lib/tracker_core`
+  (ohne Arduino-Header, host-testbar, ggf. über `IModem`-Mock); nur echte
+  Hardware-Anbindung (Serial, NVS, Sleep, `Update`) nach `firmware/src`.
 - Zahlen (Datenraten, Ströme) immer aus `docs/hardware-review.md` bzw.
   `docs/architecture.md` übernehmen, nicht neu schätzen.
 

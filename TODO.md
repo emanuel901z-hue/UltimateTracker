@@ -49,6 +49,14 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 - [x] ESP32-S3-Eigenheiten geprüft + dokumentiert (`docs/esp32s3.md`) *(2026-10-11)*
       → Release-Env ohne USB-CDC (startet sonst am Akku nicht), externer PTT-Pull-up
       zwingend, Ring-Log in RTC-Speicher, QEMU-Erwartungen korrigiert
+- [x] Modem-Abstraktion + Mock + **kompletter Wake-Zyklus** host-testbar *(2026-10-11)*
+- [x] NVS-Provisioning (JSON-Kommando per USB-Serial) *(2026-10-11)*
+- [x] OTA: Server-Endpunkte, Angebot im Sync, Prüflogik *(2026-10-11)*
+      → offen: Flash-Schreiben (`Update`/esp_ota) mit Hardware
+- [x] GNSS-Auswertung `AT+CGNSINF` + UTC→Epoch *(2026-10-11)*
+- [x] Feldstabilität: Ring-Log (RTC), Reset-Zähler, monotone Uptime über Sleeps *(2026-10-11)*
+- [ ] **(i) HTTP-Engine des Modems implementieren** (`AT+SHCONF/SHBOD/SHREQ/SHREAD`) – Hardware-Phase M6
+- [ ] **(i) PWRKEY/Power-Zyklus + Rail-Handling messen** (B1, M1/M3)
 - [ ] LIS3DH: I2C-Init, Schwellwert-Interrupt, EXT1-Wake
 - [ ] PMU AXP2101: TS-Pin-Detection aus, Akkustand lesen, Ladestrom setzen
 - [ ] I2S-Pipeline (8 kHz/16 Bit/IMA-ADPCM) + LEDC-Piezo (gegenphasig)

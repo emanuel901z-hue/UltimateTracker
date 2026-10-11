@@ -22,6 +22,12 @@
 #define PIN_PTT_BUTTON       9     // RTC-GPIO, INPUT_PULLUP, EXT1-Wake
 #define PIN_MODEM_RI         3     // Modem-RI (nur Eingang, optionaler Wake)
 
+// --- Modem-Steuerung (reserviert, nicht für andere Funktionen nutzen) ---
+#define PIN_MODEM_RX         4     // ESP32-RX  <- Modem-TXD (UART)
+#define PIN_MODEM_TX         5     // ESP32-TX  -> Modem-RXD (UART)
+#define PIN_MODEM_PWRKEY     41    // Modem ein/aus (128-ms-Puls)
+#define PIN_MODEM_DTR        42    // Modem-Sleep-Steuerung
+
 // --- I2S (geteilte BCLK/WS, Full-Duplex) ---
 #define PIN_I2S_BCLK         16
 #define PIN_I2S_WS           17

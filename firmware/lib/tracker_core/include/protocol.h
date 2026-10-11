@@ -1,6 +1,6 @@
 // protocol.h – Bauen/Parsen der Sync-Nachrichten (A5/C1).
 //
-// Ein Roundtrip pro Wake: Position und Status hoch, Nachricht/Konfiguration
+// Ein Roundtrip pro Wake: Position und Status hoch, Nachricht/Konfiguration/OTA
 // runter. Nutzt ArduinoJson (läuft auch auf dem Host für die Tests).
 // Endpunkt und Format: docs/architecture.md (Abschnitt 3.2).
 
@@ -8,6 +8,8 @@
 
 #include <cstdint>
 #include <string>
+
+#include "ota.h"
 
 namespace tracker {
 
@@ -27,24 +29,33 @@ struct Position {
 
 struct SyncRequest {
   std::string device_id;
-  float battery_percent = -1.0f;  // < 0 = unbekannt
-  const char* wake_reason = "timer";
-  const char* firmware = "0.1.0";
+  float battery_percent;  // < 0 = unbekannt
+  const char* wake_reason;
+  const char* firmware;
   Position position;
+
+  SyncRequest() : battery_percent(-1.0f), wake_reason("timer"), firmware("0.0.0") {}
 };
 
 struct PendingMessage {
-  bool present = false;
+  bool present;
   std::string id;
   std::string url;
   std::string format;
-  uint32_t size = 0;
+  uint32_t size;
+
+  PendingMessage() : present(false), size(0) {}
 };
 
 struct SyncResponse {
-  bool search_mode = false;
-  uint32_t next_poll_s = 900;
+  bool search_mode;
+  uint32_t next_poll_s;
   PendingMessage message;
+  FirmwareOffer ota;
+  int audio_volume;      // -1 = nicht gesetzt
+  std::string min_fw;    // minimale Firmware-Version, die der Server erwartet
+
+  SyncResponse() : search_mode(false), next_poll_s(900), audio_volume(-1) {}
 };
 
 // Baut den JSON-Body für POST /api/v1/device/sync.

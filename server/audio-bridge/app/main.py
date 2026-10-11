@@ -7,6 +7,7 @@ Konfiguration über Umgebungsvariablen (siehe server/.env.example).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import secrets
@@ -26,6 +27,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 AUDIO_DIR = DATA_DIR / "audio"
+FIRMWARE_DIR = DATA_DIR / "firmware"
 DB_PATH = DATA_DIR / "bridge.sqlite3"
 EVENTS_LOG = DATA_DIR / "events.jsonl"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -83,6 +85,7 @@ def db() -> sqlite3.Connection:
 def init_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
     with db() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(
@@ -133,6 +136,16 @@ def init_db() -> None:
                    source TEXT NOT NULL DEFAULT 'tracker',
                    reported_at TEXT,
                    received_at TEXT NOT NULL
+               )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS firmware (
+                   version TEXT PRIMARY KEY,
+                   filename TEXT NOT NULL,
+                   sha256 TEXT NOT NULL,
+                   size INTEGER NOT NULL,
+                   notes TEXT NOT NULL DEFAULT '',
+                   uploaded_at TEXT NOT NULL
                )"""
         )
 
@@ -323,6 +336,47 @@ async def retention_loop() -> None:
                 print(f"[retention] {result}", flush=True)
         except Exception as exc:
             print(f"[retention] Fehler: {exc!r}", flush=True)
+
+
+# --- Firmware/OTA-Hilfsfunktionen (docs/optimizations.md B7) ---------------
+
+
+def parse_version(text: str):
+    """'1.2.3' → (1, 2, 3); None bei ungültigem Format."""
+    parts = text.strip().split(".")
+    if not 1 <= len(parts) <= 3:
+        return None
+    numbers = []
+    for part in parts:
+        if not part.isdigit() or len(part) > 4:
+            return None
+        numbers.append(int(part))
+    while len(numbers) < 3:
+        numbers.append(0)
+    return tuple(numbers)
+
+
+def version_is_newer(available: str, current: str) -> bool:
+    a, c = parse_version(available), parse_version(current)
+    if a is None or c is None:
+        return False
+    return a > c
+
+
+def latest_firmware() -> dict | None:
+    """Neueste Firmware nach Versionsvergleich (nicht nach Upload-Zeitpunkt)."""
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM firmware").fetchall()
+    best = None
+    best_version = None
+    for row in rows:
+        version = parse_version(row["version"])
+        if version is None:
+            continue
+        if best_version is None or version > best_version:
+            best_version = version
+            best = dict(row)
+    return best
 
 
 # --- Find-My- und Positions-Hilfsfunktionen ---------------------------------
@@ -561,12 +615,24 @@ async def device_sync(request: Request) -> dict:
             "duration_ms": row["duration_ms"],
         }
 
+    fw_version = str(body.get("fw") or "")
+    latest = latest_firmware()
+    offer = None
+    if latest is not None and fw_version and version_is_newer(latest["version"], fw_version):
+        offer = {
+            "version": latest["version"],
+            "url": f"/api/v1/device/firmware/{latest['version']}/download",
+            "sha256": latest["sha256"],
+            "size": latest["size"],
+        }
+
     return {
         "server_time": now_iso(),
         "search_mode": search_mode_active(),
         "next_poll_s": next_poll_seconds(battery),
         "message": message,
-        "config": {"audio_volume": None, "log_level": None},
+        "ota": offer,
+        "config": {"audio_volume": None},
         "min_fw": None,
     }
 
@@ -822,6 +888,86 @@ def findmy_list(provider: str | None = None, beacon_id: str | None = None, limit
     with db() as conn:
         rows = conn.execute(sql, args).fetchall()
     return {"locations": [dict(r) for r in rows]}
+
+
+# --- Firmware (OTA, docs/optimizations.md B7) -------------------------------
+
+
+@app.post("/api/v1/parent/firmware", dependencies=[Depends(require_parent)])
+async def firmware_upload(
+    version: str = Form(...),
+    notes: str = Form(""),
+    firmware: UploadFile = File(...),
+) -> dict:
+    """Firmware-Binary hochladen (Eltern-Token). Version im Format 1.2.3."""
+    if parse_version(version) is None:
+        raise HTTPException(status_code=400, detail="Version muss wie 1.2.3 aussehen")
+    data = await firmware.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Leere Datei")
+    limit = int(MAX_UPLOAD_MB * 1024 * 1024 * 4)
+    if len(data) > limit:
+        raise HTTPException(status_code=413, detail=f"Firmware zu groß (>{limit} Bytes)")
+    digest = hashlib.sha256(data).hexdigest()
+    path = FIRMWARE_DIR / f"{version}.bin"
+    path.write_bytes(data)
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO firmware(version, filename, sha256, size, notes, uploaded_at) "
+            "VALUES(?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(version) DO UPDATE SET filename = excluded.filename, "
+            "sha256 = excluded.sha256, size = excluded.size, notes = excluded.notes, "
+            "uploaded_at = excluded.uploaded_at",
+            (version, path.name, digest, len(data), notes, now_iso()),
+        )
+    return {"version": version, "sha256": digest, "size": len(data)}
+
+
+@app.get("/api/v1/parent/firmware", dependencies=[Depends(require_parent)])
+def firmware_list() -> dict:
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT version, sha256, size, notes, uploaded_at FROM firmware ORDER BY uploaded_at DESC"
+        ).fetchall()
+    return {"firmware": [dict(r) for r in rows]}
+
+
+@app.delete("/api/v1/parent/firmware/{version}", dependencies=[Depends(require_parent)])
+def firmware_delete(version: str) -> dict:
+    with db() as conn:
+        row = conn.execute("SELECT filename FROM firmware WHERE version = ?", (version,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Unbekannte Version")
+        conn.execute("DELETE FROM firmware WHERE version = ?", (version,))
+    (FIRMWARE_DIR / row["filename"]).unlink(missing_ok=True)
+    return {"deleted": version}
+
+
+@app.get("/api/v1/device/firmware/latest", dependencies=[Depends(require_device)])
+def firmware_latest(fw: str = "") -> dict:
+    """OTA-Angebot für den Tracker (update=false, wenn nichts Neueres vorliegt)."""
+    latest = latest_firmware()
+    if latest is None or not version_is_newer(latest["version"], fw):
+        return {"update": False}
+    return {
+        "update": True,
+        "version": latest["version"],
+        "url": f"/api/v1/device/firmware/{latest['version']}/download",
+        "sha256": latest["sha256"],
+        "size": latest["size"],
+    }
+
+
+@app.get("/api/v1/device/firmware/{version}/download", dependencies=[Depends(require_device)])
+def firmware_download(version: str) -> FileResponse:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM firmware WHERE version = ?", (version,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Unbekannte Version")
+    path = FIRMWARE_DIR / row["filename"]
+    if not path.exists():
+        raise HTTPException(status_code=410, detail="Datei fehlt")
+    return FileResponse(path, media_type="application/octet-stream", filename=path.name)
 
 
 # --- Traccar-Webhook --------------------------------------------------------

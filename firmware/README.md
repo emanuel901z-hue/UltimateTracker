@@ -54,9 +54,11 @@ ist `esp32-s3-devkitc-1` mit QIO-Flash und OPI-PSRAM konfiguriert.
 | Pfad | Inhalt |
 |---|---|
 | `include/pins.h` | Verbindliche Pin-Belegung (Quelle: `docs/pinout.md`) |
-| `include/config.h` | Tunables (Poll-Intervalle, Wake-Drossel **3 min**, Lautstärke, Modem-Modus) |
-| `src/main.cpp` | Einstiegspunkt, Wake-Logik-Skelett, TODOs |
-| `lib/tracker_core/` | **Plattformunabhängige Logik** (kein Arduino): IMA-ADPCM-Codec, Sync-Protokoll, Wake-/Poll-Policy, AGC, Ereignis-Ringpuffer |
+| `include/config.h` | Tunables (Poll-Intervalle, Wake-Drossel **3 min**, Lautstärke, Modem-Modus, OTA-Limit) |
+| `src/main.cpp` | Hardware-Glue: Wake-Grund, Bewegungs-Drossel, Provisioning, Wake-Zyklus, Sleep |
+| `src/modem_sim7080.*` | SIM7080G über AT (PWRKEY, GNSS-Sequenz, HTTP-Engine als TODO) |
+| `src/nvs_config_store.*` | Konfiguration im NVS (Provisioning, B6) |
+| `lib/tracker_core/` | **Plattformunabhängige Logik** (kein Arduino): ADPCM-Codec, Sync-Protokoll, Wake-/Poll-Policy, AGC, Ringpuffer, GNSS-Parser, Provisioning, OTA-Prüfung, **Modem-Abstraktion + Mock + Wake-Zyklus** |
 | `test/` | Host-Tests dieser Logik (Unity, `pio test -e native`) |
 
 ## Tests (ohne Hardware)
@@ -67,8 +69,10 @@ pio test -e native      # braucht gcc/g++ auf dem Host
 wsl -d UltimateTracker -- bash -lc 'cd ~/UltimateTracker/firmware && pio test -e native'
 ```
 
-Aktuell: **23 Tests** (ADPCM-Round-Trip inkl. SNR-Prüfung, Protokoll-Bauen/Parsen
-gegen das echte Bridge-Format, Wake-Drossel, Poll-Grenzen, AGC, Ringpuffer).
+Aktuell: **53 Tests in 9 Suites** – ADPCM-Round-Trip inkl. SNR-Prüfung,
+Sync-Protokoll gegen das echte Bridge-Format, Wake-Drossel, Poll-Grenzen, AGC,
+Ringpuffer, GNSS-Parser (SIMCom-Beispielzeile), Provisioning, OTA-Prüfung und
+der **komplette Wake-Zyklus gegen den Modem-Mock**.
 Details: `../docs/simulation.md`.
 
 ## Nächste Schritte (nach Hardware-Lieferung)

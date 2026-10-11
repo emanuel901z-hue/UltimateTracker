@@ -18,9 +18,15 @@ die aktuelle Basis läuft.
 | A9 Status-Dashboard (API + UI-Karte) | ✅ umgesetzt |
 | A3 TLS-Reverse-Proxy (Caddy, Profil `tls`) | ✅ umgesetzt + getestet (HTTPS, Redirect, CA-Export) |
 | A10 PostgreSQL statt H2 | ✅ umgesetzt + getestet (Tabellen verifiziert, Admin neu angelegt) |
-| Firmware-Logik: ADPCM, Protokoll, Wake-Policy, AGC, Ring-Log | ✅ umgesetzt, **23 Host-Tests grün** (`pio test -e native`) |
-| B2 Motion-Wake-Drossel **3 min** | ✅ Konstante in `config.h` + Logik in `lib/tracker_core` (getestet) |
-| B1, B3, B5–B11 | ⏳ offen (nächste Pakete) |
+| Firmware-Logik: ADPCM, Protokoll, Wake-Policy, AGC, Ring-Log | ✅ umgesetzt, **53 Host-Tests grün** (`pio test -e native`) |
+| **B10 Modem-Abstraktion + Mock** (`IModem`, `MockModem`, `wake_cycle`) | ✅ umgesetzt + getestet (kompletter Wake-Zyklus ohne Hardware) |
+| **B6 NVS-Provisioning** (`config_store`, JSON-Kommando, NVS-Blob) | ✅ umgesetzt + getestet |
+| **B7 OTA** (Server-Endpunkte + Angebot im Sync + Prüflogik) | ✅ Server-Seite + Logik umgesetzt/getestet; Flash-Schreiben folgt mit Hardware |
+| **B3 GNSS-Auswertung** (`AT+CGNSINF`-Parser, UTC→Epoch) | ✅ umgesetzt + getestet (SIMCom-Beispielzeile) |
+| **B1 Modem-Power-Modi** (aus/PSM/eDRX als Config + AT-Sequenzen) | ✅ Struktur umgesetzt; Entscheidung braucht M1/M3 |
+| **B8 Feldstabilität** (Ring-Log in RTC, Reset-Zähler, monotone Uptime) | ✅ umgesetzt |
+| B2 Motion-Wake-Drossel **3 min** | ✅ Konstante + Logik + Tests |
+| B5 Audio-AGC, B9 Low-Battery, B11 Selbsttest | 🟡 Logik vorhanden (AGC/Policy); Verkabelung mit der Hardware offen |
 
 ## A. Server / Stack
 

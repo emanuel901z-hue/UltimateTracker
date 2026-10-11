@@ -44,6 +44,24 @@ bool parse_sync_response(const std::string& json, SyncResponse& out) {
     out.message.format = std::string(message["format"] | "bin");
     out.message.size = message["size"] | 0u;
   }
+
+  out.ota = FirmwareOffer{};
+  JsonVariantConst ota = doc["ota"];
+  if (ota.is<JsonObjectConst>()) {
+    out.ota.present = true;
+    out.ota.version = std::string(ota["version"] | "");
+    out.ota.url = std::string(ota["url"] | "");
+    out.ota.sha256 = std::string(ota["sha256"] | "");
+    out.ota.size = ota["size"] | 0u;
+  }
+
+  out.audio_volume = -1;
+  JsonVariantConst config = doc["config"];
+  if (config.is<JsonObjectConst>() && config["audio_volume"].is<int>()) {
+    out.audio_volume = config["audio_volume"].as<int>();
+  }
+
+  out.min_fw = std::string(doc["min_fw"] | "");
   return true;
 }
 
