@@ -108,10 +108,6 @@ services:
       SITE_APPLE: ${SITE_APPLE:-apple.localhost}
       SITE_LAN: ${SITE_LAN:-localhost}
       TLS_ARG: ${TLS_ARG:-internal}
-      # Automatische Anmeldung in den angeschlossenen Diensten (Single Sign-on):
-      # Basic-Auth-Werte als base64 von "benutzer:passwort".
-      WEBUI_BASIC_AUTH: ${WEBUI_BASIC_AUTH:-}
-      APPLE_BASIC_AUTH: ${APPLE_BASIC_AUTH:-}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -127,13 +123,12 @@ services:
   # ---------------------------------------------------------------------------
 
   anisette:
-    # Apple-Authentifizierung (Anisette-Daten) für die Find-My-Bridge
+    # Apple-Authentifizierung (Anisette-Daten) für die Find-My-Bridge.
+    # Rein interner Dienst – kein veröffentlichter Port.
     image: dadoum/anisette-v3-server:latest
     profiles: [findmy]
     restart: unless-stopped
     logging: *default-logging
-    ports:
-      - "6969:6969"
     volumes:
       - anisette-data:/home/Alcoholic/.config/anisette-v3
     networks:
@@ -172,12 +167,12 @@ services:
     # Apple-Find-My-Endpoint: Key-Generierung und optionale Web-UI (manuelle Sicht).
     # Braucht beim ersten Start eine Apple-ID (interaktiv, 2FA) – ohne sie beendet
     # sich der Dienst; deshalb kein Endlos-Neustart.
+    # Kein veröffentlichter Port: erreichbar nur über Caddy (apple.localhost) und
+    # damit hinter dem Single Sign-on der Eltern-UI.
     image: christld/macless-haystack:latest
     profiles: [findmy]
     restart: on-failure:3
     logging: *default-logging
-    ports:
-      - "6176:6176"
     volumes:
       - macless-data:/app/endpoint/data
     depends_on:
@@ -194,11 +189,11 @@ services:
     profiles: [findmy]
     restart: unless-stopped
     logging: *default-logging
-    ports:
-      - "4321:4321"
+    # Kein veröffentlichter Port: erreichbar nur über Caddy (findmy.localhost) und
+    # damit hinter dem Single Sign-on. Deshalb ist die Basic-Auth der WebUI
+    # standardmäßig AUS (leer) – ein zweiter Login entfällt.
     environment:
       TZ: ${TZ:-Europe/Berlin}
-      # Basis-Auth aktivieren (dringend empfohlen, siehe docs/findmy.md):
       HTTP_USER: ${WEBUI_USER:-}
       HTTP_PASSWORD: ${WEBUI_PASSWORD:-}
       # Verschlüsselung der Tokens at rest (jeder String; Verlust = neu einloggen):

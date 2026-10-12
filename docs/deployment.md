@@ -87,9 +87,11 @@ curl -s "http://localhost:5055/?id=TEST123&lat=48.1372&lon=11.5756&batt=87&times
 
 - Eltern-UI: <http://localhost:8085> → Geräte-ID (IMEI) und Parent-Token eintragen,
   Nachricht aufnehmen und senden; Suchmodus-Schalter.
-- Optional (Profil `findmy`): Google-Find-Hub-WebUI auf <http://localhost:4321>
-  (Zugangsdaten `WEBUI_USER`/`WEBUI_PASSWORD` aus `server/.env`),
-  Apple-Endpunkt `macless-haystack` auf Port 6176, Anisette auf 6969.
+- Optional (Profil `findmy`): Google-Find-Hub-WebUI und Apple-Endpunkt
+  (`macless-haystack`) sind **nur über Caddy** erreichbar
+  (`https://findmy.localhost`, `https://apple.localhost`) und liegen damit
+  hinter der Anmeldung der Eltern-UI – **keine zweite Anmeldung** ✓.
+  Anisette läuft rein intern.
   Details: [`findmy.md`](findmy.md).
 - Tracker-Endpunkte (mit `X-Auth-Token: <DEVICE_TOKEN>`):
   - `GET /api/v1/device/pending?device_id=<IMEI>`
@@ -150,14 +152,12 @@ aus `server/.env` an (Werte stehen in `ADMIN-ZUGANG.txt`) und gibt das
 `JSESSIONID`-Cookie an den Browser weiter. Ergebnis: **kein zweites Login** ✓
 (im Browser verifiziert).
 
-**Basic-Auth der Find-My-Oberflächen:** Caddy schickt die Zugangsdaten
-automatisch mit, damit der Browser nicht fragt:
-
-```bash
-printf '%s' 'benutzer:passwort' | base64 -w0     # → WEBUI_BASIC_AUTH / APPLE_BASIC_AUTH in server/.env
-```
-
-Leer gelassen fragt die jeweilige Oberfläche wie bisher selbst.
+**Keine zweite Anmeldung bei Google/Apple:** Die Find-My-Oberflächen
+veröffentlichen keine Ports mehr und laufen ohne eigene Basic-Auth – sie
+sind ausschließlich über Caddy und damit hinter dem SSO der Eltern-UI
+erreichbar. Es gibt also nichts zu konfigurieren: **ein Login, alle
+Dienste** ✓. (Nur wer die Dienste bewusst direkt veröffentlicht, setzt in
+`server/.env` wieder `WEBUI_USER`/`WEBUI_PASSWORD`.)
 
 **Warum die Karte nicht mehr eingebettet wird:** Traccar verlangt sein eigenes
 Konto, und in einem iframe hält diese Sitzung wegen der Third-Party-Cookie-
@@ -233,7 +233,8 @@ docker compose --profile tls exec caddy cat /data/caddy/pki/authorities/local/ro
 ```
 
 Die Hostnamen müssen auf den Server zeigen (Router-DNS oder hosts-Datei).
-Danach die Ports 8082/8085/4321 nicht mehr nach außen veröffentlichen.
+Die Find-My-Dienste veröffentlichen gar keine Ports mehr – Zugriff nur über
+Caddy (SSO). Für die Hauptdienste gilt: 8082/8085 nicht nach außen öffnen.
 
 **Internet-Betrieb:** echte Domains in `SITE_*` eintragen, `TLS_ARG=du@example.org`
 setzen, Ports 80/443 freigeben – Caddy holt die Zertifikate automatisch.
@@ -272,7 +273,7 @@ WSL2 leitet `localhost` automatisch weiter – es ist **kein** zweiter Stack nö
 |---|---|
 | Eltern-UI/API (**Einstiegspunkt für alles**) | <http://localhost:8085> |
 | Traccar | <http://localhost:8082> |
-| Google-Find-My-WebUI | <http://localhost:4321> (Basic-Auth) |
+| Google-Find-My-WebUI | <https://findmy.localhost> (über den SSO-Login) |
 
 **„Eine App"-Übersicht:** Die Eltern-UI zeigt oben eine **Dienste-Karte** mit
 Live-Status aller Dienste (Karte, Find My Google/Apple, Anisette, Apple-Bridge)
@@ -314,7 +315,7 @@ docker compose -p uttest down -v
 | Traccar | 8082 / 5055 | **9082 / 9055** |
 | Audio-Bridge | 8085 | **9085** |
 | Caddy (Profil `tls`) | 80 / 443 | **8080 / 8443** |
-| Find-My-Dienste | 4321 / 6969 / 6176 / 5500 | **5321 / 7969 / 7176 / 6500** |
+| Find-My-Dienste | nur über Caddy (keine Ports) | **5321 / 7176 / 6500** (nur Test-Instanz) |
 | Volumes | `ultimatetracker_*` | `uttest_*` (getrennt) |
 | Datenbank | bestehende Daten | **leer** – Traccar legt einen neuen Admin an (erster registrierter Benutzer wird Administrator) |
 
@@ -331,7 +332,7 @@ Konfigurationsfehler im Stack. Drei Wege:
 
 | Weg | Aufwand | Bemerkung |
 |---|---|---|
-| **Port-Weiterleitung auf dem Host** | `powershell -ExecutionPolicy Bypass -File scripts\windows-lan-forward.ps1` (als **Administrator**) | leitet 8085/8082/4321/80/443 per `netsh portproxy` auf die WSL-IP und öffnet die Firewall-Regeln. Nach jedem Distro-Neustart erneut ausführen (WSL-IP ändert sich) |
+| **Port-Weiterleitung auf dem Host** | `powershell -ExecutionPolicy Bypass -File scripts\windows-lan-forward.ps1` (als **Administrator**) | leitet 8085/8082/80/443 per `netsh portproxy` auf die WSL-IP und öffnet die Firewall-Regeln. Nach jedem Distro-Neustart erneut ausführen (WSL-IP ändert sich) |
 | **Mirrored Networking** | `C:\Users\<du>\.wslconfig`: `[wsl2]` + `networkingMode=mirrored`, danach `wsl --shutdown` | WSL teilt sich die Host-IP → LAN-Zugriff ohne Weiterleitung (Windows 11 22H2+). Gilt für **alle** Distros |
 | **Tailscale** (empfohlen für „von außen") | in der WSL: `curl -fsSL https://tailscale.com/install.sh \| sh` + `sudo tailscale up` | eigenes Tailnet-Gerät, **kein** offener Port, Zugriff vom Handy überall – ohne DynDNS. Ideal, weil auf dem Windows-Host ohnehin Tailscale läuft |
 
@@ -367,7 +368,8 @@ Ziel: vom Handy nur `https://<dein-dyndns-name>` aufrufen → Login → alles da
 
 1. **Router**: nur **80** und **443** auf den Host weiterleiten (Let's Encrypt
    braucht 80 für die Prüfung). Optional zusätzlich **8443** für die vollständige
-   Traccar-Oberfläche. Alle anderen Ports (8082, 8085, 4321 …) **nicht** öffnen.
+   Traccar-Oberfläche. Alle anderen Ports (8082, 8085 …) **nicht** öffnen –
+   die Find-My-Dienste sind ohnehin nur intern erreichbar.
 2. **`server/.env`** anpassen:
    ```env
    SITE_AUDIO=meinname.dyndns.org

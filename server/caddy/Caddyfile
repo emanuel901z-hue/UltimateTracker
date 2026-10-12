@@ -59,11 +59,7 @@
 	forward_auth audio-bridge:8085 {
 		uri /api/v1/auth/verify
 	}
-	# Basic-Auth der WebUI automatisch mitliefern (Wert: base64 von "user:pass",
-	# siehe server/.env). Leer = die WebUI fragt selbst.
-	reverse_proxy google-findmy-webui:4321 {
-		header_up Authorization "Basic {$WEBUI_BASIC_AUTH}"
-	}
+	reverse_proxy google-findmy-webui:4321
 }
 
 {$SITE_APPLE:apple.localhost} {
@@ -72,9 +68,7 @@
 	forward_auth audio-bridge:8085 {
 		uri /api/v1/auth/verify
 	}
-	reverse_proxy macless-haystack:6176 {
-		header_up Authorization "Basic {$APPLE_BASIC_AUTH}"
-	}
+	reverse_proxy macless-haystack:6176
 }
 
 # ---------------------------------------------------------------------------

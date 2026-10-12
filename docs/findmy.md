@@ -92,14 +92,17 @@ der Minimal-Variante) und die **GoogleFindMyToolsWebUi** (P6g9YHK6), die den off
 Fix für den Key-Rotations-Bug (leonboe1/GoogleFindMyTools#114) bereits enthält und
 zusätzlich Web-UI, Scheduling und Firmware-Build mitbringt.
 
-### 3a. WebUI – empfohlen (Profil `findmy`, Port 4321)
+### 3a. WebUI – empfohlen (Profil `findmy`, nur über Caddy)
+
+> Zugriff über **<https://findmy.localhost>** (hinter dem Login der
+> Eltern-UI). Ein direkter Port ist bewusst nicht veröffentlicht.
 
 ```bash
 cd server
 docker compose --profile findmy up -d google-findmy-webui
 ```
 
-Dann <http://localhost:4321> → Config → „Sign in with Google“ (Chrome/Xvfb/noVNC
+Dann <https://findmy.localhost> → Config → „Sign in with Google“ (Chrome/Xvfb/noVNC
 werden beim ersten Login im Container nachinstalliert; der Login läuft direkt im
 Browser). Kernfunktionen:
 

@@ -100,7 +100,8 @@ Produktivbetrieb abschalten und Geräte explizit anlegen.
 
 ### A11 – Feinschliff (klein)
 - Per-Geräte-Token statt eines gemeinsamen `DEVICE_TOKEN` (Leak-Eingrenzung).
-- Uptime-Überwachung (z. B. Uptime-Kuma) für 8082/8085/4321 mit Alarm per Apprise.
+- Uptime-Überwachung (z. B. Uptime-Kuma) für 8082/8085 (und die Caddy-Adressen)
+  mit Alarm per Apprise.
 - 1NCE-Datenvolumen im Blick behalten (Portal-Alarm).
 
 ## B. Firmware
