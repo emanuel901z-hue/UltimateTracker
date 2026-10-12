@@ -34,6 +34,8 @@ jobs:
       - name: Unit-Tests der Provider-Schicht
         working-directory: server/audio-bridge
         run: python -m unittest discover -s tests -v
+      - name: Barrierefreiheit der UI prüfen (WCAG 2.2 AA, maschinell prüfbar)
+        run: python scripts/check-ui-a11y.py
 
   smoke:
     name: Smoke-Test gegen den Stack

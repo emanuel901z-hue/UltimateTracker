@@ -47,6 +47,13 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   müssen grün bleiben; Firmware zusätzlich `pio run` + `pio test -e native`.
 - Container-Namen nicht fest verdrahten (parallele Compose-Projekte, Testinstanz);
   in Skripten den Container dynamisch suchen (`docker ps --filter name=…`).
+- **Eltern-UI** (`server/audio-bridge/app/static/index.html`): mobile-first,
+  Orientierung **WCAG 2.2 AA** (Labels, sichtbarer Fokus, ≥44 px Bedienziele,
+  Kontraste hell/dunkel, `aria-live` für Statusmeldungen, Tabs als
+  `role="tablist"`/`tab`/`tabpanel` mit Pfeiltasten). Neue Formularfelder
+  brauchen Label + `aria-describedby` + Fehlerfeld (`<id>-error`) und eine
+  Prüfung in `validate…()`. Nach Änderungen `python scripts/check-ui-a11y.py`
+  laufen lassen (ist in der CI).
 
 ## Befehle
 
@@ -55,6 +62,7 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
 - Firmware bauen: `cd firmware && pio run` (PlatformIO)
 - Repo in die WSL-Distro spiegeln (aus WSL heraus): `bash scripts/sync-to-wsl.sh`
 - Tests: `bash scripts/smoke-test.sh` · `pio test -e native` · `python -m unittest discover -s tests`
+- UI-Prüfung: `python scripts/check-ui-a11y.py` (Labels, ARIA, Tab-Muster, Kontraste, Bedienziele)
 - Parallele Test-Instanz: `bash scripts/start-test-instance.sh` (Ports +1000, Projekt `uttest`)
 
 ## Struktur-Konventionen

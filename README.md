@@ -76,7 +76,10 @@ docker compose up -d
 
 Details (WSL-Setup, TLS, LAN-/Internet-Betrieb, Betrieb & Wartung):
 [`docs/deployment.md`](docs/deployment.md). Tests: `bash scripts/smoke-test.sh`
-(19 Gruppen) und `pio test -e native` (53 Host-Tests der Firmware-Logik).
+(19 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik) und
+`python scripts/check-ui-a11y.py` (Bedienbarkeit/Barrierefreiheit der
+Eltern-UI: Labels, ARIA, Tab-Muster, Kontraste hell/dunkel, Bedienziele –
+Orientierung an WCAG 2.2 AA).
 
 ## Datenschutz & Sicherheit
 

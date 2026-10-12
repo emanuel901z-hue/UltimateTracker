@@ -3,212 +3,375 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#101418">
+<meta name="theme-color" content="#10141a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="UltimateTracker">
+<meta name="description" content="Eltern-Oberfläche des UltimateTracker: Standort, Sprachnachrichten, Geräte und Betrieb.">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/icon-180.png">
 <title>UltimateTracker – Eltern</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 46rem; padding: 1rem; }
-  h1 { font-size: 1.3rem; }
-  h2 { font-size: 1.05rem; margin-top: 1.6rem; }
-  label { display: block; margin: .4rem 0; }
-  input[type=text], input[type=password], select { width: 100%; padding: .4rem; }
-  button { padding: .5rem .9rem; margin: .2rem .4rem .2rem 0; }
-  .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: end; }
-  .row > * { flex: 1 1 8rem; }
-  #status { margin-left: .4rem; opacity: .8; }
-  ul { list-style: none; padding: 0; }
-  li { border-top: 1px solid #8884; padding: .5rem 0; }
+  /* Farben und Maße als Tokens: heller und dunkler Modus, beide auf
+     WCAG-2.2-AA-Kontrast geprüft (siehe scripts/check-ui-a11y.py). */
+  :root {
+    color-scheme: light dark;
+    --bg: #f4f6f8; --fg: #12171c; --muted: #4f5a66; --card: #ffffff; --line: #cfd6dd;
+    --accent: #0b57c2; --accent-fg: #ffffff; --ok: #14672f; --warn: #7a5200; --err: #b3261e;
+    --radius: .6rem; --gap: 1rem; --tap: 2.75rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1218; --fg: #e9eef4; --muted: #aab6c4; --card: #161c24; --line: #2b3540;
+      --accent: #8ab6ff; --accent-fg: #0b1016; --ok: #5cd07c; --warn: #e0b341; --err: #ff8a80;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 1rem/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 64rem; margin: 0 auto; padding: 1rem; }
+  h1 { font-size: 1.25rem; margin: 0; }
+  h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+  h3 { font-size: 1rem; margin: 1rem 0 .4rem; }
+  p { margin: .4rem 0; }
+  a { color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; margin: 0 0 var(--gap); }
+  .grid { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); align-items: start; }
+  .appbar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; margin: 1rem 0; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .mt { margin-top: .5rem; }
+  .row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end; }
+  .row > * { flex: 1 1 9rem; }
+  .row-tight { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; align-items: center; }
+  .grow { flex: 1 1 14rem; width: auto; }
+  .linkish { min-height: var(--tap); padding: .3rem .6rem; }
+  /* Tabs */
+  .tabs { display: flex; gap: .25rem; overflow-x: auto; border-bottom: 1px solid var(--line); padding-bottom: .25rem; margin-bottom: var(--gap); }
+  .tabs [role="tab"] {
+    flex: 0 0 auto; min-height: var(--tap); padding: .5rem .9rem; font: inherit;
+    background: transparent; color: var(--fg); border: 1px solid transparent;
+    border-radius: var(--radius) var(--radius) 0 0; cursor: pointer;
+  }
+  .tabs [role="tab"]:hover { background: var(--card); }
+  .tabs [role="tab"][aria-selected="true"] { background: var(--card); border-color: var(--line); border-bottom-color: var(--card); font-weight: 600; }
+  /* Formulare */
+  label { display: block; margin: .5rem 0; }
+  input, select, textarea {
+    width: 100%; min-height: var(--tap); padding: .45rem .6rem; font: inherit;
+    color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  input[type="checkbox"] { width: auto; min-height: auto; }
+  button {
+    min-height: var(--tap); padding: .5rem 1rem; font: inherit; cursor: pointer;
+    color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  /* Sichtbarer Fokus (WCAG 2.4.7 / 2.4.11) */
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  /* Fehler und Hinweise */
+  .hint { color: var(--muted); font-size: .85rem; margin: .15rem 0 .3rem; }
+  .field-error { color: var(--err); font-size: .85rem; margin: .15rem 0 0; min-height: 1.2em; }
+  [aria-invalid="true"] { border-color: var(--err); border-width: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .skip { position: absolute; left: -9999px; }
+  .skip:focus { left: 0; top: 0; z-index: 10; background: var(--card); padding: .6rem 1rem; border: 2px solid var(--accent); border-radius: var(--radius); }
+  /* Listen */
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { border-top: 1px solid var(--line); padding: .6rem 0; }
+  li:first-child { border-top: 0; }
+  li > button { margin-left: .3rem; }
   audio { display: block; margin-top: .3rem; width: 100%; }
-  .muted { opacity: .7; font-size: .9rem; }
-  .card { border: 1px solid #8884; border-radius: .5rem; padding: .7rem; margin: .5rem 0; }
-  /* Kartenüberschrift ohne Abstand nach oben (vorher Inline-Styles) */
-  .card > h2 { margin-top: 0; }
-  .mt { margin-top: .4rem; }
-  .row-tight { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
-  .grow { flex: 1 1 12rem; width: auto; }
-  /* Statuspunkte der Dienste-Übersicht */
-  .dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .45rem; background: #8b949e; }
-  .dot.up { background: #3fb950; }
-  .dot.error { background: #d29922; }
-  .dot.down { background: #f85149; }
-  .dot.na { background: #8b949e; }
-  .linkish { margin-left: .5rem; }
-  #map { width: 100%; height: 60vh; border: 1px solid #8884; border-radius: .4rem; }
+  /* Statuspunkte: Farbe nie allein – immer mit Text */
+  .dot { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; margin-right: .45rem; background: var(--muted); }
+  .dot.up { background: var(--ok); }
+  .dot.error { background: var(--warn); }
+  .dot.down { background: var(--err); }
+  .dot.na { background: var(--muted); }
+  #map { width: 100%; height: min(70vh, 40rem); border: 1px solid var(--line); border-radius: var(--radius); }
+  .live { position: sticky; bottom: 0; }
+  @media (max-width: 30rem) {
+    .wrap { padding: .75rem; }
+    h1 { font-size: 1.1rem; }
+    .row > * { flex: 1 1 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Zum Inhalt springen</a>
+<div class="wrap">
 <h1>UltimateTracker – Eltern</h1>
 
 <div class="card" id="login-card">
   <h2>Anmeldung</h2>
-  <div class="row">
-    <div><label>Benutzername <input id="login-user" type="text" autocomplete="username"></label></div>
-    <div><label>Passwort <input id="login-pass" type="password" autocomplete="current-password"></label></div>
-  </div>
-  <div class="row-tight">
-    <button id="login">Anmelden</button>
-    <span class="muted" id="login-state"></span>
-  </div>
+  <form id="login-form" novalidate>
+    <label for="login-user">Benutzername
+      <input id="login-user" name="username" type="text" autocomplete="username" required
+             minlength="3" aria-describedby="login-user-error">
+    </label>
+    <p class="field-error" id="login-user-error"></p>
+    <label for="login-pass">Passwort
+      <input id="login-pass" name="password" type="password" autocomplete="current-password" required
+             aria-describedby="login-pass-error">
+    </label>
+    <p class="field-error" id="login-pass-error"></p>
+    <div class="row-tight">
+      <button id="login" class="primary" type="submit">Anmelden</button>
+      <span class="muted" id="login-state" role="status" aria-live="polite"></span>
+    </div>
+  </form>
   <details class="mt">
     <summary class="muted">Stattdessen API-Token verwenden (Skripte, Erstinstallation)</summary>
-    <label class="mt">Parent-Token <input id="token" type="password" autocomplete="off"></label>
+    <label class="mt" for="token">Parent-Token
+      <input id="token" type="password" autocomplete="off">
+    </label>
   </details>
-</div>
-
-<div class="card" id="user-bar" hidden>
-  <span id="user-name" class="muted">–</span>
-  <button id="logout" class="linkish">Abmelden</button>
-  <details class="mt">
-    <summary class="muted">Passwort ändern</summary>
-    <div class="row mt">
-      <div><label>Aktuelles Passwort <input id="pw-current" type="password" autocomplete="current-password"></label></div>
-      <div><label>Neues Passwort <input id="pw-new" type="password" autocomplete="new-password"></label></div>
-      <div><label>Neues Passwort (Wiederholung) <input id="pw-repeat" type="password" autocomplete="new-password"></label></div>
-    </div>
-    <div class="row-tight">
-      <button id="password-save">Passwort ändern</button>
-      <span class="muted" id="pw-state"></span>
-    </div>
-    <div class="muted mt">Andere angemeldete Geräte werden dabei abgemeldet.</div>
-  </details>
-</div>
-
-<div class="card" id="users-card" hidden>
-  <h2>Benutzer</h2>
-  <ul id="users"><li class="muted">– wird geladen –</li></ul>
-  <div class="row">
-    <div><label>Neuer Benutzer <input id="new-user" type="text" autocomplete="off" placeholder="z. B. mama"></label></div>
-    <div><label>Passwort <input id="new-user-pass" type="password" autocomplete="new-password"></label></div>
-    <div><label>Rolle <select id="new-user-role"><option value="parent">parent</option><option value="admin">admin</option></select></label></div>
-  </div>
-  <div class="row-tight">
-    <button id="user-create">Benutzer anlegen</button>
-    <span class="muted" id="user-state"></span>
-  </div>
 </div>
 
 <div id="app" hidden>
-<label>Kind / Tracker
-  <select id="device"><option value="">– bitte anmelden –</option></select>
-</label>
-
-<div class="card">
-  <h2>Kinder</h2>
-  <ul id="children"><li class="muted">– wird geladen –</li></ul>
-  <div class="muted mt">
-    Alle Tracker auf einen Blick: Akkustand, letzte Position, Suchmodus – pro Kind.
-    „auswählen" schaltet Status, Nachrichten und Aufnahme auf dieses Kind um.
+  <div class="appbar">
+    <label for="device">Kind / Tracker
+      <select id="device"><option value="">– bitte anmelden –</option></select>
+    </label>
+    <button id="refresh">Alles aktualisieren</button>
   </div>
+
+  <nav class="tabs" role="tablist" aria-label="Bereiche">
+    <button role="tab" id="tab-uebersicht" aria-controls="panel-uebersicht" aria-selected="true">Übersicht</button>
+    <button role="tab" id="tab-karte" aria-controls="panel-karte" aria-selected="false" tabindex="-1">Karte</button>
+    <button role="tab" id="tab-nachricht" aria-controls="panel-nachricht" aria-selected="false" tabindex="-1">Nachricht</button>
+    <button role="tab" id="tab-geraete" aria-controls="panel-geraete" aria-selected="false" tabindex="-1">Geräte</button>
+    <button role="tab" id="tab-betrieb" aria-controls="panel-betrieb" aria-selected="false" tabindex="-1">Betrieb</button>
+    <button role="tab" id="tab-konto" aria-controls="panel-konto" aria-selected="false" tabindex="-1">Konto</button>
+  </nav>
+
+  <main id="main">
+    <section role="tabpanel" id="panel-uebersicht" aria-labelledby="tab-uebersicht" tabindex="0">
+      <div class="card">
+        <h2>Kinder</h2>
+        <ul id="children"><li class="muted">– wird geladen –</li></ul>
+        <p class="hint">Alle Tracker auf einen Blick: Akkustand, letzte Position, Suchmodus – pro Kind.
+          „auswählen" schaltet Status, Nachrichten und Aufnahme auf dieses Kind um.</p>
+      </div>
+      <div class="card" id="status-card">
+        <h2>Status</h2>
+        <div id="status-body" class="muted">– keine Daten –</div>
+      </div>
+      <div class="card">
+        <h2>Dienste</h2>
+        <ul id="services"><li class="muted">– wird geladen –</li></ul>
+        <p class="hint">Eine Oberfläche für alles: Karte, Find My (Google/Apple) und diese App.
+          Der Status wird alle 10 s geprüft; „öffnen" führt in den jeweiligen Dienst.</p>
+      </div>
+      <div class="card">
+        <h2>Nachrichten</h2>
+        <ul id="list"></ul>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-karte" aria-labelledby="tab-karte" tabindex="0" hidden>
+      <div class="card">
+        <h2>Karte</h2>
+        <div class="row-tight">
+          <button id="map-load">Karte hier laden</button>
+          <a id="map-link" href="#" target="_blank" rel="noopener">in neuem Tab öffnen</a>
+        </div>
+        <div id="map-wrap" class="mt" hidden>
+          <iframe id="map" title="Traccar-Karte (Standorte und Verlauf)" loading="lazy"></iframe>
+        </div>
+        <p class="hint">Die Karte kommt aus Traccar. Für Verlauf, Geofences und Berichte
+          dort „in neuem Tab öffnen" – die Anmeldung gilt dank Single Sign-on weiter.</p>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-nachricht" aria-labelledby="tab-nachricht" tabindex="0" hidden>
+      <div class="card">
+        <h2>Sprachnachricht senden</h2>
+        <div class="row-tight">
+          <button id="rec" class="primary">Aufnahme starten</button>
+          <button id="send" disabled>Senden</button>
+        </div>
+        <p class="hint" id="status" role="status" aria-live="polite"></p>
+        <label class="mt">
+          <input type="checkbox" id="search"> Suchmodus aktiv (Tracker piept, pollt häufiger)
+        </label>
+        <p class="hint">Der Tracker holt die Nachricht beim nächsten Poll ab – im Suchmodus
+          alle 60 s, sonst im eingestellten Intervall.</p>
+      </div>
+      <div class="card">
+        <h2>Benachrichtigungen</h2>
+        <div class="muted" id="push-state" role="status" aria-live="polite">Status: –</div>
+        <div class="row-tight">
+          <button id="push-enable">Auf diesem Gerät aktivieren</button>
+          <button id="push-test">Test senden</button>
+        </div>
+        <p class="hint">Push braucht eine sichere Verbindung (HTTPS oder localhost).
+          In der WSL-Instanz liefert das Caddy-Profil HTTPS
+          (<code>docker compose --profile tls up -d</code>).</p>
+      </div>
+      <div class="card">
+        <h2>SMS (1NCE)</h2>
+        <div class="muted" id="sms-state" role="status" aria-live="polite">Status: –</div>
+        <label class="mt" for="sms-text">Text (max. 160 Zeichen)
+          <input id="sms-text" class="grow" type="text" maxlength="160" inputmode="text"
+                 aria-describedby="sms-hint sms-count" placeholder="z. B. Komm bitte nach Hause">
+        </label>
+        <p class="hint" id="sms-count">0 / 160 Zeichen</p>
+        <div class="row-tight">
+          <button id="sms-send">SMS an Tracker</button>
+        </div>
+        <p class="hint" id="sms-hint">Serververmittelt (1NCE A2P): Zustellung erfolgt beim nächsten
+          Netz-Attach – kein Handy-↔-Gerät-SMS möglich. Details: <code>docs/sms.md</code>.</p>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-geraete" aria-labelledby="tab-geraete" tabindex="0" hidden>
+      <div class="card">
+        <h2>Geräte</h2>
+        <div id="devices"></div>
+      </div>
+      <div class="card">
+        <h2>Gerät anlegen oder ändern</h2>
+        <form id="device-form" novalidate>
+          <div class="row">
+            <div>
+              <label for="d-id">ID / IMEI (15 Ziffern)
+                <input id="d-id" type="text" inputmode="numeric" pattern="[0-9]{15}" maxlength="15"
+                       placeholder="860000000000000" aria-describedby="d-id-hint d-id-error">
+              </label>
+              <p class="hint" id="d-id-hint">Steht auf dem Aufkleber des SIM7080G-Modems (AT+GSN).</p>
+              <p class="field-error" id="d-id-error"></p>
+            </div>
+            <div>
+              <label for="d-name">Name
+                <input id="d-name" type="text" maxlength="64" placeholder="z. B. Tracker Kinderzimmer"
+                       aria-describedby="d-name-error">
+              </label>
+              <p class="field-error" id="d-name-error"></p>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="d-msisdn">MSISDN / Rufnummer (optional)
+                <input id="d-msisdn" type="tel" inputmode="tel" pattern="\+?[0-9]{6,15}"
+                       placeholder="+491700000000" aria-describedby="d-msisdn-hint d-msisdn-error">
+              </label>
+              <p class="hint" id="d-msisdn-hint">Nur für den optionalen SMS-Pfad nötig.</p>
+              <p class="field-error" id="d-msisdn-error"></p>
+            </div>
+            <div>
+              <label for="d-notes">Notizen (optional)
+                <input id="d-notes" type="text" maxlength="120">
+              </label>
+            </div>
+          </div>
+          <div class="row-tight">
+            <button id="d-save" class="primary">Gerät speichern</button>
+            <span class="muted" id="d-state" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Find My (Apple / Google)</h2>
+        <div id="findmy"></div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-betrieb" aria-labelledby="tab-betrieb" tabindex="0" hidden>
+      <div class="card">
+        <h2>Betrieb</h2>
+        <div id="system" class="muted">– wird geladen –</div>
+        <div class="row-tight mt">
+          <button id="system-refresh">Werte aktualisieren</button>
+          <button id="cleanup">Aufräumen jetzt</button>
+          <button id="backup">Backup herunterladen</button>
+        </div>
+        <p class="hint">Das Backup enthält Audio, Datenbank und Ereignislog als tar.gz.</p>
+      </div>
+      <div class="card">
+        <h2>Einstellungen</h2>
+        <div id="settings"></div>
+        <div class="row-tight mt">
+          <button id="settings-save" class="primary">Speichern</button>
+          <span class="muted" id="settings-state" role="status" aria-live="polite"></span>
+        </div>
+        <p class="hint">Wirkt sofort (ohne Neustart); die <code>.env</code> bleibt der Startwert.</p>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-konto" aria-labelledby="tab-konto" tabindex="0" hidden>
+      <div class="card" id="user-bar">
+        <h2>Konto</h2>
+        <div class="row-tight">
+          <span id="user-name" class="muted">–</span>
+          <button id="logout" class="linkish">Abmelden</button>
+        </div>
+        <details class="mt">
+          <summary>Passwort ändern</summary>
+          <form id="password-form" novalidate>
+            <label for="pw-current">Aktuelles Passwort
+              <input id="pw-current" type="password" autocomplete="current-password" required>
+            </label>
+            <label for="pw-new">Neues Passwort (mindestens 10 Zeichen)
+              <input id="pw-new" type="password" autocomplete="new-password" required minlength="10"
+                     aria-describedby="pw-hint pw-error">
+            </label>
+            <label for="pw-repeat">Neues Passwort (Wiederholung)
+              <input id="pw-repeat" type="password" autocomplete="new-password" required minlength="10">
+            </label>
+            <p class="hint" id="pw-hint">Andere angemeldete Geräte werden dabei abgemeldet.</p>
+            <p class="field-error" id="pw-error"></p>
+            <div class="row-tight">
+              <button id="password-save" class="primary" type="submit">Passwort ändern</button>
+              <span class="muted" id="pw-state" role="status" aria-live="polite"></span>
+            </div>
+          </form>
+        </details>
+      </div>
+      <div class="card" id="users-card" hidden>
+        <h2>Benutzer</h2>
+        <ul id="users"><li class="muted">– wird geladen –</li></ul>
+        <form id="user-form" novalidate>
+          <div class="row">
+            <div>
+              <label for="new-user">Neuer Benutzer
+                <input id="new-user" type="text" autocomplete="off" minlength="3" maxlength="32"
+                       placeholder="z. B. mama" aria-describedby="new-user-error">
+              </label>
+              <p class="field-error" id="new-user-error"></p>
+            </div>
+            <div>
+              <label for="new-user-pass">Passwort (mindestens 10 Zeichen)
+                <input id="new-user-pass" type="password" autocomplete="new-password" minlength="10"
+                       aria-describedby="new-user-pass-error">
+              </label>
+              <p class="field-error" id="new-user-pass-error"></p>
+            </div>
+            <div>
+              <label for="new-user-role">Rolle
+                <select id="new-user-role">
+                  <option value="parent">parent (darf bedienen)</option>
+                  <option value="admin">admin (darf verwalten)</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="row-tight">
+            <button id="user-create" class="primary">Benutzer anlegen</button>
+            <span class="muted" id="user-state" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
 </div>
 
-<div class="card" id="status-card">
-  <h2>Status</h2>
-  <div id="status-body" class="muted">– keine Daten –</div>
-</div>
-
-<div class="card">
-  <h2>Dienste</h2>
-  <ul id="services"><li class="muted">– wird geladen –</li></ul>
-  <div class="muted mt">
-    Eine Oberfläche für alles: Karte, Find My (Google/Apple) und diese App.
-    Der Status wird alle 10 s geprüft; „öffnen" führt in den jeweiligen Dienst.
-  </div>
-</div>
-
-<div class="card">
-  <h2>Betrieb</h2>
-  <div id="system" class="muted">– wird geladen –</div>
-  <div class="row-tight mt">
-    <button id="system-refresh">Werte aktualisieren</button>
-    <button id="cleanup">Aufräumen jetzt</button>
-    <button id="backup">Backup herunterladen</button>
-  </div>
-  <div class="muted mt">Backup enthält Audio, Datenbank und Ereignislog als tar.gz.</div>
-</div>
-
-<div class="card">
-  <h2>Einstellungen</h2>
-  <div id="settings" class="muted">– wird geladen –</div>
-  <div class="row-tight mt">
-    <button id="settings-save">Speichern</button>
-    <span class="muted" id="settings-state"></span>
-  </div>
-  <div class="muted mt">Wirkt sofort (ohne Neustart); die <code>.env</code> bleibt der Startwert.</div>
-</div>
-
-
-<div class="card">
-  <h2>Karte</h2>
-  <div class="row-tight">
-    <button id="map-load">Karte hier laden</button>
-    <a id="map-link" href="#" target="_blank" rel="noopener">in neuem Tab öffnen</a>
-  </div>
-  <div id="map-wrap" class="mt" hidden>
-    <iframe id="map" title="Traccar-Karte" loading="lazy"></iframe>
-  </div>
-</div>
-
-<div class="card">
-  <h2>Sprachnachricht senden</h2>
-  <div>
-    <button id="rec">Aufnahme starten</button>
-    <button id="send" disabled>Senden</button>
-    <span id="status"></span>
-  </div>
-  <label><input type="checkbox" id="search"> Suchmodus aktiv (Tracker piept, pollt häufiger)</label>
-</div>
-
-<div class="card">
-  <h2>Benachrichtigungen</h2>
-  <div class="muted" id="push-state">Status: –</div>
-  <div>
-    <button id="push-enable">Auf diesem Gerät aktivieren</button>
-    <button id="push-test">Test senden</button>
-  </div>
-  <div class="muted mt">
-    Hinweis: Push braucht eine sichere Verbindung (HTTPS oder localhost).
-    In der WSL-Instanz liefert das Caddy-Profil HTTPS (<code>docker compose --profile tls up -d</code>).
-  </div>
-</div>
-
-<div class="card">
-  <h2>SMS (1NCE)</h2>
-  <div class="muted" id="sms-state">Status: –</div>
-  <div class="row-tight">
-    <input id="sms-text" class="grow" placeholder="Text (max. 160 Zeichen)">
-    <button id="sms-send">SMS an Tracker</button>
-  </div>
-  <div class="muted mt">
-    Serververmittelt (1NCE A2P): Zustellung erfolgt beim nächsten Netz-Attach –
-    kein Handy-↔-Gerät-SMS möglich. Details: <code>docs/sms.md</code>.
-  </div>
-</div>
-
-<h2>Geräte</h2>
-<div id="devices"></div>
-<div class="card">
-  <div class="row">
-    <div><label>ID / IMEI <input id="d-id" type="text" placeholder="z. B. 860000000000000"></label></div>
-    <div><label>Name <input id="d-name" type="text" placeholder="z. B. Tracker Kinderzimmer"></label></div>
-  </div>
-  <div class="row">
-    <div><label>MSISDN / Rufnummer <input id="d-msisdn" type="text" placeholder="+49…"></label></div>
-    <div><label>Notizen <input id="d-notes" type="text"></label></div>
-  </div>
-  <button id="d-save">Gerät speichern</button>
-</div>
-
-<h2>Find My (Apple / Google)</h2>
-<div id="findmy"></div>
-<button id="refresh">Alles aktualisieren</button>
-
-<h2>Nachrichten</h2>
-<ul id="list"></ul>
+<p class="live sr-only" id="live" role="status" aria-live="polite"></p>
 </div>
 
 <script>
@@ -229,7 +392,11 @@ $('token').addEventListener('input', (e) => {
   loadDevices();
 });
 
-function setStatus(text) { $('status').textContent = text; }
+function setStatus(text) {
+  $('status').textContent = text;
+  const live = $('live');
+  if (live) live.textContent = text;
+}
 function headers() { return { 'X-Auth-Token': state.token }; }
 function fmt(iso) { try { return new Date(iso).toLocaleString(); } catch { return iso; } }
 
@@ -832,6 +999,146 @@ $('token').addEventListener('input', (e) => {
   }
 })();
 setInterval(loadServices, 30000);
+
+// --- Barrierefreie Tab-Navigation (role=tablist, Pfeiltasten, roving tabindex) ---
+const TABS = Array.from(document.querySelectorAll('[role="tab"]'));
+const PANELS = TABS.map((tab) => document.getElementById(tab.getAttribute('aria-controls')));
+
+function selectTab(tab, moveFocus = true) {
+  TABS.forEach((candidate, index) => {
+    const selected = candidate === tab;
+    candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
+    candidate.tabIndex = selected ? 0 : -1;
+    PANELS[index].hidden = !selected;
+  });
+  localStorage.setItem('ut_tab', tab.id);
+  if (moveFocus) tab.focus();
+  if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); }
+  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); }
+  if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); }
+  if (tab.id === 'tab-konto') loadUsers();
+}
+
+TABS.forEach((tab, index) => {
+  tab.addEventListener('click', () => selectTab(tab, false));
+  tab.addEventListener('keydown', (event) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+    if (step) {
+      event.preventDefault();
+      selectTab(TABS[(index + step + TABS.length) % TABS.length]);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      selectTab(TABS[0]);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      selectTab(TABS[TABS.length - 1]);
+    }
+  });
+});
+
+// Formulare nicht neu laden (die bestehenden Handler hängen an den Buttons)
+document.querySelectorAll('form').forEach((form) => {
+  form.addEventListener('submit', (event) => event.preventDefault());
+});
+
+// --- Eingabevalidierung (verständliche Meldungen, Feldbezogen) ---------------
+function fieldError(input, message) {
+  const box = document.getElementById(input.id + '-error');
+  if (box) box.textContent = message || '';
+  input.setAttribute('aria-invalid', message ? 'true' : 'false');
+  return !message;
+}
+
+function requireText(input, label, minLength = 1) {
+  const value = input.value.trim();
+  if (!value) return fieldError(input, label + ' darf nicht leer sein.');
+  if (value.length < minLength) return fieldError(input, label + ' braucht mindestens ' + minLength + ' Zeichen.');
+  return fieldError(input, '');
+}
+
+function requireImei(input) {
+  const value = input.value.trim();
+  if (!value) return fieldError(input, 'Die IMEI fehlt – sie steht auf dem Aufkleber des Modems (AT+GSN).');
+  if (!/^[0-9]{15}$/.test(value)) return fieldError(input, 'Die IMEI besteht aus genau 15 Ziffern, ohne Leerzeichen.');
+  return fieldError(input, '');
+}
+
+function optionalPhone(input) {
+  const value = input.value.trim();
+  if (!value) return fieldError(input, '');
+  if (!/^\+?[0-9]{6,15}$/.test(value)) {
+    return fieldError(input, 'Bitte nur Ziffern, optional mit „+" am Anfang – z. B. +491700000000.');
+  }
+  return fieldError(input, '');
+}
+
+function validateDeviceForm() {
+  return [requireImei($('d-id')), requireText($('d-name'), 'Der Name', 2), optionalPhone($('d-msisdn'))].every(Boolean);
+}
+
+function validateLoginForm() {
+  return [requireText($('login-user'), 'Der Benutzername', 3), requireText($('login-pass'), 'Das Passwort', 1)].every(Boolean);
+}
+
+function validatePasswordForm() {
+  const okCurrent = requireText($('pw-current'), 'Das aktuelle Passwort', 1);
+  const okNew = requireText($('pw-new'), 'Das neue Passwort', 10);
+  const repeated = $('pw-repeat').value === $('pw-new').value;
+  const okRepeat = repeated ? fieldError($('pw-repeat'), '')
+    : fieldError($('pw-repeat'), 'Die Wiederholung passt nicht zum neuen Passwort.');
+  return okCurrent && okNew && okRepeat;
+}
+
+function validateUserForm() {
+  return [requireText($('new-user'), 'Der Benutzername', 3),
+    requireText($('new-user-pass'), 'Das Passwort', 10)].every(Boolean);
+}
+
+function validateSettings() {
+  let ok = true;
+  document.querySelectorAll('[data-setting]').forEach((input) => {
+    const min = Number(input.min);
+    const max = Number(input.max);
+    const value = Number(input.value);
+    const valid = Number.isFinite(value) && value >= min && value <= max;
+    input.setAttribute('aria-invalid', valid ? 'false' : 'true');
+    if (!valid) {
+      ok = false;
+      $('settings-state').textContent = 'Bitte einen Wert zwischen ' + min + ' und ' + max +
+        ' eintragen (' + input.dataset.setting + ').';
+    }
+  });
+  return ok;
+}
+
+// Validierung läuft VOR den bestehenden Handlern (Capture-Phase)
+$('d-save').addEventListener('click', (event) => {
+  if (!validateDeviceForm()) { event.stopImmediatePropagation(); event.preventDefault(); }
+}, true);
+$('login').addEventListener('click', (event) => {
+  if (!validateLoginForm()) { event.stopImmediatePropagation(); event.preventDefault(); }
+}, true);
+$('password-save').addEventListener('click', (event) => {
+  if (!validatePasswordForm()) { event.stopImmediatePropagation(); event.preventDefault(); }
+}, true);
+$('user-create').addEventListener('click', (event) => {
+  if (!validateUserForm()) { event.stopImmediatePropagation(); event.preventDefault(); }
+}, true);
+$('settings-save').addEventListener('click', (event) => {
+  if (!validateSettings()) { event.stopImmediatePropagation(); event.preventDefault(); }
+}, true);
+
+// SMS: Zeichenzähler und Freigabe
+function updateSmsCounter() {
+  const used = $('sms-text').value.length;
+  $('sms-count').textContent = used + ' / 160 Zeichen';
+  $('sms-send').disabled = used === 0;
+}
+$('sms-text').addEventListener('input', updateSmsCounter);
+
+// Start: gemerkter Tab oder Übersicht
+selectTab(TABS.find((tab) => tab.id === localStorage.getItem('ut_tab')) || TABS[0], false);
+updateSmsCounter();
 </script>
 </body>
 </html>
