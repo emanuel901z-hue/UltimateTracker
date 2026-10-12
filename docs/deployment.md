@@ -331,7 +331,47 @@ Damit ist die Bridge die Operationszentrale: ein Login, Monitoring,
 Konfiguration, Administration und Wartung an einer Stelle – Traccar liefert die
 Karte, die eingebettet daneben liegt.
 
-## 10. Troubleshooting
+## 10. Repo veröffentlichen (Remote & Zugangsdaten)
+
+Das Projekt bleibt lokal, bis du es bewusst veröffentlichst. Wenn es soweit ist:
+
+```bash
+cd /d/Projekte/UltimateTracker
+git remote add origin https://github.com/<user>/UltimateTracker.git
+git push -u origin main          # veröffentlicht den Branch
+```
+
+**Zugangsdaten gehören nicht in `server/.env`**, sondern in die Projekt-Git-Settings
+– dort sind sie nie versioniert (`.git/` wird nie committet):
+
+```bash
+git config --local credential.helper "store --file=$PWD/.git/credentials"
+printf 'https://<user>:<PAT>@github.com\n' > .git/credentials
+icacls ".git\\credentials" /inheritance:r /grant:r "$USERNAME:F"   # Windows
+```
+
+Prüfen ohne zu veröffentlichen:
+
+```bash
+GIT_TERMINAL_PROMPT=0 git ls-remote --heads origin   # Exit 0 = Zugang ok
+```
+
+**Zwei Netze vor versehentlichen Secrets:**
+
+1. `.gitignore` hält `.env`, `ADMIN-ZUGANG.txt`, `*.bin`, Laufzeitdaten draußen.
+2. `scripts/git-hooks/pre-commit` blockt `.env`-Dateien und Secret-Muster
+   (Installation: `cp scripts/git-hooks/pre-commit .git/hooks/pre-commit`).
+
+**Vor dem ersten Push einmal prüfen:**
+
+```bash
+# Muster wie im Hook (scripts/git-hooks/pre-commit) – hier bewusst umschrieben,
+# damit dieser Text selbst keinen Secret-Scanner triggert:
+git grep -nE 'github[_-]pat|AKIA[0-9A-Z]{16}|API_CLIENTSECRET=' -- . || echo "sauber"
+git log --all -S'github_pat' --oneline | wc -l    # 0 = nie in der Historie
+```
+
+## 11. Troubleshooting
 
 | Symptom | Ursache/Abhilfe |
 |---|---|
