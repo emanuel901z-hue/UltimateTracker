@@ -4,6 +4,38 @@ Wie Tracker, SIM und Beacons eindeutig adressiert werden – und was SMS leisten
 kann (und was nicht). **Stand 2026-10-12 korrigiert:** Die frühere Annahme
 „Gerät ↔ Eltern direkt per SMS" ist mit 1NCE **nicht** möglich.
 
+## 0. Wofür sind dann die 250 inklusiven SMS gut?
+
+Die 250 SMS der 1NCE IoT Lifetime Flat sind **kein** Handy-Messaging, sondern
+Kommunikation **zwischen dem Gerät und der 1NCE-Plattform**:
+
+| Richtung | Was passiert | Nutzen für uns |
+|---|---|---|
+| **MO** (Gerät → Plattform) | Gerät sendet per `AT+CMGS`; die SMS landet im 1NCE-Konto (Portal/API) | Notfall-/Alarmmeldung („SOS", „Akku leer"), funktioniert auch **ohne Datensitzung** |
+| **MT** (Plattform → Gerät) | Der Kunde sendet über die **1NCE-API** (`POST /v2/sims/{iccid}/sms`); Zustellung beim nächsten Attach | Weckruf („poll jetzt"), Suchmodus-Beschleunigung |
+
+1NCE beschreibt den Zweck selbst als „fall-back or wake-up calls". Der Vorteil
+gegenüber HTTP: Der Weg funktioniert, wenn die Datensitzung nicht steht, und er
+weckt das Gerät **zwischen** seinen regulären Poll-Intervallen (Zustellung ist
+allerdings bis zu 24 h gepuffert – also ein *queued* Weckruf, keine Sofortaktion).
+
+**Nicht** möglich (1NCE-Regeln): Handy → Gerät (P2P-MT-SMS) und SMS über NB-IoT.
+
+## 0b. Umsetzungsstand der 1NCE-API (2026-10-12)
+
+| Baustein | Status |
+|---|---|
+| OAuth2-Token (`POST /oauth/token`, Basic-Auth mit Client-ID/Secret) | ✅ implementiert, **mit echtem Konto getestet** |
+| `GET /api/v1/parent/sms/status` → SIMs + SMS-Kontingent | ✅ (Konto erreichbar; aktuell 0 SIMs zugeordnet) |
+| `POST /api/v1/parent/sms` → MT-SMS an eine SIM (`{iccid, text}`) | ✅ implementiert (noch kein Versand getestet – SIM fehlt) |
+| `GET /api/v1/parent/sms?iccid=…` → MT-/MO-Verlauf | ✅ implementiert |
+| UI-Karte „SMS (1NCE)" (Status + Senden) | ✅ |
+| Zuordnung SIM ↔ Gerät (`iccid` in der Geräte-Registry) | ✅ Spalte + API |
+| Zugangsdaten | `1NCE_API_CLIENTID`/`1NCE_API_CLIENTSECRET` in `server/.env` (nicht im Repo!) |
+
+Quelle der API-Details: `docs/1NCE/authorization-v2.yaml` und
+`docs/1NCE/sim-management-v2.json` (OpenAPI-Spezifikationen).
+
 ## 1. Wer ist wer: IMEI, MSISDN, Beacon-IDs
 
 | Identität | Quelle | Verwendung |

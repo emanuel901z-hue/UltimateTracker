@@ -45,6 +45,9 @@ docker compose logs -f audio-bridge
 | GET/POST/DELETE | `/api/v1/parent/firmware[/{version}]` | Parent-Token | Firmware verwalten (OTA) |
 | GET | `/api/v1/device/firmware/latest?fw=` | Device-Token | OTA-Angebot |
 | GET | `/api/v1/device/firmware/{version}/download` | Device-Token | Firmware-Binary |
+| GET | `/api/v1/parent/sms/status` | Parent-Token | 1NCE-Konto: SIMs + SMS-Kontingent |
+| POST | `/api/v1/parent/sms` | Parent-Token | MT-SMS an den Tracker (`{iccid, text}`) |
+| GET | `/api/v1/parent/sms?iccid=` | Parent-Token | MT-/MO-SMS-Verlauf einer SIM |
 
 Token-Header: `X-Auth-Token: <token>`.
 

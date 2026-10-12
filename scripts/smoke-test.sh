@@ -132,5 +132,19 @@ curl -sf -X DELETE -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' 
   -d '{"endpoint":"https://example.invalid/push/smoke"}' "$BASE/api/v1/parent/push/subscribe" | grep -q '"subscriptions":0' \
   && pass "Abo wieder entfernt" || fail "Abo nicht entfernt"
 
+echo "15) 1NCE-SMS-API"
+SMS_STATUS=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/sms/status")
+echo "$SMS_STATUS" | grep -q '"configured"' \
+  && pass "Status-Endpunkt antwortet" || fail "Status-Endpunkt fehlerhaft"
+if echo "$SMS_STATUS" | grep -q '"configured":true'; then
+  pass "1NCE-Zugangsdaten aktiv (SIMs: $(echo "$SMS_STATUS" | grep -o '"count":[0-9]*' | cut -d: -f2))"
+else
+  echo "  SKIP - 1NCE nicht konfiguriert (1NCE_API_CLIENTID/SECRET in .env)"
+fi
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Auth-Token: $PTOK" \
+  "$BASE/api/v1/parent/sms?iccid=0000000000000000000")
+[ "$CODE" = "502" ] && pass "Ungültige ICCID sauber beantwortet (HTTP 502)" \
+  || fail "Unerwarteter Status bei ungültiger ICCID: $CODE"
+
 echo
 echo "Alle Smoke-Tests bestanden."

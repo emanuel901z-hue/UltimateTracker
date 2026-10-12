@@ -66,6 +66,14 @@ MAX_UPLOAD_MB = env_float("MAX_UPLOAD_MB", 2.0)
 RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
 APPRISE_URLS = os.environ.get("APPRISE_URLS", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@example.org")
+
+# --- 1NCE API (SMS, docs/1NCE, docs/sms.md) ---------------------------------
+# Die Zugangsdaten heißen im 1NCE-Portal "1NCE_API_CLIENTID"/"…SECRET"; beide
+# Schreibweisen werden akzeptiert (führende Ziffer ist als Shell-Variable ungültig).
+NCE_API_BASE = os.environ.get("NCE_API_BASE", "https://api.1nce.com/management-api")
+NCE_CLIENT_ID = os.environ.get("1NCE_API_CLIENTID") or os.environ.get("NCE_API_CLIENTID", "")
+NCE_CLIENT_SECRET = os.environ.get("1NCE_API_CLIENTSECRET") or os.environ.get("NCE_API_CLIENTSECRET", "")
+NCE_SOURCE_ADDRESS = os.environ.get("NCE_SMS_SOURCE", "12345")
 POLL_INTERVAL_S = env_int("POLL_INTERVAL_S", 900)
 SEARCH_POLL_INTERVAL_S = env_int("SEARCH_POLL_INTERVAL_S", 60)
 
@@ -159,6 +167,10 @@ def init_db() -> None:
                    created_at TEXT NOT NULL
                )"""
         )
+        # Migration: ICCID für die 1NCE-Zuordnung (SIM ↔ Gerät)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(devices)")}
+        if "iccid" not in columns:
+            conn.execute("ALTER TABLE devices ADD COLUMN iccid TEXT NOT NULL DEFAULT ''")
 
 
 def now_iso() -> str:
@@ -407,6 +419,62 @@ def push_async(title: str, body: str) -> None:
     asyncio.create_task(asyncio.to_thread(send_push, title, body))
 
 
+# --- 1NCE-API-Client --------------------------------------------------------
+
+_nce_token = {"value": "", "expires_at": 0.0}
+
+
+def nce_configured() -> bool:
+    return bool(NCE_CLIENT_ID and NCE_CLIENT_SECRET)
+
+
+def nce_token() -> str:
+    """Bearer-Token holen (OAuth2 client_credentials mit Basic-Auth)."""
+    if not nce_configured():
+        raise RuntimeError("1NCE-Zugangsdaten fehlen (1NCE_API_CLIENTID/…SECRET)")
+    now = time.time()
+    if _nce_token["value"] and _nce_token["expires_at"] > now + 30:
+        return _nce_token["value"]
+
+    import requests
+
+    response = requests.post(
+        f"{NCE_API_BASE}/oauth/token",
+        auth=(NCE_CLIENT_ID, NCE_CLIENT_SECRET),
+        json={"grant_type": "client_credentials"},
+        timeout=20,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Token-Anfrage fehlgeschlagen (HTTP {response.status_code}): {response.text[:160]}"
+        )
+    data = response.json()
+    token = str(data.get("access_token") or "")
+    if not token:
+        raise RuntimeError("Antwort ohne access_token")
+    _nce_token["value"] = token
+    _nce_token["expires_at"] = now + float(data.get("expires_in") or 3600)
+    return token
+
+
+def nce_request(method: str, path: str, **kwargs):
+    """API-Aufruf mit Bearer-Token. Rückgabe: (status_code, payload)."""
+    import requests
+
+    response = requests.request(
+        method,
+        f"{NCE_API_BASE}{path}",
+        headers={"Authorization": f"Bearer {nce_token()}", "Accept": "application/json"},
+        timeout=30,
+        **kwargs,
+    )
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = response.text
+    return response.status_code, payload
+
+
 # --- Retention --------------------------------------------------------------
 
 
@@ -641,6 +709,7 @@ def healthz() -> dict:
         "retention_days": RETENTION_DAYS,
         "notifications": bool(APPRISE_URLS),
         "push_subscriptions": push_subscription_count(),
+        "sms_api": nce_configured(),
     }
 
 
@@ -994,13 +1063,14 @@ async def device_upsert(device_id: str, request: Request) -> dict:
         raise HTTPException(status_code=400, detail="JSON erwartet")
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON-Objekt erwartet")
-    fields = {key: str(body.get(key, "") or "") for key in ("name", "imei", "msisdn", "notes")}
+    fields = {key: str(body.get(key, "") or "") for key in ("name", "imei", "msisdn", "iccid", "notes")}
     with db() as conn:
         conn.execute(
-            "INSERT INTO devices(id, name, imei, msisdn, notes, created_at) VALUES(?, ?, ?, ?, ?, ?) "
+            "INSERT INTO devices(id, name, imei, msisdn, iccid, notes, created_at) VALUES(?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET name = excluded.name, imei = excluded.imei, "
-            "msisdn = excluded.msisdn, notes = excluded.notes",
-            (device_id, fields["name"] or device_id, fields["imei"], fields["msisdn"], fields["notes"], now_iso()),
+            "msisdn = excluded.msisdn, iccid = excluded.iccid, notes = excluded.notes",
+            (device_id, fields["name"] or device_id, fields["imei"], fields["msisdn"],
+             fields["iccid"], fields["notes"], now_iso()),
         )
     return {"id": device_id, **fields}
 
@@ -1010,6 +1080,94 @@ def device_delete(device_id: str) -> dict:
     with db() as conn:
         conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
     return {"deleted": device_id}
+
+
+# --- 1NCE-SMS (serververmittelt, docs/sms.md) -------------------------------
+
+
+@app.get("/api/v1/parent/sms/status", dependencies=[Depends(require_parent)])
+def sms_status() -> dict:
+    """SIMs des 1NCE-Kontos inkl. SMS-Kontingent (read-only)."""
+    if not nce_configured():
+        return {
+            "configured": False,
+            "hint": "1NCE_API_CLIENTID und 1NCE_API_CLIENTSECRET in server/.env setzen",
+        }
+    try:
+        status, sims = nce_request("GET", "/v2/sims")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"1NCE nicht erreichbar: {exc}")
+    if status != 200 or not isinstance(sims, list):
+        raise HTTPException(status_code=502, detail=f"1NCE: HTTP {status} {str(sims)[:200]}")
+    return {
+        "configured": True,
+        "count": len(sims),
+        "sims": [
+            {
+                "iccid": str(sim.get("iccid") or ""),
+                "msisdn": sim.get("msisdn"),
+                "status": sim.get("status"),
+                "label": sim.get("label"),
+                "imei": sim.get("imei"),
+                "sms_quota": sim.get("current_quota_SMS"),
+                "quota_status": sim.get("quota_status_SMS"),
+            }
+            for sim in sims[:10]
+        ],
+    }
+
+
+@app.post("/api/v1/parent/sms", dependencies=[Depends(require_parent)])
+async def sms_send(request: Request) -> dict:
+    """MT-SMS an den Tracker senden (1NCE A2P). Body: {"iccid": "…", "text": "…"}"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    iccid = str(body.get("iccid") or "").strip()
+    text = str(body.get("text") or "").strip()
+    if not iccid or not text:
+        raise HTTPException(status_code=400, detail="iccid und text erforderlich")
+    if len(text) > 160:
+        raise HTTPException(status_code=400, detail="maximal 160 Zeichen (kein Multipart-Versand)")
+    try:
+        status, payload = nce_request(
+            "POST",
+            f"/v2/sims/{iccid}/sms",
+            json={"source_address": NCE_SOURCE_ADDRESS, "payload": text},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"1NCE nicht erreichbar: {exc}")
+    if status not in (200, 201):
+        raise HTTPException(status_code=502, detail=f"1NCE: HTTP {status} {str(payload)[:200]}")
+    sms_id = payload.get("id") if isinstance(payload, dict) else None
+    return {"sent": True, "iccid": iccid, "id": sms_id, "hint": "Zustellung beim nächsten Netz-Attach"}
+
+
+@app.get("/api/v1/parent/sms", dependencies=[Depends(require_parent)])
+def sms_list(iccid: str, limit: int = 20) -> dict:
+    """MT-/MO-SMS einer SIM (Plattform → Gerät bzw. Gerät → Plattform)."""
+    try:
+        status, messages = nce_request("GET", f"/v2/sims/{iccid}/sms")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"1NCE nicht erreichbar: {exc}")
+    if status != 200 or not isinstance(messages, list):
+        raise HTTPException(status_code=502, detail=f"1NCE: HTTP {status} {str(messages)[:200]}")
+    directions = {1: "MT", 2: "MO"}
+    states = {2: "PENDING", 4: "DELIVERED", 5: "FAILED", 6: "EXPIRED"}
+    normalised = [
+        {
+            "id": msg.get("id"),
+            "direction": directions.get(msg.get("sms_type"), msg.get("sms_type")),
+            "state": states.get(msg.get("status"), msg.get("status")),
+            "payload": msg.get("payload"),
+            "source": msg.get("source_address"),
+            "submit_date": msg.get("submit_date"),
+            "delivery_date": msg.get("delivery_date"),
+        }
+        for msg in messages[: max(1, min(limit, 100))]
+    ]
+    return {"iccid": iccid, "total": len(messages), "messages": normalised}
 
 
 # --- Find My (Apple / Google) ----------------------------------------------

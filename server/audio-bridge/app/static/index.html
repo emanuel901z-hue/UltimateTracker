@@ -63,6 +63,19 @@
   </div>
 </div>
 
+<div class="card">
+  <h2 style="margin-top:0">SMS (1NCE)</h2>
+  <div class="muted" id="sms-state">Status: –</div>
+  <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem">
+    <input id="sms-text" placeholder="Text (max. 160 Zeichen)" style="flex:1;min-width:180px">
+    <button id="sms-send">SMS an Tracker</button>
+  </div>
+  <div class="muted" style="margin-top:.4rem">
+    Serververmittelt (1NCE A2P): Zustellung erfolgt beim nächsten Netz-Attach –
+    kein Handy-↔-Gerät-SMS möglich. Details: <code>docs/sms.md</code>.
+  </div>
+</div>
+
 <h2>Geräte</h2>
 <div id="devices"></div>
 <div class="card">
@@ -300,6 +313,46 @@ $('push-test').addEventListener('click', async () => {
   pushStatus('Test gesendet (aktiv: ' + data.sent + ', entfernt: ' + data.removed + ')');
 });
 
+// --- SMS über die 1NCE-API ---
+let smsIccid = '';
+
+async function loadSmsStatus() {
+  if (!state.token) { $('sms-state').textContent = 'Status: Token fehlt'; return; }
+  const res = await fetch('/api/v1/parent/sms/status', { headers: headers() });
+  if (!res.ok) { $('sms-state').textContent = 'Status: HTTP ' + res.status; return; }
+  const data = await res.json();
+  if (!data.configured) {
+    $('sms-state').textContent = 'Status: nicht konfiguriert (1NCE-Zugangsdaten in server/.env)';
+    return;
+  }
+  if (!data.sims || !data.sims.length) {
+    $('sms-state').textContent = 'Status: Konto erreichbar, aber keine SIM zugeordnet';
+    return;
+  }
+  const sim = data.sims[0];
+  smsIccid = sim.iccid || '';
+  $('sms-state').textContent = 'SIM ' + sim.iccid +
+    (sim.msisdn ? ' · ' + sim.msisdn : '') +
+    ' · SMS-Kontingent: ' + (sim.sms_quota !== undefined && sim.sms_quota !== null ? sim.sms_quota : '?');
+}
+
+$('sms-send').addEventListener('click', async () => {
+  if (!state.token) { $('sms-state').textContent = 'Status: Token fehlt'; return; }
+  if (!smsIccid) await loadSmsStatus();
+  if (!smsIccid) { $('sms-state').textContent = 'keine SIM im 1NCE-Konto gefunden'; return; }
+  const text = $('sms-text').value.trim();
+  if (!text) { $('sms-state').textContent = 'bitte einen Text eingeben'; return; }
+  const res = await fetch('/api/v1/parent/sms', {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ iccid: smsIccid, text }),
+  });
+  const data = await res.json().catch(() => ({}));
+  $('sms-state').textContent = res.ok
+    ? 'gesendet (ID ' + (data.id ?? '?') + ') – Zustellung beim nächsten Netz-Attach'
+    : 'Fehler: HTTP ' + res.status + (data.detail ? ' – ' + data.detail : '');
+});
+
 async function loadStatus() {
   const box = $('status-body');
   if (!state.token || !state.device) { box.textContent = '– Gerät/Token wählen –'; return; }
@@ -332,6 +385,7 @@ $('refresh').addEventListener('click', () => { loadDevices(); load(); });
 loadDevices();
 load();
 refreshPushState();
+loadSmsStatus();
 </script>
 </body>
 </html>

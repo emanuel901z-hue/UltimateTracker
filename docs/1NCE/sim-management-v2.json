@@ -1,0 +1,2989 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SIM Management",
+    "description": "Documentation of the 1NCE API for SIM Management.",
+    "license": {
+      "name": "Apache 2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
+    },
+    "contact": {
+      "name": "1NCE GmbH",
+      "url": "https://1nce.com",
+      "email": "info@1nce.com"
+    },
+    "version": "v2.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.1nce.com/management-api/",
+      "description": "API gateway",
+      "variables": {
+        "basePath": {
+          "default": "v2",
+          "description": "API Version Segment"
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "General SIMs",
+      "x-displayName": "General SIMs"
+    },
+    {
+      "name": "Connectivity",
+      "x-displayName": "Connectivity"
+    },
+    {
+      "name": "SMS",
+      "x-displayName": "SMS"
+    },
+    {
+      "name": "SIM Events",
+      "x-displayName": "SIM Events"
+    },
+    {
+      "name": "Volume Top Up",
+      "x-displayName": "Volume Top Up"
+    },
+    {
+      "name": "SIM Extension",
+      "x-displayName": "SIM Extension"
+    }
+  ],
+  "paths": {
+    "/prod/token": {},
+    "/v2/sims": {
+      "get": {
+        "tags": [
+          "General SIMs"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Number index of the requested SIM list page. Use this parameter to iterate through all SIMs on the different pages. The total amount of pages is listed in the response header.",
+            "allowEmptyValue": false,
+            "schema": {
+              "minimum": 1,
+              "exclusiveMinimum": false,
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Defines the size of a page, the number of individual SIMs listed on one page. The maximum allowed value is 100.",
+            "allowEmptyValue": false,
+            "schema": {
+              "maximum": 100,
+              "exclusiveMaximum": false,
+              "minimum": 1,
+              "exclusiveMinimum": false,
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Filter parameter in <i>{filter}:{value}</i> format. Expects comma separated list of filtering criteria out of the following fields: <ul><li>imei</li><li>ip_address</li></ul><p><b>Example:</b> \"ip_address:127.0.0.1,imei:4711\"</p>",
+            "allowEmptyValue": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort values in a comma seperated list. Prepend \"-\" for descending sort. Possible values:<ul><li>imei</li><li>ip_address</li></ul><p><b>Example:</b>\"ip_address,-imei\"</p>",
+            "allowEmptyValue": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get All SIMs",
+        "description": "Get a List of SIMs for the current account.",
+        "operationId": "getSimsUsingGET",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Count-Per-Page": {
+                "description": "Number of results per page.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Current-Page": {
+                "description": "Number of the current page.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Total-Count": {
+                "description": "Total number of results available.",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-Total-Pages": {
+                "description": "Total number of pages available.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SimsSim"
+                  }
+                }
+              },
+              "application/json;charset=UTF-8": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SimsSim"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}": {
+      "get": {
+        "tags": [
+          "General SIMs"
+        ],
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM to be queried.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          }
+        ],
+        "summary": "Get Single SIM",
+        "description": "Get detail information (status, label, MSISDN, IMSI, ICCID, Lifetime, etc.) for a singe SIM based on the ICCID.",
+        "operationId": "getSimUsingGET",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsSim"
+                }
+              },
+              "application/json;charset=UTF-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsSim"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "General SIMs"
+        ],
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM to be changed.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          }
+        ],
+        "summary": "Modify SIM card",
+        "description": "Modification of a SIM card to activate, deactivate, change label, change IMEI lock, etc.",
+        "operationId": "updateSimUsingPUT",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimsSimUpdateReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/NoContent"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}/reset": {
+      "post": {
+        "tags": [
+          "Connectivity"
+        ],
+        "summary": "Create Connectivity Reset",
+        "description": "Trigger a connectivity reset for a given SIM. The actual reset will be done asynchronously. A positive-response only means that the connectivity-reset has been successfully placed into the queue.",
+        "operationId": "resetConnectivityUsingPOST",
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM to be reset.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/NoContent"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}/quota/data": {
+      "get": {
+        "tags": [
+          "General SIMs"
+        ],
+        "summary": "Get SIM Data Quota",
+        "description": "Get the current data quota of a particular SIM.",
+        "operationId": "getDataQuotaForSimUsingGET",
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM to be queried.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsQuota"
+                }
+              },
+              "application/json;charset=UTF-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsQuota"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}/quota/sms": {
+      "get": {
+        "tags": [
+          "General SIMs"
+        ],
+        "summary": "Get SIM SMS Quota",
+        "description": "Get the current SMS quota of a particular SIM.",
+        "operationId": "getSmsQuotaForSimUsingGET",
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM to be queried.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsQuota"
+                }
+              },
+              "application/json;charset=UTF-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsQuota"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}/status": {
+      "get": {
+        "tags": [
+          "General SIMs"
+        ],
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM to be queried.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          }
+        ],
+        "summary": "Get SIM Status",
+        "description": "Query the current status of a specific SIM card.\n\nThis API retrieves connectivity details of a SIM. The following is a list of possible statuses: \n* `ATTACHED`:\n    The Endpoint has successfully attached to the Home Core network in the past.\n    The device will be shown as `ATTACHED` until the visited network has signaled that the device is inactive/offline.\n    Usually the visited network informs the Core Network within 1-2 days after a device went offline.\n\n* `ONLINE`:\n    The Endpoint has an active data connection\n\n* `OFFLINE`:\n    The Endpoint has not attached to the core network yet or the device was previously attached but the visited network signaled that the device had no activity for the last 1-2 days.\n    Note: The device is not reachable for external services (e.g. SMS, MSRN lookup).\n\n* `BLOCKED`:\n    The Endpoint is blocked\n",
+        "operationId": "getStatusForSimUsingGET",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsConnectivityDetail"
+                }
+              },
+              "application/json;charset=UTF-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsConnectivityDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}/sms": {
+      "post": {
+        "tags": [
+          "SMS"
+        ],
+        "summary": "Create SMS",
+        "description": "Create and send an MT-SMS to a device.",
+        "operationId": "sendSmsToSimUsingPOST",
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM for MT-SMS or MO-SMS.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          }
+        ],
+        "requestBody": {
+          "description": "The MT-SMS message that should be sent to SIM.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SMSMessage"
+              }
+            },
+            "application/json;charset=UTF-8": {
+              "schema": {
+                "$ref": "#/components/schemas/SMSMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Resource created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointCreateSmsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "SMS"
+        ],
+        "summary": "Get MT/MO-SMS",
+        "description": "Get a list of SMS sent and received by a specific SIM card.",
+        "operationId": "getSmsForSimUsingGET",
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM for MT-SMS or MO-SMS.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          },
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PerPageParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of MT-SMS and MO-SMS for the device.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SimsSms"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}/sms/{id}": {
+      "get": {
+        "tags": [
+          "SMS"
+        ],
+        "summary": "Get SMS Details",
+        "description": "Query details about an individual SMS from a specific SIM card.",
+        "operationId": "getSmsOfSimUsingGET",
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM for MT-SMS or MO-SMS.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the SMS message to be queried.",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "example": 123
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Details of the requested SMS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimsSms"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "SMS by ICCID"
+        ],
+        "summary": "Cancel SMS",
+        "description": "Cancel a SMS message that is buffered to be delivered to the device with the SIM card but was not yet delivered.",
+        "operationId": "cancelSmsOfSimUsingDELETE",
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM for MT-SMS or MO-SMS.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the SMS message to be cancelled.",
+            "required": true,
+            "schema": {
+              "type": "number"
+            },
+            "example": 123
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ResourceDeleted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}/events": {
+      "get": {
+        "tags": [
+          "SIM Events"
+        ],
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM to be queried.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "8988280666000000000"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Number index of the requested SIM event page. Use this parameter to iterate through all SIMs on the different pages. The total amount of pages is listed in the response header.",
+            "allowEmptyValue": false,
+            "schema": {
+              "minimum": 1,
+              "exclusiveMinimum": false,
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "The number of events per page, maximum allowed value is 1000.",
+            "allowEmptyValue": false,
+            "schema": {
+              "maximum": 1000,
+              "exclusiveMaximum": false,
+              "minimum": 1,
+              "exclusiveMinimum": false,
+              "type": "integer",
+              "default": 10
+            }
+          }
+        ],
+        "summary": "Get SIM Events",
+        "description": "Get diagnostic/event information for a SIM card.",
+        "operationId": "getEventsForSimUsingGET",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                }
+              },
+              "application/json;charset=UTF-8": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/{iccid}/topup": {
+      "post": {
+        "tags": [
+          "Volume Top Up"
+        ],
+        "summary": "Create Single Top Up",
+        "description": "Top up the data/SMS volume of one specific SIM.",
+        "operationId": "topUpUsingPOST",
+        "parameters": [
+          {
+            "name": "iccid",
+            "in": "path",
+            "description": "The ICCID of the SIM to be topped up.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 8988280666000000000
+          },
+          {
+            "name": "payment_method",
+            "in": "query",
+            "description": "Optional payment method selection between creditcard, banktransfer, monthlyinvoice or boleto. If the parameter is left empty or is invalid, banktransfer is used as default for the top up order process.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "banktransfer",
+                "creditcard",
+                "monthlyinvoice",
+                "boleto"
+              ],
+              "default": "banktransfer",
+              "example": "banktransfer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Order created successfully.",
+            "headers": {
+              "Location": {
+                "description": "The path to the newly created order.",
+                "schema": {
+                  "type": "string",
+                  "example": "https://api.1nce.com/management-api/v2/orders/1234"
+                }
+              }
+            },
+            "content": {}
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "Invalid Payment Method": {
+                    "value": {
+                      "message": "Payment method used is not valid."
+                    }
+                  }
+                },
+                "schema": {
+                  "title": "Invalid Payment Method",
+                  "properties": {
+                    "message": {
+                      "example": "Payment method used is not valid.",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {}
+          },
+          "403": {
+            "description": "SIM does not belong to user.",
+            "content": {}
+          },
+          "404": {
+            "description": "SIM not found.",
+            "content": {}
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ]
+      }
+    },
+    "/v2/sims/autoTopup": {
+      "post": {
+        "tags": [
+          "Volume Top Up"
+        ],
+        "summary": "Enable Auto Top Up",
+        "description": "Trigger an auto top up configuration update for the given SIMs.",
+        "operationId": "autoTopupUsingPOST",
+        "requestBody": {
+          "description": "Auto top up request with ICCIDs of SIMs where the auto top up configuration should be changed.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoTopupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {}
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {}
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {}
+          },
+          "422": {
+            "description": "The following SIMs are expired and cannot be modified via API. Only extensions are permitted",
+            "content": {}
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ],
+        "x-codegen-request-body-name": "request"
+      }
+    },
+    "/v2/sims/extension": {
+      "post": {
+        "tags": [
+          "SIM Extension"
+        ],
+        "summary": "Create SIM Extension",
+        "description": "Trigger the SIM extension for one or more SIM cards to extend their activation period and renew their quota (data and SMS). An invoice is automatically triggered depending on the chosen payment method.",
+        "operationId": "extendSimsUsingPOST",
+        "parameters": [
+          {
+            "name": "payment_method",
+            "in": "query",
+            "description": "Optional payment method selection between creditcard, banktransfer, monthly invoice or boleto. If the parameter is left empty or is invalid, banktransfer is used as default for the SIM extension process. To use creditcard please save your credit card details in the customer portal via \"account\".",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "banktransfer",
+                "creditcard",
+                "monthlyinvoice",
+                "boleto"
+              ],
+              "default": "banktransfer",
+              "example": "banktransfer"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The body shall include a list of atleast one ICCIDs and optionally a product id.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SIMExtensionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {}
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {}
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {}
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {}
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "BearerAuthentication": []
+          }
+        ],
+        "x-codegen-request-body-name": "request"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuthentication": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Bearer Authentication Token used to gain access to the 1NCE API. Please refer to the Open Authorization (/oauth/token) request for obtaining a Bearer Token."
+      }
+    },
+    "schemas": {
+      "SimsSimQuotaStatus": {
+        "type": "object",
+        "title": "Quota Status",
+        "description": "Indicates whether more than 20%, less than 20% or 0% of the current quota SMS or data are still available.",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "Numeric indicator for the threshold levels: <ul><li>0: more than 20%</li><li>1: less than 20%</li><li>2: 0% remaining</li></ul>",
+            "example": 0
+          },
+          "description": {
+            "type": "string",
+            "description": "Text description of the quota status."
+          },
+          "threshold_reached_date": {
+            "type": "string",
+            "description": "Date on which the threshold less than 20% of the quota avaliable was reached.",
+            "format": "date-time"
+          },
+          "quota_exceeded_date": {
+            "type": "string",
+            "description": "Date on which 100% of the avaliable quota was exceeded.",
+            "format": "date-time"
+          }
+        }
+      },
+      "SimsSim": {
+        "type": "object",
+        "title": "SIM Card",
+        "description": "Detailed information about a SIM card.",
+        "properties": {
+          "iccid": {
+            "type": "string",
+            "description": "ICCID identifier of the SIM.",
+            "example": "8988303000123456789"
+          },
+          "iccid_with_luhn": {
+            "type": "string",
+            "description": "ICCID identifier of the SIM with Luhn check number.",
+            "example": "89883030001234567890"
+          },
+          "imsi": {
+            "type": "string",
+            "description": "First IMSI of the SIM, used for normal 1NCE network.",
+            "example": "901405100000018"
+          },
+          "imsi_2": {
+            "type": "string",
+            "description": "Second IMSI of the SIM, used for China+ network.",
+            "example": "901405100000018"
+          },
+          "current_imsi": {
+            "type": "string",
+            "description": "Currently active IMSI, dependent on the region where the SIM is used.",
+            "example": "901405100000018"
+          },
+          "msisdn": {
+            "type": "string",
+            "description": "MSISDN of the SIM.",
+            "example": "882285100000018"
+          },
+          "imei": {
+            "type": "string",
+            "description": "IMEI of the device in which the SIM is inserted.",
+            "example": "0000000000000018"
+          },
+          "imei_lock": {
+            "type": "boolean",
+            "description": "Indicates if SIM is locked to the current device IMEI.",
+            "example": true
+          },
+          "status": {
+            "type": "string",
+            "description": "The current status of the SIM card.",
+            "example": "Disabled",
+            "enum": [
+              "Enabled",
+              "Disabled"
+            ]
+          },
+          "activation_date": {
+            "type": "string",
+            "description": "The date when the SIM card was activated.",
+            "example": "2018-03-09T07:59:09.000+0000"
+          },
+          "ip_address": {
+            "type": "string",
+            "description": "The fixed IP address of the SIM card.",
+            "example": "100.100.100.18"
+          },
+          "current_quota": {
+            "type": "number",
+            "description": "The overall set data quota for the SIM in MB.",
+            "example": 500
+          },
+          "quota_status": {
+            "$ref": "#/components/schemas/SimsSimQuotaStatus"
+          },
+          "current_quota_SMS": {
+            "type": "number",
+            "description": "Current SMS Quota for the SIM.",
+            "example": 250
+          },
+          "quota_status_SMS": {
+            "$ref": "#/components/schemas/SimsSimQuotaStatus"
+          },
+          "label": {
+            "type": "string",
+            "description": "Label set by the customer in the 1NCE Portal for the SIM.",
+            "example": "DX-137-B12"
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Not found Error",
+        "type": "object",
+        "required": [
+          "error_code",
+          "error_token",
+          "message"
+        ],
+        "properties": {
+          "error_code": {
+            "type": "number",
+            "example": 1000
+          },
+          "error_token": {
+            "type": "string",
+            "example": "NotFound"
+          },
+          "message": {
+            "type": "string",
+            "example": "Element not found",
+            "description": "Error Message with more details goes here"
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal Server Error",
+        "type": "object",
+        "required": [
+          "error_code",
+          "error_token",
+          "message"
+        ],
+        "properties": {
+          "error_code": {
+            "type": "number",
+            "example": 1000
+          },
+          "error_token": {
+            "type": "string",
+            "example": "InternalServerError"
+          },
+          "message": {
+            "type": "string",
+            "example": "Internal Server Error",
+            "description": "Error Message with more details goes here"
+          }
+        }
+      },
+      "SimsSimUpdateReq": {
+        "type": "object",
+        "title": "SIM Update Request",
+        "description": "Information about a SIM card based on a SIM update procedure.",
+        "properties": {
+          "iccid": {
+            "type": "string",
+            "description": "ICCID of the queried SIM.",
+            "example": "8988280666000000000"
+          },
+          "label": {
+            "type": "string",
+            "description": "Label of the SIM set by the customer in the 1NCE Portal.",
+            "example": "DX-137-B12"
+          },
+          "imei_lock": {
+            "type": "boolean",
+            "description": "Flag that indicates if SIM is locked to the current device IMEI.",
+            "example": false
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the SIM. A SIM can be enabled (active) or disabled (deactivated).",
+            "example": "Enabled",
+            "enum": [
+              "Enabled",
+              "Disabled"
+            ]
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Validation Error",
+        "type": "object",
+        "required": [
+          "error_code",
+          "error_token",
+          "message"
+        ],
+        "properties": {
+          "error_code": {
+            "type": "number",
+            "example": 1000
+          },
+          "error_token": {
+            "type": "string",
+            "example": "BadRequest"
+          },
+          "message": {
+            "type": "string",
+            "example": "Cannot parse parameter per_page as Int: For Input String \"abc\"",
+            "description": "Error Message with more details goes here"
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflict HTTP Status 409",
+        "type": "object",
+        "required": [
+          "error_code",
+          "error_token",
+          "message"
+        ],
+        "properties": {
+          "error_code": {
+            "type": "number",
+            "example": 1000
+          },
+          "error_token": {
+            "type": "string",
+            "example": "Conflict"
+          },
+          "message": {
+            "type": "string",
+            "example": "Conflicting request",
+            "description": "Error Message with more details goes here"
+          }
+        }
+      },
+      "SimsQuotaStatus": {
+        "type": "object",
+        "description": "- 0 - \"EXHAUSTED\"\n- 1 - \"ACTIVE\"\n- 2 - \"EXPIRED\"\n",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 0,
+            "enum": [
+              0,
+              1,
+              2
+            ]
+          },
+          "description": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": [
+              "EXHAUSTED",
+              "ACTIVE",
+              "EXPIRED"
+            ]
+          }
+        },
+        "example": {
+          "id": 0,
+          "description": "ACTIVE"
+        }
+      },
+      "SimsQuota": {
+        "title": "Sims Quota",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "example": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/SimsQuotaStatus"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double",
+            "description": "Amount left i.e. still available for use:\n- for SMS: the quantity/number of short messages\n- for Data: the amount of data traffic in megabytes. 1 megabyte = 1024 kilobytes.\n- can be negative\n",
+            "example": 435.787951
+          },
+          "total_volume": {
+            "type": "number",
+            "format": "double",
+            "description": "Initially provisioned volume or (in case the quota was topped up) the remaining volume at that time plus the\nvolume of the topup.\n- for SMS: the quantity/number of short messages\n- for Data: the amount of data traffic in megabytes. 1 megabyte = 1024 kilobytes.\n",
+            "example": 500
+          },
+          "accumulated_total_volume": {
+            "type": "number",
+            "format": "double",
+            "description": "Sum of initially provisioned volume and all topup volumes.\n",
+            "example": 100
+          },
+          "last_volume_added": {
+            "type": "number",
+            "format": "double",
+            "description": "Amount of SMS or data volume which was last purchased for this SIM:\n- for SMS: the quantity/number of short messages\n- for Data: the amount of data traffic in megabytes. 1 megabyte = 1024 kilobytes.\n",
+            "example": 500
+          },
+          "service": {
+            "type": "string",
+            "enum": [
+              "sms",
+              "data"
+            ],
+            "example": "data"
+          },
+          "threshold_percentage": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of the [total_volume] for triggering a threshold event.  The threshold event is triggered when the remaining volume reaches or falls below this percentage.",
+            "example": 20
+          },
+          "threshold_volume": {
+            "type": "number",
+            "format": "double",
+            "description": "Calculated upon quota creation and upon quota topup as [total_volume] * [threshold_percentage]:\n- for SMS: the quantity/number of short messages\n- for Data: the amount of data traffic in megabytes. 1 megabyte = 1024 kilobytes.\n",
+            "example": 20
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The date when this current quota will expire.",
+            "example": "2029-01-01T00:00:00.000Z"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO8601 DateTime",
+            "example": "2024-08-24T13:13:21Z"
+          }
+        }
+      },
+      "SimsConnectivityStatus": {
+        "type": "object",
+        "description": "The current connectivity status of a SIM.",
+        "required": [
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "example": "ONLINE",
+            "enum": [
+              "ONLINE",
+              "ATTACHED",
+              "OFFLINE",
+              "BLOCKED"
+            ]
+          }
+        }
+      },
+      "SimsDataTrafficLimitState": {
+        "type": "object",
+        "description": "Data traffic limit state of the SIM",
+        "required": [
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "example": "NOT_REACHED",
+            "enum": [
+              "REACHED",
+              "NOT_REACHED"
+            ]
+          }
+        }
+      },
+      "SimsLocation": {
+        "type": "object",
+        "required": [
+          "iccid",
+          "imsi"
+        ],
+        "properties": {
+          "iccid": {
+            "type": "string",
+            "description": "ICCID of a specific 1NCE SIM.",
+            "example": "8988303010000000000"
+          },
+          "imsi": {
+            "type": "string",
+            "description": "IMSI of the SIM that triggered the event.",
+            "example": "901439999999999"
+          },
+          "last_updated": {
+            "type": "string",
+            "description": "Timestamp from the last location update.",
+            "example": "2023-08-06 09:59:05"
+          },
+          "sgsn_number": {
+            "type": "string",
+            "description": "Serving GPRS Support Node (SGSN) identifier for the SGSN where the SIM is attached.",
+            "example": "120631.mmecd7.mmegi8002.mme.epc.mnc260.mcc310.3gppnetwork.org"
+          },
+          "vlr_number": {
+            "type": "string",
+            "description": "Visitor Location Register (VLR) identifier.",
+            "example": "15622751137"
+          },
+          "operator_id": {
+            "type": "string",
+            "description": "Identifier for the current operator the SIM is connected to.",
+            "example": "826"
+          },
+          "msc": {
+            "type": "string",
+            "description": "Mobile-services Switching Centre (MSC) identifier number.",
+            "example": "491770940000"
+          },
+          "sgsn_ip_address": {
+            "type": "string",
+            "description": "IP address of the used Serving GPRS Support Node (SGSN).",
+            "example": "12.23.107.88"
+          },
+          "mme_name": {
+            "type": "string",
+            "example": "mmeName"
+          },
+          "mme_realm": {
+            "type": "string",
+            "example": "mmeRealm"
+          },
+          "sgsn_name": {
+            "type": "string",
+            "example": "sgsnName"
+          },
+          "sgsn_realm": {
+            "type": "string",
+            "example": "sgsnRealm"
+          },
+          "operator": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "country",
+              "mnc"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1,
+                "example": 2,
+                "description": "Identifier for the operator."
+              },
+              "name": {
+                "type": "string",
+                "example": "T-Mobile",
+                "description": "String name of the operator where the SIM is currently attached to."
+              },
+              "mnc": {
+                "type": "string",
+                "example": "01",
+                "description": "Represents Mobile Network code"
+              },
+              "country": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "iso_code"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 74,
+                    "description": "The Country's id. 0 represents the \"ANY\"-country."
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Germany",
+                    "description": "String name of the country of the operator where the SIM is currently attached."
+                  },
+                  "iso_code": {
+                    "type": "string",
+                    "description": "ISO code for the country.",
+                    "example": "de"
+                  }
+                }
+              }
+            }
+          },
+          "country": {
+            "type": "object",
+            "description": "Represents a Country.",
+            "required": [
+              "country_id",
+              "name",
+              "country_code",
+              "mcc",
+              "iso_code"
+            ],
+            "properties": {
+              "country_id": {
+                "type": "string",
+                "example": "74",
+                "description": "The Country's id. 0 represents the \"ANY\"-country."
+              },
+              "name": {
+                "type": "string",
+                "example": "Germany",
+                "description": "String name of the country where the SIM device is currently located."
+              },
+              "country_code": {
+                "example": "49",
+                "type": "string",
+                "description": "The international phone number prefix. \u201c49\u201d is the one for Germany, \u201c381\u201d is the one for Serbia."
+              },
+              "mcc": {
+                "type": "string",
+                "example": "262",
+                "description": "An MCC (Mobile Country Code) is used in combination with an MNC (a combination known as an \"MCC/MNC tuple\") to uniquely identify a mobile network operator (carrier) using the GSM (including GSM-R), UMTS, LTE, and 5G public land mobile networks."
+              },
+              "iso_code": {
+                "type": "string",
+                "example": "de",
+                "description": "The ISO 3166 code."
+              }
+            }
+          }
+        }
+      },
+      "SimsPdpContext": {
+        "type": "object",
+        "required": [
+          "pdp_context_id",
+          "endpoint_id",
+          "tariff_id",
+          "ratezone_id",
+          "organisation_id",
+          "tx_teid_data_plane",
+          "tx_teid_control_plane",
+          "rx_teid",
+          "rx_teid_data_plane",
+          "rx_teid_control_plane",
+          "gtp_version",
+          "nsapi",
+          "sgsn_control_plane_ip_address",
+          "sgsn_data_plane_ip_address",
+          "ggsn_control_plane_ip_address",
+          "ggsn_data_plane_ip_address",
+          "created",
+          "mcc",
+          "mnc",
+          "lac",
+          "ci",
+          "sac",
+          "rac",
+          "ue_ip_address",
+          "imeisv",
+          "rat_type",
+          "region",
+          "apn",
+          "sim_id",
+          "imsi_id",
+          "imsi"
+        ],
+        "properties": {
+          "pdp_context_id": {
+            "type": "string",
+            "description": "ID of the current PDP Context.",
+            "example": "92415"
+          },
+          "endpoint_id": {
+            "type": "string",
+            "description": "ID of the used SIM endpoint.",
+            "example": "166"
+          },
+          "tariff_id": {
+            "type": "string",
+            "description": "ID of the used tariff.",
+            "example": "34"
+          },
+          "ratezone_id": {
+            "type": "string",
+            "description": "ID of the used ratezone.",
+            "example": "70"
+          },
+          "organisation_id": {
+            "type": "string",
+            "description": "ID of the internal organisation reference.",
+            "example": "2"
+          },
+          "imsi_id": {
+            "type": "string",
+            "description": "ID of the used IMSI.",
+            "example": "627"
+          },
+          "imsi": {
+            "type": "string",
+            "description": "IMSI of the specific SIM.",
+            "example": "901439999999999"
+          },
+          "sim_id": {
+            "type": "string",
+            "description": "ID of the specific SIM.",
+            "example": "625"
+          },
+          "tx_teid_data_plane": {
+            "type": "string",
+            "description": "Tunnel ID for the current PDP Context user plane.",
+            "example": "7116"
+          },
+          "tx_teid_control_plane": {
+            "type": "string",
+            "description": "Tunnel ID for the current PDP Context control plane.",
+            "example": "7116"
+          },
+          "rx_teid": {
+            "type": "string",
+            "example": "7116"
+          },
+          "rx_teid_data_plane": {
+            "type": "string",
+            "example": "7116"
+          },
+          "rx_teid_control_plane": {
+            "type": "string",
+            "example": "7116"
+          },
+          "gtp_version": {
+            "type": "string",
+            "description": "Version of the used GPRS Tunneling Protocol (GTP).",
+            "example": "1"
+          },
+          "nsapi": {
+            "type": "string",
+            "description": "ID of the used Network Service Access Point Identifier (NSAPI).",
+            "example": "5"
+          },
+          "sgsn_control_plane_ip_address": {
+            "type": "string",
+            "example": "12.23.107.89",
+            "description": "IP address of the Serving GPRS Support Node (SGSN) for the control plane."
+          },
+          "sgsn_data_plane_ip_address": {
+            "type": "string",
+            "example": "12.23.107.89",
+            "description": "IP address of the Serving GPRS Support Node (SGSN) for the user data plane."
+          },
+          "ggsn_control_plane_ip_address": {
+            "type": "string",
+            "example": "12.23.107.89",
+            "description": "IP address of the Gateway GPRS Support Node (GGSN) for the control plane."
+          },
+          "ggsn_data_plane_ip_address": {
+            "type": "string",
+            "example": "12.23.107.89",
+            "description": "IP address of the Gateway GPRS Support Node (GGSN) for the user data plane."
+          },
+          "created": {
+            "type": "string",
+            "example": "2019-12-04T08:12:02.000Z",
+            "description": "Timestamp when the PDP Context was created."
+          },
+          "mcc": {
+            "type": "string",
+            "example": "262",
+            "description": "Mobile Country Code (MCC)."
+          },
+          "mnc": {
+            "type": "string",
+            "example": "01",
+            "description": "Mobile Network Code (MNC)."
+          },
+          "operator_id": {
+            "type": "string",
+            "example": "4"
+          },
+          "lac": {
+            "type": "string",
+            "example": "40217",
+            "deprecated": true,
+            "description": "**Deprecated**. Use `gtp_v1_uli.lac` instead.\n"
+          },
+          "ci": {
+            "type": "string",
+            "example": "12",
+            "deprecated": true,
+            "description": "**Deprecated**. Use `gtp_v1_uli.ci` instead.\n"
+          },
+          "sac": {
+            "type": "string",
+            "example": "7",
+            "deprecated": true,
+            "description": "**Deprecated**. Use `gtp_v1_uli.sac` instead.\n"
+          },
+          "rac": {
+            "type": "string",
+            "example": "8",
+            "deprecated": true,
+            "description": "**Deprecated**. Use `gtp_v1_uli.rac` instead.\n"
+          },
+          "gtp_v1_uli": {
+            "type": "object",
+            "description": "GTP V1 User Location Information. Cannot be returned with both gtp_v1_uli and gtp_v2_uli. Only one is returned.",
+            "properties": {
+              "lac": {
+                "type": "string",
+                "description": "Location Area Code",
+                "example": "40217"
+              },
+              "ci": {
+                "type": "string",
+                "description": "Cell ID",
+                "example": "12"
+              },
+              "sac": {
+                "type": "string",
+                "description": "Service Area Code",
+                "example": "7"
+              },
+              "rac": {
+                "type": "string",
+                "description": "Routing Area Code",
+                "example": "8"
+              }
+            }
+          },
+          "gtp_v2_uli": {
+            "type": "object",
+            "description": "GTP V2 User Location Information. Cannot be returned with both gtp_v1_uli and gtp_v2_uli. Only one is returned.",
+            "properties": {
+              "cgi": {
+                "type": "object",
+                "description": "Cell Global Identification",
+                "properties": {
+                  "lac": {
+                    "type": "string",
+                    "description": "Location Area Code",
+                    "example": "40217"
+                  },
+                  "ci": {
+                    "type": "string",
+                    "description": "Cell ID",
+                    "example": "12"
+                  }
+                }
+              },
+              "sai": {
+                "type": "object",
+                "description": "Service Area Identity",
+                "properties": {
+                  "lac": {
+                    "type": "string",
+                    "description": "Location Area Code",
+                    "example": "40217"
+                  },
+                  "sac": {
+                    "type": "string",
+                    "description": "Service Area Code",
+                    "example": "7"
+                  }
+                }
+              },
+              "rai": {
+                "type": "object",
+                "description": "Routing Area Identity",
+                "properties": {
+                  "lac": {
+                    "type": "string",
+                    "description": "Location Area Code",
+                    "example": "40217"
+                  },
+                  "rac": {
+                    "type": "string",
+                    "description": "Routing Area Code",
+                    "example": "8"
+                  }
+                }
+              },
+              "tac": {
+                "type": "string",
+                "description": "Tracking Area Code",
+                "example": "38402"
+              },
+              "eci": {
+                "type": "string",
+                "description": "E-UTRAN Cell Identifier",
+                "example": "12"
+              },
+              "lac": {
+                "type": "string",
+                "description": "Location Area Code",
+                "example": "40217"
+              },
+              "menbi": {
+                "type": "string",
+                "description": "Macro eNodeB ID",
+                "example": "88364"
+              },
+              "emenbi": {
+                "type": "string",
+                "description": "Extended Macro eNodeB ID",
+                "example": "4"
+              }
+            }
+          },
+          "ue_ip_address": {
+            "type": "string",
+            "example": "10.199.5.223",
+            "description": "IP address of the device using the SIM."
+          },
+          "imeisv": {
+            "type": "string",
+            "example": "3526510721968301",
+            "description": "IMEISV of the device with the SIM."
+          },
+          "rat_type": {
+            "type": "object",
+            "description": "Describes the Radio Access Technology used in the PDP Context.",
+            "required": [
+              "rat_type_id",
+              "description"
+            ],
+            "properties": {
+              "rat_type_id": {
+                "type": "string",
+                "example": "2",
+                "description": "ID of the used RAT."
+              },
+              "description": {
+                "type": "string",
+                "example": "NB-IoT",
+                "description": "Radio Access Type name"
+              }
+            }
+          },
+          "region": {
+            "type": "string",
+            "example": "us-east-1"
+          },
+          "apn": {
+            "type": "string",
+            "example": "apn"
+          },
+          "ipcan_session_id": {
+            "type": "string",
+            "example": "23"
+          }
+        },
+        "description": "Information about the current PDP Context of the SIM."
+      },
+      "SimsConnectivityDetail": {
+        "type": "object",
+        "description": "Information about the current SIM connectivity status, location and PDP Context of a SIM.",
+        "required": [
+          "status",
+          "services"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SimsConnectivityStatus"
+          },
+          "data_traffic_limit_state": {
+            "$ref": "#/components/schemas/SimsDataTrafficLimitState"
+          },
+          "location": {
+            "$ref": "#/components/schemas/SimsLocation"
+          },
+          "pdp_contexts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimsPdpContext"
+            }
+          },
+          "services": {
+            "type": "array",
+            "description": "List of services currently available.",
+            "items": {
+              "type": "string",
+              "description": "Currently used service.",
+              "example": "GPRS"
+            }
+          }
+        }
+      },
+      "SimsSms": {
+        "type": "object",
+        "properties": {
+          "submit_date": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2019-09-29T07:33:15.000Z"
+          },
+          "delivery_date": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2019-09-29T07:33:15.000Z"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2019-09-30T07:33:15.000Z"
+          },
+          "final_date": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2019-09-29T07:33:18.000Z"
+          },
+          "retry_date": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null
+          },
+          "last_delivery_attempt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2019-09-29T07:33:15.000Z"
+          },
+          "retry_count": {
+            "type": "integer",
+            "format": "int64",
+            "example": 0
+          },
+          "gsm_map_error": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "dcs": {
+            "type": "integer",
+            "format": "int64",
+            "example": 0
+          },
+          "pid": {
+            "type": "integer",
+            "format": "int64",
+            "example": 0
+          },
+          "source_address": {
+            "type": "string",
+            "example": "1234"
+          },
+          "endpoint": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int64",
+                "example": 166
+              },
+              "name": {
+                "type": "string",
+                "example": "Your Endpoint"
+              }
+            }
+          },
+          "sim_id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 0
+          },
+          "iccid": {
+            "type": "string",
+            "example": "8988303000000001000"
+          },
+          "msisdn": {
+            "type": "string",
+            "example": "883XXXXXXXXXXXX"
+          },
+          "imsi": {
+            "type": "string",
+            "example": "901XXXXXXXXXXXX"
+          },
+          "msc": {
+            "type": "integer",
+            "format": "int64",
+            "example": 491770940000
+          },
+          "udh": {
+            "type": "string",
+            "example": ""
+          },
+          "payload": {
+            "type": "string",
+            "example": "***"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 589
+          },
+          "status": {
+            "type": "object",
+            "description": "4 - DELIVERED\n\n5 - FAILED\n\n2 - PENDING\n\n6 - EXPIRED\n",
+            "properties": {
+              "description": {
+                "type": "string",
+                "enum": [
+                  "DELIVERED",
+                  "FAILED",
+                  "PENDING",
+                  "EXPIRED"
+                ]
+              },
+              "id": {
+                "type": "integer",
+                "format": "int64",
+                "enum": [
+                  4,
+                  5,
+                  2,
+                  6
+                ]
+              }
+            }
+          },
+          "sms_type": {
+            "type": "object",
+            "description": "1 - MT\n\n2 - MO\n",
+            "properties": {
+              "description": {
+                "type": "string",
+                "enum": [
+                  "MT",
+                  "MO"
+                ]
+              },
+              "id": {
+                "type": "integer",
+                "format": "int64",
+                "enum": [
+                  1,
+                  2
+                ]
+              }
+            }
+          },
+          "source_address_type": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "example": "National"
+              },
+              "id": {
+                "type": "integer",
+                "format": "int64",
+                "example": 161
+              }
+            }
+          }
+        }
+      },
+      "SMSSourceAddressType": {
+        "title": "Source Address Type",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "Numerical identifier for the type of source address of an SMS. <ul><li>145 - International</li><li>161 - National</li><li>208 - Alphanumeric</li></ul>",
+            "example": 145,
+            "enum": [
+              145,
+              161,
+              208
+            ]
+          }
+        }
+      },
+      "SMSMessage": {
+        "title": "SMS Message Object",
+        "description": "SMS message object used to describe an SMS message.",
+        "type": "object",
+        "properties": {
+          "source_address": {
+            "type": "string",
+            "description": "The source address of the SMS. This value can be set to any number as it is not used.",
+            "example": "1234567890"
+          },
+          "payload": {
+            "type": "string",
+            "description": "The content body of the SMS message.",
+            "example": "This is an SMS message."
+          },
+          "udh": {
+            "type": "string",
+            "description": "The optional User Data Header (UDH) encoded as a hex-String can be used to concatenate SMS messages.",
+            "example": "050003CC0301",
+            "pattern": "^([0-9a-fA-F])*$"
+          },
+          "dcs": {
+            "type": "integer",
+            "description": "The optional Data Coding Scheme (DCS) can be used for setting the message body format to HEX String or normal Text Mode.",
+            "example": 0
+          },
+          "source_address_type": {
+            "$ref": "#/components/schemas/SMSSourceAddressType"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Expiry Date of the sent SMS in ISO8601 (RFC3339) format.",
+            "example": "2028-03-14T16:10:29.000+00:00"
+          }
+        }
+      },
+      "EndpointCreateSmsResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "DeleteItemResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "Country": {
+        "type": "object",
+        "description": "Represents a Country.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 74,
+            "description": "The Country's id. The id is the same as in the legacy system. 0 represents the \"ANY\"-country."
+          },
+          "name": {
+            "type": "string",
+            "example": "Germany",
+            "description": "The name of the Country."
+          },
+          "country_code": {
+            "example": "49",
+            "type": "string",
+            "description": "The international phone number prefix. \u201c49\u201d is the one for Germany, \u201c381\u201d is the one for Serbia."
+          },
+          "mcc": {
+            "type": "string",
+            "example": "262",
+            "description": "An MCC (Mobile Country Code) is used in combination with an MNC (a combination known as an \"MCC/MNC tuple\") to uniquely identify a mobile network operator (carrier) using the GSM (including GSM-R), UMTS, LTE, and 5G public land mobile networks."
+          },
+          "iso_code": {
+            "type": "string",
+            "example": "de",
+            "description": "The ISO 3166 code."
+          }
+        }
+      },
+      "LocationDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "country": {
+            "$ref": "#/components/schemas/Country"
+          },
+          "tapcode": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "tapcode": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "mnc": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "mnc": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "update_location_failure_reason": {
+            "type": "string",
+            "example": "RAT_NOT_ALLOWED"
+          }
+        }
+      },
+      "PdpContextDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "country": {
+            "$ref": "#/components/schemas/Country"
+          },
+          "volume": {
+            "type": "object",
+            "properties": {
+              "tx": {
+                "type": "number",
+                "format": "double"
+              },
+              "rx": {
+                "type": "number",
+                "format": "double"
+              },
+              "total": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          },
+          "data_service_failure_cause": {
+            "type": "string",
+            "enum": [
+              "IMSI_NOT_FOUND",
+              "APN_NOT_AUTHORIZED",
+              "PDN_NOT_SUPPORTED",
+              "IMEI_LOCK_BREACHED",
+              "NO_QUOTA_FOUND",
+              "QUOTA_EXPIRED",
+              "QUOTA_EXHAUSTED",
+              "MONTHLY_USAGE_LIMIT_EXCEEDED",
+              "DATA_SERVICE_BARRED",
+              "IMEI_LOCK_ENFORCED",
+              "INACTIVITY_TIMER_EXPIRED"
+            ]
+          },
+          "pdp_context": {
+            "type": "object",
+            "properties": {
+              "tariff_id": {
+                "type": "string"
+              },
+              "operator_id": {
+                "type": "string"
+              },
+              "ratezone_id": {
+                "type": "string"
+              },
+              "nsapi": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "sgsn_control_plane_ip_address": {
+                "type": "string"
+              },
+              "rac": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "sgsn_data_plane_ip_address": {
+                "type": "string"
+              },
+              "ci": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "lac": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "ue_ip_address": {
+                "type": "string"
+              },
+              "mnc": {
+                "type": "string"
+              },
+              "rat_type": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "tx_teid_data_plane": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "rx_teid": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "ggsn_data_plane_ip_address": {
+                "type": "string"
+              },
+              "mcc": {
+                "type": "string"
+              },
+              "tx_teid_control_plane": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "ggsn_control_plane_ip_address": {
+                "type": "string"
+              },
+              "sac": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "gtp_version": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "apn": {
+                "type": "string",
+                "nullable": true
+              },
+              "imeisv": {
+                "type": "string"
+              },
+              "imsi": {
+                "type": "string"
+              },
+              "breakout_ip": {
+                "type": "string",
+                "nullable": true
+              },
+              "pdp_context_id": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "tunnel_created": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "ipcan_session_id": {
+                "type": "string",
+                "nullable": true
+              },
+              "gtp_v1_uli": {
+                "type": "object",
+                "properties": {
+                  "lac": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "ci": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "sac": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "rac": {
+                    "type": "integer",
+                    "format": "int64"
+                  }
+                }
+              },
+              "gtp_v2_uli": {
+                "type": "object",
+                "properties": {
+                  "cgi": {
+                    "type": "object",
+                    "properties": {
+                      "lac": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "ci": {
+                        "type": "integer",
+                        "format": "int64"
+                      }
+                    }
+                  },
+                  "sai": {
+                    "type": "object",
+                    "properties": {
+                      "lac": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "sac": {
+                        "type": "integer",
+                        "format": "int64"
+                      }
+                    }
+                  },
+                  "rai": {
+                    "type": "object",
+                    "properties": {
+                      "lac": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "rac": {
+                        "type": "integer",
+                        "format": "int64"
+                      }
+                    }
+                  },
+                  "tac": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "eci": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "lac": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "menbi": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "emenbi": {
+                    "type": "integer",
+                    "format": "int64"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "QuotaDetail": {
+        "type": "object",
+        "properties": {
+          "volume": {
+            "type": "number",
+            "format": "float"
+          },
+          "threshold_volume": {
+            "type": "number",
+            "format": "float",
+            "deprecated": true
+          },
+          "threshold_percentage": {
+            "type": "integer",
+            "format": "int32",
+            "deprecated": true
+          },
+          "threshold": {
+            "type": "object",
+            "properties": {
+              "percentage": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "volume": {
+                "type": "number",
+                "format": "float"
+              }
+            }
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "total_volume": {
+            "type": "number",
+            "format": "float"
+          }
+        }
+      },
+      "EndpointQuotaStatus": {
+        "type": "object",
+        "description": "- 0 - \"EXHAUSTED\"\n- 1 - \"ACTIVE\"\n- 2 - \"EXPIRED\"\n",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 0,
+            "enum": [
+              0,
+              1,
+              2
+            ]
+          },
+          "description": {
+            "type": "string",
+            "example": "EXHAUSTED",
+            "enum": [
+              "EXHAUSTED",
+              "ACTIVE",
+              "EXPIRED"
+            ]
+          }
+        },
+        "example": {
+          "id": 0,
+          "description": "EXHAUSTED"
+        }
+      },
+      "EndpointQuota": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "volume",
+          "total_volume",
+          "last_volume_added",
+          "service",
+          "threshold_percentage",
+          "threshold_volume",
+          "expiry_date",
+          "created_at",
+          "accumulated_total_volume"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/EndpointQuotaStatus"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double",
+            "description": "Amount left i.e. still available for use:\n- for SMS: the quantity/number of short messages\n- for Data: the amount of data traffic in megabytes. 1 megabyte = 1024 kilobytes.\n- can be negative\n"
+          },
+          "total_volume": {
+            "type": "number",
+            "format": "double",
+            "description": "Initially provisioned volume or (in case the quota was topped up) the remaining volume at that time plus the\nvolume of the topup.\n- for SMS: the quantity/number of short messages\n- for Data: the amount of data traffic in megabytes. 1 megabyte = 1024 kilobytes.\n"
+          },
+          "accumulated_total_volume": {
+            "type": "number",
+            "format": "double",
+            "description": "Sum of initially provisioned volume and all topup volumes.\n"
+          },
+          "last_volume_added": {
+            "type": "number",
+            "format": "double",
+            "description": "Last volume amount added:\n- for SMS: the quantity/number of short messages\n- for Data: the amount of data traffic in megabytes. 1 megabyte = 1024 kilobytes.\n"
+          },
+          "service": {
+            "type": "string",
+            "enum": [
+              "sms",
+              "data"
+            ]
+          },
+          "threshold_percentage": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of the [total_volume] for triggering a threshold event.  The threshold event is triggered when the remaining volume reaches or falls below this percentage."
+          },
+          "threshold_volume": {
+            "type": "number",
+            "format": "double",
+            "description": "Calculated upon quota creation and upon quota topup as [total_volume] * [threshold_percentage]:\n- for SMS: the quantity/number of short messages\n- for Data: the amount of data traffic in megabytes. 1 megabyte = 1024 kilobytes.\n"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO8601 DateTime"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO8601 DateTime"
+          }
+        },
+        "example": {
+          "id": 1,
+          "status": {
+            "id": 0,
+            "description": "EXHAUSTED"
+          },
+          "volume": 95.5,
+          "total_volume": 100,
+          "accumulated_total_volume": 100,
+          "last_volume_added": 0,
+          "service": "data",
+          "threshold_percentage": 20,
+          "threshold_volume": 20,
+          "expiry_date": "2027-07-26T13:13:21Z",
+          "created_at": "2024-08-24T13:13:21Z"
+        }
+      },
+      "EventQuotaDetail": {
+        "type": "object",
+        "required": [
+          "quota"
+        ],
+        "properties": {
+          "quota": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/QuotaDetail"
+              },
+              {
+                "$ref": "#/components/schemas/EndpointQuota"
+              }
+            ]
+          },
+          "regional_pool": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "VpnDetail": {
+        "type": "object",
+        "properties": {
+          "vpn_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "OSS VPN ID"
+          },
+          "region": {
+            "type": "string",
+            "description": "AWS region code"
+          },
+          "client": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "description": "OpenVPN Client version"
+              },
+              "private_ip": {
+                "type": "string",
+                "description": "Private IP address"
+              },
+              "public_ip": {
+                "type": "string",
+                "description": "Public IP address"
+              }
+            }
+          }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "event_type": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "example": {
+              "id": 4,
+              "description": "Delete PDP Context"
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2023-03-01T12:07:09.000Z"
+          },
+          "alert": {
+            "type": "boolean",
+            "example": true
+          },
+          "user": {
+            "type": "string",
+            "example": "user",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "example": "PDP Context deleted."
+          },
+          "event_source": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "example": {
+              "id": 0,
+              "description": "Network"
+            }
+          },
+          "event_severity": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "example": {
+              "id": 0,
+              "description": "INFO"
+            }
+          },
+          "organisation": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "example": {
+              "id": 2,
+              "name": "Organisation_Name"
+            }
+          },
+          "endpoint": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "name": {
+                "type": "string"
+              },
+              "ip_address": {
+                "type": "string"
+              },
+              "imei": {
+                "type": "string"
+              }
+            },
+            "example": {
+              "id": 1,
+              "name": "Monitoring201",
+              "ip_address": "10.199.6.39",
+              "imei": "869951030000000"
+            }
+          },
+          "sim": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "iccid": {
+                "type": "string"
+              },
+              "msisdn": {
+                "type": "string"
+              }
+            },
+            "example": {
+              "id": 110,
+              "iccid": "8988317000000000000",
+              "msisdn": "456831700000000"
+            }
+          },
+          "imsi": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "imsi": {
+                "type": "string"
+              }
+            },
+            "example": {
+              "id": 110,
+              "imsi": "901430000000114"
+            }
+          },
+          "detail": {
+            "description": "Notification Details",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LocationDetail"
+              },
+              {
+                "$ref": "#/components/schemas/PdpContextDetail"
+              },
+              {
+                "$ref": "#/components/schemas/EventQuotaDetail"
+              },
+              {
+                "$ref": "#/components/schemas/VpnDetail"
+              }
+            ]
+          }
+        }
+      },
+      "AutoTopupRequest": {
+        "title": "Auto Top Up Request",
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Boolean indicating wheather auto top up should be enabled or disabled for the given ICCIDs/SIMs."
+          },
+          "iccids": {
+            "type": "array",
+            "description": "A list of ICCIDs of SIMs where the auto top up configuration should be changed.",
+            "items": {
+              "type": "string",
+              "example": "8988280666000000000"
+            }
+          }
+        },
+        "description": "Request with a flag for enabeling and disabeling auto top up for the listed ICCIDs."
+      },
+      "SIMExtensionRequest": {
+        "title": "SIM Extension Request",
+        "type": "object",
+        "properties": {
+          "iccids": {
+            "type": "array",
+            "description": "A list of ICCIDs of SIMs which should be extended.",
+            "items": {
+              "type": "string",
+              "example": "8988280666000000000"
+            }
+          },
+          "productId": {
+            "type": "integer",
+            "description": "Optional product id (see /v1/products) for changing the product during the process of the SIM extension. If left out, the current SIM product will be used for extension."
+          }
+        },
+        "description": "Request for extending the lifetime of SIMs product."
+      }
+    },
+    "responses": {
+      "NotFound": {
+        "description": "Not found error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/NotFound"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/InternalServerError"
+            }
+          }
+        }
+      },
+      "NoContent": {
+        "description": "No Content"
+      },
+      "BadRequest": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BadRequest"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Operation cannot be completed because the resource is referenced by other resources or otherwise colliding.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Conflict"
+            }
+          }
+        }
+      },
+      "ResourceDeleted": {
+        "description": "Resource Deleted",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DeleteItemResponse"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "PageParam": {
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "description": "The number of returned chunk within the complete set."
+      },
+      "PerPageParam": {
+        "in": "query",
+        "name": "per_page",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 20
+        },
+        "description": "The numbers of items to return per page."
+      }
+    }
+  },
+  "x-tagGroups": [
+    {
+      "name": "openapi-core-management",
+      "tags": [
+        "Endpoint by ICCID"
+      ]
+    },
+    {
+      "name": "openapi-smsc-facade-management",
+      "tags": [
+        "SMS by ICCID"
+      ]
+    },
+    {
+      "name": "openapi-ext-management",
+      "tags": [
+        "Events by ICCID"
+      ]
+    }
+  ],
+  "x-readme": {
+    "explorer-enabled": true,
+    "proxy-enabled": true
+  }
+}
