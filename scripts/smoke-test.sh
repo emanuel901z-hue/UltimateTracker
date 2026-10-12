@@ -147,8 +147,13 @@ else
 fi
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Auth-Token: $PTOK" \
   "$BASE/api/v1/parent/sms?iccid=0000000000000000000")
-[ "$CODE" = "502" ] && pass "Ungültige ICCID sauber beantwortet (HTTP 502)" \
-  || fail "Unerwarteter Status bei ungültiger ICCID: $CODE"
+# 502 = Anbieter antwortet mit Fehler (Zugangsdaten gesetzt)
+# 503 = kein SIM-Provider konfiguriert (z. B. in der CI ohne 1NCE-Zugangsdaten)
+if [ "$CODE" = "502" ] || [ "$CODE" = "503" ]; then
+  pass "Ungültige ICCID sauber beantwortet (HTTP $CODE)"
+else
+  fail "Unerwarteter Status bei ungültiger ICCID: $CODE"
+fi
 
 echo "16) Dienste-Übersicht (eine Oberfläche für alles)"
 SERVICES=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/services")
