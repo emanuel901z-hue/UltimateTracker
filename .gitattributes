@@ -9,3 +9,6 @@
 *.pdf binary
 *.stl binary
 *.3mf binary
+
+# Vendored Fremdbibliotheken: Byte-exakt halten (Prüfsummen-Nachweis)
+server/audio-bridge/app/static/vendor/** -text
