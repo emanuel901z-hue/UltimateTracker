@@ -1,0 +1,44 @@
+# Parallele Test-Instanz – für „mal eben angucken" neben der Hauptinstanz.
+#
+# Start (in der WSL):   bash scripts/start-test-instance.sh
+# Stopp:                docker compose -p uttest down
+#
+# Warum überhaupt eine zweite Datei:
+#   * Die Hauptinstanz (Projekt "ultimatetracker") belegt 8082/8085/5055/…
+#   * Container-Namen sind nicht mehr fest verdrahtet, Volumes sind über den
+#     Projektnamen getrennt (-p uttest) → beide Instanzen stören sich nicht.
+#   * Bind-Mounts (traccar.xml, caddy/, sim-providers/) werden geteilt (nur lesend).
+#
+# Alle veröffentlichten Ports sind um +1000 verschoben. `!override` ersetzt die
+# Liste aus der Hauptdatei (sonst würde Compose die Ports anhängen).
+
+services:
+  traccar:
+    ports: !override
+      - "9082:8082"   # Web-UI
+      - "9055:5055"   # OsmAnd-Protokoll
+
+  audio-bridge:
+    ports: !override
+      - "9085:8085"   # Eltern-UI + API
+
+  caddy:
+    ports: !override
+      - "8080:80"
+      - "8443:443"
+
+  anisette:
+    ports: !override
+      - "7969:6969"
+
+  macless-haystack:
+    ports: !override
+      - "7176:6176"
+
+  google-findmy-webui:
+    ports: !override
+      - "5321:4321"
+
+  google-findmy:
+    ports: !override
+      - "6500:5500"

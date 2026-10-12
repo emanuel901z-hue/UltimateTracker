@@ -12,7 +12,6 @@ services:
     # Produktiv-Datenbank (A10). H2-Fallback: DATABASE_* in server/.env auf die
     # H2-Werte setzen und diesen Dienst stoppen (siehe .env.example).
     image: postgres:16-alpine
-    container_name: ut-postgres
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -33,7 +32,6 @@ services:
   traccar:
     # Version gepinnt (A2). Update: Version ändern + `docker compose pull traccar`.
     image: traccar/traccar:6.16.0
-    container_name: ut-traccar
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -63,7 +61,6 @@ services:
 
   audio-bridge:
     build: ./audio-bridge
-    container_name: ut-audio-bridge
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -98,7 +95,6 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: ut-caddy
     profiles: [tls]
     restart: unless-stopped
     logging: *default-logging
@@ -127,7 +123,6 @@ services:
   anisette:
     # Apple-Authentifizierung (Anisette-Daten) für die Find-My-Bridge
     image: dadoum/anisette-v3-server:latest
-    container_name: ut-anisette
     profiles: [findmy]
     restart: unless-stopped
     logging: *default-logging
@@ -145,7 +140,6 @@ services:
     # Hinweis: 1 Abfrage/Stunde (Default) gilt als account-sicher.
     # Commit gepinnt (A2); Update: neuen Commit-Hash von GitHub übernehmen.
     build: https://github.com/jannisko/findmy-traccar-bridge.git#4e4ae2535d024470cfa6e12a0a60f91d5ccee54a
-    container_name: ut-findmy-bridge
     profiles: [findmy]
     # Ohne APPLE_BEACON_KEYS beendet sich der Dienst sauber (Exit 0) → kein
     # Endlos-Neustart; echte Abstürze werden bis zu 3× wiederholt.
@@ -171,7 +165,6 @@ services:
   macless-haystack:
     # Apple-Find-My-Endpoint: Key-Generierung und optionale Web-UI (manuelle Sicht)
     image: christld/macless-haystack:latest
-    container_name: ut-macless-haystack
     profiles: [findmy]
     restart: unless-stopped
     logging: *default-logging
@@ -190,7 +183,6 @@ services:
     # Digest gepinnt (A2); Update: `docker pull` + neuen Digest übernehmen.
     # Details: docs/findmy.md
     image: ghcr.io/p6g9yhk6/googlefindmytools@sha256:bda31fda3d0dcd1e25666742b97259b4ad72ab7605e86c5c017659ae4397c093
-    container_name: ut-google-findmy-webui
     profiles: [findmy]
     restart: unless-stopped
     logging: *default-logging
@@ -220,7 +212,6 @@ services:
     # Traccar-Fork; kein Web-UI, aber schlanker. Bekannter Key-Rotations-Bug –
     # dann auf die WebUI wechseln. Details: docs/findmy.md
     build: ./findmy-google
-    container_name: ut-google-findmy
     profiles: [google-minimal]
     restart: unless-stopped
     logging: *default-logging

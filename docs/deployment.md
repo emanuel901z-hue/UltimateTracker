@@ -142,7 +142,58 @@ docker run --rm -v ultimatetracker_traccar-data:/data -v "$PWD":/backup alpine \
 Umzug: auf dem Thin Client Docker installieren, Repo klonen/kopieren, `server/.env`
 übernehmen, Volumes zurückspielen, `docker compose up -d`.
 
-## 8. Troubleshooting
+## 8. Blick vom Windows-Host & parallele Test-Instanz
+
+### 8.1 Die WSL-Instanz vom Windows-Browser aus ansehen
+
+WSL2 leitet `localhost` automatisch weiter – es ist **kein** zweiter Stack nötig:
+
+| Dienst | URL im Windows-Browser |
+|---|---|
+| Eltern-UI/API | <http://localhost:8085> |
+| Traccar | <http://localhost:8082> |
+| Google-Find-My-WebUI | <http://localhost:4321> (Basic-Auth) |
+
+Für **HTTPS** (Profil `tls`): `.localhost`-Namen lösen im Browser auf 127.0.0.1
+auf, also <https://audio.localhost> / <https://traccar.localhost>. Damit die
+Warnung verschwindet, einmalig die Caddy-CA in den Windows-Zertifikatsspeicher
+importieren (Datei vorher per `caddy-root.crt`-Export holen, siehe Abschnitt 6):
+
+```powershell
+certutil -addstore -user Root caddy-root.crt
+```
+
+**Docker Desktop** (falls du es installierst): in den Einstellungen unter
+*Resources → WSL Integration* die Distribution **UltimateTracker deaktivieren** –
+sonst mischen sich zwei Docker-Engines in derselben Distro.
+
+### 8.2 Zweite Instanz zum Ausprobieren (ohne die laufende anzufassen)
+
+```bash
+# in der WSL, aus dem Repo-Verzeichnis
+bash scripts/start-test-instance.sh                  # Kern-Stack (Postgres, Traccar, Bridge)
+bash scripts/start-test-instance.sh --profile tls    # zusätzlich Caddy
+
+# Stoppen (entfernt auch die Test-Volumes):
+docker compose -p uttest down -v
+```
+
+| | Hauptinstanz | Test-Instanz |
+|---|---|---|
+| Compose-Projekt | `ultimatetracker` | `uttest` |
+| Traccar | 8082 / 5055 | **9082 / 9055** |
+| Audio-Bridge | 8085 | **9085** |
+| Caddy (Profil `tls`) | 80 / 443 | **8080 / 8443** |
+| Find-My-Dienste | 4321 / 6969 / 6176 / 5500 | **5321 / 7969 / 7176 / 6500** |
+| Volumes | `ultimatetracker_*` | `uttest_*` (getrennt) |
+| Datenbank | bestehende Daten | **leer** – Traccar legt einen neuen Admin an (erster registrierter Benutzer wird Administrator) |
+
+Beide Instanzen nutzen dieselbe `server/.env` (gleiche Tokens) und dieselben
+Config-Bind-Mounts (nur lesend). Die Container-Namen sind **nicht** mehr fest
+verdrahtet (`ut-*`), sondern vom Compose-Projekt abgeleitet – Skripte wie der
+Smoke-Test finden den Bridge-Container dynamisch.
+
+## 9. Troubleshooting
 
 | Symptom | Ursache/Abhilfe |
 |---|---|

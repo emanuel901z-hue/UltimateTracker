@@ -108,7 +108,9 @@ curl -sf -X DELETE -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/firmware/9.9.9"
   && pass "Test-Firmware wieder entfernt" || fail "Aufräumen fehlgeschlagen"
 
 echo "14) Push (PWA/Web-Push)"
-KEYS=$(docker exec -i ut-audio-bridge python - <<'PY'
+# Container-ID dynamisch bestimmen (funktioniert auch für parallele Instanzen)
+BRIDGE_CID=$(docker ps --filter "name=audio-bridge" --format '{{.ID}}' | head -1)
+KEYS=$(docker exec -i "$BRIDGE_CID" python - <<'PY'
 import base64, os
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
