@@ -227,6 +227,18 @@ class GenericProvider(SimProvider):
         status, payload = self._call("send_sms", {"iccid": iccid, "text": text, "source": "12345"})
         if status not in (200, 201, 202):
             raise ProviderError(f"{self.name} SMS-Versand: HTTP {status} {str(payload)[:160]}")
+
+        # Manche Anbieter melden den Erfolg nur als Wert im Body (z. B. GraphQL:
+        # {"data": {"sendSms": false}}) – optional prüfbar über "expect".
+        expect = (self.endpoints.get("send_sms") or {}).get("expect")
+        if isinstance(expect, dict):
+            value = dig(payload, str(expect.get("path") or "$"))
+            wanted = expect.get("equals", True)
+            if value != wanted:
+                raise ProviderError(
+                    f"{self.name}: Versand abgelehnt (erwartet {wanted!r}, Antwort {value!r})"
+                )
+
         fields = self.fields.get("sms") or {}
         sms_id = dig(payload, fields.get("id", "id")) if isinstance(payload, dict) else None
         return {"id": sms_id}

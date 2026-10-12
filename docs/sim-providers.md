@@ -87,6 +87,9 @@ Ohne `SIM_PROVIDER` wird `nce` genommen, sobald 1NCE-Zugangsdaten gesetzt sind.
 
 - **`items`**: Pfad zur Liste in der Antwort (`$` = Wurzel, `data.items` = verschachtelt).
 - **`fields`**: Pfade ins Objekt (`a.b.c`); fehlt ein Feld, bleibt der Wert leer.
+- **`expect`** (optional, nur `send_sms`): Erfolgsprüfung im Antwort-Body für
+  APIs, die keinen Fehlerstatus, sondern einen Wert liefern
+  (`{"path": "data.sendSms", "equals": true}`).
 - **Platzhalter**: `{iccid}`, `{text}`, `{source}` in Pfad/Body; `${VAR}` bzw.
   `${VAR:-default}` in der Konfiguration (aus der Umgebung).
 - **Versionen**: Steckt die Version im Pfad (wie bei 1NCE `/v2/…`), einfach in
@@ -94,7 +97,46 @@ Ohne `SIM_PROVIDER` wird `nce` genommen, sobald 1NCE-Zugangsdaten gesetzt sind.
   `NCE_API_VERSION` umstellbar (Default `v2`) – ein Wechsel auf `v3` wäre damit
   eine Umgebungsvariable, kein Codeumbau.
 
-## 4. Beispiele für andere Anbieter (Muster, nicht getestet)
+## 4. Beispiel: wherever SIM (GraphQL statt REST)
+
+`https://docs.whereversim.com/` ist die aktuelle Referenz der **wherever SIM
+Link+ GraphQL-API** (AWS AppSync) – das erklärt das „wilde" Aussehen: **eine**
+POST-URL (`https://graphql.api.whereversim.com/graphql`), die Abfragen stecken
+im Body; dazu WebSocket-Subscriptions unter `/graphql/realtime`.
+
+| Eigenschaft | whereversim | 1NCE (zum Vergleich) |
+|---|---|---|
+| Stil | GraphQL (Queries/Mutations) | REST |
+| Auth | statischer Header `Authorization: <Token>` | OAuth2 `client_credentials` |
+| SIM-Liste | `query { listSims(limit:) { items { … } } }` | `GET /v2/sims` |
+| SMS senden | `mutation { sendSms(iccid:, text:) }` → **Boolean** | `POST /v2/sims/{iccid}/sms` |
+| SMS-Verlauf | `query { listSms(iccid:, limit:) { items { … } } }` | `GET /v2/sims/{iccid}/sms` |
+| Paginierung | `nextToken` | keine (Liste komplett) |
+| Push | WebSocket-Subscriptions (`onSms`, `updatedSim`) | – |
+
+**Das Template deckt das ab** – mitgeliefert als
+`server/sim-providers/example-whereversim-generic.json`:
+
+- Auth: `{"type": "header", "header_name": "Authorization", "header_value": "${WHEREVERSIM_API_TOKEN}"}`
+- Endpunkte: `path: ""` (also genau die `base_url`), `items: "data.listSims.items"` bzw.
+  `"data.listSms.items"` (GraphQL verschachtelt unter `data`), Query + `variables` im `body`.
+- `sendSms` liefert **nur ein Boolean** → dafür gibt es die optionale Erfolgsprüfung:
+  ```json
+  "expect": {"path": "data.sendSms", "equals": true}
+  ```
+  Ist der Wert `false`, meldet die Bridge einen Fehler statt „gesendet".
+
+**Nicht** über das Template abgedeckt (bräuchte eine eigene Provider-Klasse wie
+`nce.py`): die **WebSocket-Subscriptions** (Echtzeit-Push bei SMS/SIM-Änderung)
+und Mehrseiten-Abfragen über `nextToken` (aktuell wird eine Seite mit
+`limit: 100` geholt).
+
+> Nebenbei: whereversim hat **zwei** API-Welten. Die oben beschriebene GraphQL-API
+> gehört zu **Link+**. Für das **tech+**-Portal gibt es zusätzlich eine klassische
+> REST-/SOAP-/Push-API (Doku im eingeloggten Portal bzw.
+> `help.whereversim.de`) – auch die ließe sich über das Template anbinden.
+
+## 5. Beispiele für andere Anbieter (Muster, nicht getestet)
 
 | Anbieter | Auth | SIM-Liste | SMS senden |
 |---|---|---|---|
@@ -108,7 +150,7 @@ gegen die jeweilige Doku prüfen und in der JSON-Konfiguration hinterlegen.
 Ein Provider, der Sonderlogik braucht (Signierung, Multipart, Paginierung),
 bekommt wie 1NCE eine eigene Klasse in `app/providers/`.
 
-## 5. Tests
+## 6. Tests
 
 ```bash
 # Unit-Tests der Provider-Schicht (ohne Netzwerk)

@@ -3,6 +3,7 @@
 Aufruf:  cd server/audio-bridge && python -m unittest discover -s tests -v
 """
 
+import json
 import os
 import sys
 import unittest
@@ -92,6 +93,103 @@ class TestGenericProvider(unittest.TestCase):
         provider = GenericProvider({"name": "x", "base_url": "https://x", "endpoints": {}})
         with self.assertRaises(ProviderError):
             provider._call("send_sms", {})
+
+
+class TestGraphQlProvider(unittest.TestCase):
+    """WhereverSIM-Stil: eine POST-URL, GraphQL-Body, verschachtelte Antworten."""
+
+    CONFIG = {
+        "name": "whereversim",
+        "base_url": "https://graphql.api.whereversim.com/graphql",
+        "auth": {"type": "header", "header_name": "Authorization", "header_value": "token"},
+        "endpoints": {
+            "list_sims": {"method": "POST", "path": "", "items": "data.listSims.items",
+                          "body": {"query": "…", "variables": {"limit": 100}}},
+            "send_sms": {"method": "POST", "path": "",
+                         "body": {"query": "…", "variables": {"iccid": "{iccid}", "text": "{text}"}},
+                         "expect": {"path": "data.sendSms", "equals": True}},
+            "list_sms": {"method": "POST", "path": "", "items": "data.listSms.items",
+                         "body": {"query": "…", "variables": {"iccid": "{iccid}"}}},
+        },
+        "fields": {
+            "sim": {"iccid": "iccid", "msisdn": "msisdn", "status": "statusid", "imei": "imei"},
+            "sms": {"id": "id", "text": "text", "direction": "direction",
+                    "source": "originator", "submitted": "unixTimestampMs"},
+        },
+    }
+
+    class FakeProvider(GenericProvider):
+        def __init__(self, config, responses):
+            super().__init__(config)
+            self.responses = responses
+            self.calls = []
+
+        def _call(self, key, values):
+            self.calls.append((key, values))
+            return 200, self.responses[key]
+
+    def test_list_sims_from_graphql_response(self):
+        provider = self.FakeProvider(self.CONFIG, {"list_sims": {"data": {"listSims": {"items": [
+            {"iccid": "8988", "imei": "8698", "msisdn": "+4917", "statusid": 3},
+        ]}}}})
+        sims = provider.list_sims()
+        self.assertEqual(len(sims), 1)
+        self.assertEqual(sims[0].iccid, "8988")
+        self.assertEqual(sims[0].msisdn, "+4917")
+        self.assertEqual(sims[0].status, "3")
+
+    def test_send_sms_success_and_rejection(self):
+        ok = self.FakeProvider(self.CONFIG, {"send_sms": {"data": {"sendSms": True}}})
+        self.assertEqual(ok.send_sms("8988", "hallo"), {"id": None})
+        self.assertEqual(ok.calls[0][1]["iccid"], "8988")
+
+        rejected = self.FakeProvider(self.CONFIG, {"send_sms": {"data": {"sendSms": False}}})
+        with self.assertRaises(ProviderError):
+            rejected.send_sms("8988", "hallo")
+
+    def test_list_sms_mapping(self):
+        provider = self.FakeProvider(self.CONFIG, {"list_sms": {"data": {"listSms": {"items": [
+            {"id": 7, "direction": "MO", "originator": "+4917", "text": "SOS",
+             "unixTimestampMs": 1767225600000},
+        ]}}}})
+        messages = provider.list_sms("8988")
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].direction, "MO")
+        self.assertEqual(messages[0].text, "SOS")
+        self.assertEqual(messages[0].source, "+4917")
+
+
+class TestShippedConfigs(unittest.TestCase):
+    """Die mitgelieferten Beispielkonfigurationen müssen gültig und vollständig sein."""
+
+    CONFIG_DIR = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "sim-providers")
+
+    def _load(self, name):
+        with open(os.path.join(self.CONFIG_DIR, name), encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def test_examples_are_valid(self):
+        # Die Beispielkonfigurationen nutzen ${…}-Platzhalter; für den Test
+        # setzen wir Dummy-Werte, damit auch die Auth-Prüfung greift.
+        keys = ("1NCE_API_CLIENTID", "1NCE_API_CLIENTSECRET", "WHEREVERSIM_API_TOKEN")
+        saved = {key: os.environ.get(key) for key in keys}
+        for key in keys:
+            os.environ[key] = "testwert"
+        try:
+            for name in ("example-1nce-generic.json", "example-whereversim-generic.json"):
+                config = self._load(name)
+                provider = GenericProvider(config)
+                self.assertTrue(provider.configured(), f"{name} ist nicht lauffähig konfiguriert")
+                for key in ("list_sims", "send_sms", "list_sms"):
+                    self.assertIn(key, provider.endpoints, f"{name} fehlt Endpunkt {key}")
+                self.assertIn("iccid", provider.fields.get("sim", {}))
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
 
 class TestRegistry(unittest.TestCase):

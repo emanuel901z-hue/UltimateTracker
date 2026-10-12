@@ -1,0 +1,66 @@
+{
+  "_kommentar": [
+    "Beispiel: wherever SIM (GraphQL/AWS AppSync) über den GENERIC-Template-Provider.",
+    "Besonderheit: KEIN REST – eine einzige POST-URL, die Abfragen stecken im Body.",
+    "Das Template kann das, weil es beliebige JSON-Bodies mit Platzhaltern baut",
+    "und Feldpfade wie data.listSims.items versteht.",
+    "NICHT abgedeckt: die WebSocket-Subscriptions (onSms/updatedSim) – dafür wäre",
+    "eine eigene Provider-Klasse nötig (wie nce.py). Details: docs/sim-providers.md",
+    "Zugangsdaten: WHEREVERSIM_API_TOKEN in server/.env (Header 'Authorization').",
+    "Aktivieren: SIM_PROVIDER=generic, SIM_PROVIDER_CONFIG=/etc/ut/providers/active.json"
+  ],
+  "name": "whereversim-generic",
+  "base_url": "https://graphql.api.whereversim.com/graphql",
+  "auth": {
+    "type": "header",
+    "header_name": "Authorization",
+    "header_value": "${WHEREVERSIM_API_TOKEN}"
+  },
+  "endpoints": {
+    "list_sims": {
+      "method": "POST",
+      "path": "",
+      "items": "data.listSims.items",
+      "body": {
+        "query": "query ListSims($limit: Int!) { listSims(limit: $limit) { items { iccid imei msisdn statusid } } }",
+        "variables": {"limit": 100}
+      }
+    },
+    "send_sms": {
+      "method": "POST",
+      "path": "",
+      "body": {
+        "query": "mutation SendSms($iccid: ID!, $text: String!) { sendSms(iccid: $iccid, text: $text) }",
+        "variables": {"iccid": "{iccid}", "text": "{text}"}
+      },
+      "expect": {"path": "data.sendSms", "equals": true}
+    },
+    "list_sms": {
+      "method": "POST",
+      "path": "",
+      "items": "data.listSms.items",
+      "body": {
+        "query": "query ListSms($iccid: ID!, $limit: Int!) { listSms(iccid: $iccid, limit: $limit) { items { id direction originator destination text unixTimestampMs } totalCount } }",
+        "variables": {"iccid": "{iccid}", "limit": 20}
+      }
+    }
+  },
+  "fields": {
+    "sim": {
+      "iccid": "iccid",
+      "msisdn": "msisdn",
+      "status": "statusid",
+      "imei": "imei"
+    },
+    "sms": {
+      "id": "id",
+      "text": "text",
+      "direction": "direction",
+      "source": "originator",
+      "submitted": "unixTimestampMs"
+    }
+  },
+  "maps": {
+    "direction": {"MO": "MO", "MT": "MT", "1": "MT", "2": "MO"}
+  }
+}
