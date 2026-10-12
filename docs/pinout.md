@@ -46,11 +46,16 @@ optional **3** (Modem-RI, nur bei registriertem Modem sinnvoll).
 ## 4. PMU (AXP2101)
 
 - I2C: SDA **15** / SCL **7** (belegt), IRQ **6** (belegt) – Adresse `0x34`.
+- **Zwei getrennte Busse:** PMU hängt an **GPIO 15/7**, unsere Sensoren an **1/2**.
+  Im Arduino-Code deshalb `Wire` (PMU) und `Wire1` (Sensoren) verwenden –
+  ein einzelner `Wire` kann nur eine Pin-Belegung gleichzeitig.
 - Akkustand **über den PMU** lesen (kein ADC-Pin für die Batterie vorhanden).
 - **TS-Pin-Detection in der Firmware deaktivieren** (kein NTC auf dem Board),
   sonst wird das Laden gesperrt.
 - Ladestrom max. 1 A (Standardwert prüfen); Rail-Nutzung für das Mikrofon
   (ALDO2/ALDO4) ist eine Option ohne zusätzlichen MOSFET.
+- Verifiziert (2026-10-12): PMU antwortet auf `0x34`, alle Rails der Werksfirmware
+  sichtbar; **DC3 = Modem/GPS-Rail ist per PMU schaltbar** (B1-Variante 3).
 
 ## 5. Varianten-Hinweis: T-SIM7080G-S3-**Standard** (NR16R2)
 

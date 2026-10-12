@@ -55,7 +55,12 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
       → offen: Flash-Schreiben (`Update`/esp_ota) mit Hardware
 - [x] GNSS-Auswertung `AT+CGNSINF` + UTC→Epoch *(2026-10-11)*
 - [x] Feldstabilität: Ring-Log (RTC), Reset-Zähler, monotone Uptime über Sleeps *(2026-10-11)*
-- [x] **Bring-up-Firmware** (`tsim7080g-s3-bringup`): Selbsttest I2C/PMU/LIS3DH/Modem/GNSS/I2S/Piezo/Taster + Kommando-Konsole *(2026-10-11)*
+- [x] **Bring-up-Firmware** (`tsim7080g-s3-bringup`): Selbsttest I2C/PMU/LIS3DH/Modem/GNSS/I2S/Piezo/Taster/WLAN/BLE + Kommando-Konsole *(2026-10-11)*
+- [x] **Erster Selbsttest am echten Board** (2026-10-12): N16R8 bestätigt, PMU @0x34 ✓,
+      WLAN/BLE ✓, Modem-AT ✓ (ohne SIM), Werks-Image gesichert – Ergebnisse in `docs/bring-up.md`
+- [ ] **(i) Peripherie auf Breadboard verdrahten** (LIS3DH, INMP441, MAX98357A, Taster, Piezo) → Selbsttest erneut
+- [ ] **(i) GNSS mit Sichtverbindung testen** (indoor kein Fix – erwartet)
+- [ ] **(i) SIM einlegen** und Modem-Teil wiederholen (CCID/CEREG/CSQ, **PSM/eDRX-Kommandos**, M4-SMS)
 - [ ] **(i) HTTP-Engine des Modems implementieren** (`AT+SHCONF/SHBOD/SHREQ/SHREAD`) – Hardware-Phase M6
 - [ ] **(i) PWRKEY/Power-Zyklus + Rail-Handling messen** (B1, M1/M3)
 - [ ] LIS3DH: I2C-Init, Schwellwert-Interrupt, EXT1-Wake

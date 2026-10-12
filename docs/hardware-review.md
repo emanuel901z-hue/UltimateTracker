@@ -144,3 +144,19 @@ Empfehlung (umgesetzt in Architektur/Entscheidungen): 8 kHz / 16 Bit / IMA-ADPCM
 4. PSM/TAU-Zeiten der 1NCE-SIM (Latenz für Suchmodus/Poll).
 5. GNSS-Performance mit aktiver Antenne im Gehäuse (M7).
 6. Ladeverhalten mit TS-Pin-Deaktivierung (M5).
+
+## 11. Verifiziert am echten Board (2026-10-12)
+
+| Prüfung | Ergebnis |
+|---|---|
+| Chip | ESP32-S3 (QFN56) Rev v0.2, 2 Kerne, 40 MHz Crystal, USB-Serial/JTAG |
+| PSRAM | **8 MB embedded → N16R8 bestätigt** (unsere `qio_opi`-Konfiguration ist korrekt) |
+| Flash | 16 MB (GigaDevice), eFuse: **quad, 3,3 V** → passt zu `flash_mode = qio` |
+| MAC | `94:a9:90:e5:0f:cc` |
+| PMU | AXP2101 @ **0x34 auf Wire (15/7)**; Rails aktiv: DC1 3,3 V, **DC3 3,0 V (Modem/GPS)**, DC5 3,3 V, BLDO1 1,8 V (Level-Shifter), BLDO2 3,3 V → **DC3 ist per PMU schaltbar (B1)** |
+| WLAN/BLE | integrierte PCB-Antenne: **8 WLAN-Netze / 18 BLE-Geräte** ✓ |
+| Modem | `AT` ✓; ohne SIM: `+CCID`/`+CPIN?` ERROR, `+CSQ: 99,99`, `+CEREG: 0,2`; **`CPSMS`/`CEDRXS` → ERROR** (mit SIM erneut prüfen) |
+| GNSS | Antennen-Power + `CGNSPWR` ✓; indoor kein Fix (erwartet) |
+| Werks-Firmware | IDF v4.4.2, „arduino-lib-builder", 4-MB-Partitionslayout; **Backup: `firmware/backup/factory-2026-10-12.bin`** |
+
+Details und Rohausgaben: `docs/bring-up.md` (Abschnitt „Ergebnisse des ersten Selbsttests").

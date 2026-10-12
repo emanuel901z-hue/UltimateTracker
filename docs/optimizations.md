@@ -117,15 +117,24 @@ Drei Betriebsarten, messbar in M1/M3:
 1. Hängt der Modem-Zweig an einer **schaltbaren PMU-Rail**? (Power-Domain-Tabelle
    nennt DC3/BLDO2 für GPS/Modem.) Welche Rail versorgt Modemkern, welche die
    GNSS-Antenne?
+   → **Verifiziert 2026-10-12:** DC3 ist an (3,0 V) und per PMU schaltbar →
+   Variante 3 ist umsetzbar. BLDO1 (1,8 V) ist der Level-Shifter und muss anbleiben.
 2. Ist **PWRKEY (GPIO 41)** für `AT+CPOWD=1`/Power-Cycle nutzbar und reagiert das
    Modem darauf sauber?
+   → teilweise verifiziert: PWRKEY-Puls funktioniert (Modem startet), aber ein
+   zweiter Puls bei laufendem Modem verwirrt es → immer erst `AT` prüfen.
 3. Bleibt die **Level-Shift-Rail BLDO1** an? (LilyGO warnt: BLDO1 nicht abschalten.)
+   → bestätigt (1,8 V aktiv).
 
 *Messungen (M1/M3):*
 4. Ruhestrom in allen drei Modi (Modem aus / PSM / eDRX registriert).
 5. Dauer **und** Energie pro Wake-Zyklus je Modus (voller Attach vs. PSM-Wake vs. eDRX-Wake).
 6. Welche **TAU-/eDRX-Werte** vergibt das 1NCE-Netz real (`AT+CPSMS?`, `AT+CEDRXS?`)
    ⇒ tatsächliche Erreichbarkeitslatenz.
+   → **Achtung (2026-10-12):** Auf diesem Board liefern `AT+CPSMS?`, `AT+CPSMS=?`,
+   `AT+CEDRXS?` und `AT+CEDRXS=?` **ERROR** (ohne SIM getestet). Mit SIM erneut
+   prüfen – falls PSM/eDRX dort ebenfalls nicht unterstützt werden, wird die
+   PMU-Rail-Abschaltung (Variante 3) zum einzigen sauberen Weg.
 
 *Anforderungen (deine Vorgaben):*
 7. **Erreichbarkeitslatenz:** Wie schnell muss eine Eltern-Aktion (Suchmodus/Nachricht)

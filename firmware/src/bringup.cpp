@@ -6,6 +6,9 @@
 #include <Wire.h>
 #include <math.h>
 
+#include <NimBLEDevice.h>
+#include <WiFi.h>
+
 #include "config.h"
 #include "driver/i2s.h"
 #include "esp_sleep.h"
@@ -36,44 +39,54 @@ void line(Stream& console, const char* text) {
 
 // --- I2C --------------------------------------------------------------------
 
-bool i2c_present(uint8_t address) {
-  Wire.beginTransmission(address);
-  return Wire.endTransmission() == 0;
+bool i2c_present(TwoWire& bus, uint8_t address) {
+  bus.beginTransmission(address);
+  return bus.endTransmission() == 0;
 }
 
-uint8_t i2c_read8(uint8_t address, uint8_t reg) {
-  Wire.beginTransmission(address);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) return 0xFF;
-  if (Wire.requestFrom(address, static_cast<uint8_t>(1)) != 1) return 0xFF;
-  return Wire.read();
+uint8_t i2c_read8(TwoWire& bus, uint8_t address, uint8_t reg) {
+  bus.beginTransmission(address);
+  bus.write(reg);
+  if (bus.endTransmission(false) != 0) return 0xFF;
+  if (bus.requestFrom(address, static_cast<uint8_t>(1)) != 1) return 0xFF;
+  return bus.read();
 }
 
-void i2c_scan(Stream& console) {
-  line(console, "[I2C] Scan (SDA=1, SCL=2):");
-  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 100000);
+void i2c_scan_bus(Stream& console, TwoWire& bus, int sda, int scl, const char* label) {
+  console.printf("[I2C] Bus %s (SDA=%d, SCL=%d):\n", label, sda, scl);
+  bus.begin(sda, scl, 100000);
+  delay(20);
   uint8_t found = 0;
   for (uint8_t address = 0x03; address < 0x78; ++address) {
-    if (i2c_present(address)) {
+    if (i2c_present(bus, address)) {
       console.printf("      0x%02X gefunden%s\n", address,
-                     address == kLis3dhAddress ? " (LIS3DH erwartet)"
-                                               : (address == kPmuAddress ? " (AXP2101 erwartet)" : ""));
+                     address == kLis3dhAddress ? " (LIS3DH)"
+                                               : (address == kPmuAddress ? " (AXP2101)" : ""));
       ++found;
     }
   }
-  console.printf("      %u Gerät(e). LIS3DH: %s, PMU: %s\n", found,
-                 i2c_present(kLis3dhAddress) ? "OK" : "FEHLT",
-                 i2c_present(kPmuAddress) ? "OK" : "FEHLT");
+  console.printf("      %u Gerät(e)\n", found);
+}
+
+void i2c_scan(Stream& console) {
+  // Zwei getrennte Busse auf diesem Board (Arduino Wire kann nur EINE
+  // Pin-Belegung gleichzeitig, deshalb Wire = PMU und Wire1 = Sensoren):
+  //   * PMU (AXP2101): SDA=15, SCL=7  – fest verdrahtet, nicht frei nutzbar
+  //   * frei für unsere Sensoren: SDA=1, SCL=2 (Kamera-Pins)
+  i2c_scan_bus(console, Wire, PIN_PMU_SDA, PIN_PMU_SCL, "PMU (belegt)");
+  i2c_scan_bus(console, Wire1, PIN_I2C_SDA, PIN_I2C_SCL, "frei (Sensor)");
 }
 
 // --- PMU (AXP2101) ----------------------------------------------------------
 
 void pmu_test(Stream& console) {
-  line(console, "[PMU] AXP2101:");
+  line(console, "[PMU] AXP2101 (Wire, SDA=15, SCL=7):");
+  Wire.begin(PIN_PMU_SDA, PIN_PMU_SCL, 100000);
+  delay(20);
 #if UT_HAS_PMU_LIB
   XPowersPMU pmu;
-  if (!pmu.begin(Wire, kPmuAddress, PIN_I2C_SDA, PIN_I2C_SCL)) {
-    line(console, "      begin() fehlgeschlagen – Adresse/Pull-ups prüfen");
+  if (!pmu.begin(Wire, kPmuAddress, PIN_PMU_SDA, PIN_PMU_SCL)) {
+    line(console, "      begin() fehlgeschlagen – Adresse/Bus prüfen");
     return;
   }
   console.printf("      Akku angeschlossen: %s\n", yes_no(pmu.isBatteryConnect()));
@@ -84,7 +97,7 @@ void pmu_test(Stream& console) {
   line(console, "      TS-Pin-Detection deaktiviert (sonst kein Laden)");
 #else
   // Ohne Bibliothek: nur Präsenz + Chip-ID-Register (0x03)
-  const uint8_t chip_id = i2c_read8(kPmuAddress, 0x03);
+  const uint8_t chip_id = i2c_read8(Wire, kPmuAddress, 0x03);
   console.printf("      Chip-ID-Register 0x03 = 0x%02X (AXP2101 erwartet 0x4A)\n", chip_id);
   line(console, "      (XPowersLib nicht installiert – Spannungswerte erst mit Bibliothek)");
 #endif
@@ -93,30 +106,33 @@ void pmu_test(Stream& console) {
 // --- LIS3DH -----------------------------------------------------------------
 
 void lis3dh_test(Stream& console) {
-  line(console, "[LIS3DH] Beschleunigungssensor:");
-  const uint8_t who = i2c_read8(kLis3dhAddress, 0x0F);
+  line(console, "[LIS3DH] Beschleunigungssensor (Wire1, SDA=1, SCL=2):");
+  Wire1.begin(PIN_I2C_SDA, PIN_I2C_SCL, 100000);
+  delay(20);
+  const uint8_t who = i2c_read8(Wire1, kLis3dhAddress, 0x0F);
   console.printf("      WHO_AM_I = 0x%02X (erwartet 0x33) → %s\n", who,
                  who == 0x33 ? "OK" : "FEHLER");
   if (who != 0x33) return;
 
   // CTRL_REG1 (0x20): 100 Hz, alle Achsen an
-  Wire.beginTransmission(kLis3dhAddress);
-  Wire.write(0x20);
-  Wire.write(0x57);
-  Wire.endTransmission();
+  Wire1.beginTransmission(kLis3dhAddress);
+  Wire1.write(0x20);
+  Wire1.write(0x57);
+  Wire1.endTransmission();
   delay(50);
 
   // Auslesen (OUT_X_L = 0x28, 6 Bytes)
-  Wire.beginTransmission(kLis3dhAddress);
-  Wire.write(0x28 | 0x80);  // Auto-Increment
-  if (Wire.endTransmission(false) != 0 || Wire.requestFrom(kLis3dhAddress, static_cast<uint8_t>(6)) != 6) {
+  Wire1.beginTransmission(kLis3dhAddress);
+  Wire1.write(0x28 | 0x80);  // Auto-Increment
+  if (Wire1.endTransmission(false) != 0 ||
+      Wire1.requestFrom(kLis3dhAddress, static_cast<uint8_t>(6)) != 6) {
     line(console, "      Auslesen fehlgeschlagen");
     return;
   }
   int16_t raw[3];
   for (int i = 0; i < 3; ++i) {
-    const uint8_t low = Wire.read();
-    const uint8_t high = Wire.read();
+    const uint8_t low = Wire1.read();
+    const uint8_t high = Wire1.read();
     raw[i] = static_cast<int16_t>((high << 8) | low) >> 4;  // 12 Bit, linksbündig
   }
   // ±2 g → 1 mg/LSB
@@ -144,16 +160,29 @@ String at_query(Stream& modem, const char* command, uint32_t timeout_ms) {
 
 void modem_test(Stream& modem, Stream& console) {
   line(console, "[Modem] SIM7080G:");
-  // Einschalten per PWRKEY (128 ms), danach AT-Bereitschaft abwarten
-  pinMode(PIN_MODEM_PWRKEY, OUTPUT);
-  digitalWrite(PIN_MODEM_PWRKEY, LOW);
-  delay(128);
-  digitalWrite(PIN_MODEM_PWRKEY, HIGH);
-  delay(3000);
+  // Erst prüfen, ob das Modem schon läuft – ein zweiter PWRKEY-Puls bei
+  // laufendem Modem verwirrt es (im Selbsttest aufgefallen). Nur einschalten,
+  // wenn AT nicht antwortet.
+  bool alive = at_query(modem, "AT", 2000).indexOf("OK") >= 0;
+  if (!alive) {
+    line(console, "      Modem aus → PWRKEY-Puls (128 ms) + warten");
+    pinMode(PIN_MODEM_PWRKEY, OUTPUT);
+    digitalWrite(PIN_MODEM_PWRKEY, LOW);
+    delay(128);
+    digitalWrite(PIN_MODEM_PWRKEY, HIGH);
+    const uint32_t start = millis();
+    while (millis() - start < 20000) {
+      if (at_query(modem, "AT", 1500).indexOf("OK") >= 0) {
+        alive = true;
+        break;
+      }
+      delay(1000);
+    }
+  } else {
+    line(console, "      Modem läuft bereits (kein PWRKEY-Puls nötig)");
+  }
 
-  String response = at_query(modem, "AT", 2000);
-  console.printf("      AT → %s\n", response.length() ? response.c_str() : "(keine Antwort)");
-  if (response.indexOf("OK") < 0) {
+  if (!alive) {
     line(console, "      Modem antwortet nicht – PWRKEY/Rail/Stromversorgung prüfen");
     return;
   }
@@ -163,7 +192,9 @@ void modem_test(Stream& modem, Stream& console) {
   console.printf("      +CSQ → %s\n", at_query(modem, "AT+CSQ", 3000).c_str());
   console.printf("      +CEREG? → %s\n", at_query(modem, "AT+CEREG?", 3000).c_str());
   console.printf("      +CPSMS? → %s\n", at_query(modem, "AT+CPSMS?", 3000).c_str());
+  console.printf("      +CPSMS=? → %s\n", at_query(modem, "AT+CPSMS=?", 3000).c_str());
   console.printf("      +CEDRXS? → %s\n", at_query(modem, "AT+CEDRXS?", 3000).c_str());
+  console.printf("      +CEDRXS=? → %s\n", at_query(modem, "AT+CEDRXS=?", 3000).c_str());
 }
 
 void gnss_test(Stream& modem, Stream& console) {
@@ -324,6 +355,44 @@ void button_test(Stream& console) {
   line(console, "      (ohne Druck ist das normal: dann beim nächsten Durchlauf drücken)");
 }
 
+// --- Funk (integrierte PCB-Antenne am Modul) --------------------------------
+
+void wifi_test(Stream& console) {
+  line(console, "[WLAN] Scan 2,4 GHz (integrierte PCB-Antenne des WROOM-1):");
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+  const int count = WiFi.scanNetworks(false, true);
+  console.printf("      %d Netz(e) gefunden\n", count);
+  for (int i = 0; i < count && i < 8; ++i) {
+    console.printf("      %-28s %4d dBm  Kanal %d\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i),
+                   WiFi.channel(i));
+  }
+  if (count == 0) {
+    line(console, "      keine Netze – Antennenbereich des Moduls freihalten (kein Metall darüber)");
+  }
+  WiFi.scanDelete();
+  WiFi.mode(WIFI_OFF);
+}
+
+void ble_test(Stream& console) {
+  line(console, "[BLE] Scan 5 s (integrierte Antenne):");
+  NimBLEDevice::init("UT-bringup");
+  NimBLEScan* scan = NimBLEDevice::getScan();
+  scan->setActiveScan(true);
+  scan->setInterval(100);
+  scan->setWindow(99);
+  const NimBLEScanResults results = scan->getResults(5000, false);
+  console.printf("      %d Gerät(e) gefunden\n", results.getCount());
+  for (int i = 0; i < results.getCount() && i < 8; ++i) {
+    const NimBLEAdvertisedDevice* device = results.getDevice(i);
+    if (device == nullptr) continue;
+    console.printf("      %-28s %4d dBm\n", device->getName().c_str(), device->getRSSI());
+  }
+  scan->clearResults();
+  NimBLEDevice::deinit(true);
+}
+
 }  // namespace
 
 void run_all(Stream& modem, Stream& console) {
@@ -346,10 +415,13 @@ void run_all(Stream& modem, Stream& console) {
   mic_test(console);
   piezo_test(console);
   button_test(console);
+  wifi_test(console);
+  ble_test(console);
 
   line(console, "---------------------------------------------------------");
   line(console, "Kommandos: [r] alles erneut  [m] Modem  [g] GNSS  [t] Ton");
   line(console, "           [i] I2S/Mikrofon  [p] Piezo  [l] LIS3DH  [b] Taster");
+  line(console, "           [w] WLAN-Scan  [n] BLE-Scan");
   line(console, "           [s] Deep Sleep 60 s (für die Strommessung M1)  [h] Hilfe");
   line(console, "=========================================================");
 }
@@ -366,6 +438,8 @@ void loop(Stream& modem, Stream& console) {
     case 'p': piezo_test(console); break;
     case 'l': lis3dh_test(console); break;
     case 'b': button_test(console); break;
+    case 'w': wifi_test(console); break;
+    case 'n': ble_test(console); break;
     case 's':
       line(console, "Deep Sleep für 60 s – jetzt Strom messen (M1) ...");
       delay(500);
@@ -373,7 +447,7 @@ void loop(Stream& modem, Stream& console) {
       esp_deep_sleep_start();
       break;
     case 'h':
-      line(console, "r=alles m=Modem g=GNSS t=Ton i=Mikrofon p=Piezo l=LIS3DH b=Taster s=Sleep h=Hilfe");
+      line(console, "r=alles m=Modem g=GNSS t=Ton i=Mikrofon p=Piezo l=LIS3DH b=Taster w=WLAN n=BLE s=Sleep h=Hilfe");
       break;
     default:
       break;

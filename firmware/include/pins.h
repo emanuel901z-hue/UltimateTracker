@@ -28,6 +28,10 @@
 #define PIN_MODEM_PWRKEY     41    // Modem ein/aus (128-ms-Puls)
 #define PIN_MODEM_DTR        42    // Modem-Sleep-Steuerung
 
+// --- PMU (AXP2101) – eigener I2C-Bus, belegt! ---
+#define PIN_PMU_SDA          15    // docs/pinout.md: reserviert
+#define PIN_PMU_SCL          7     // docs/pinout.md: reserviert
+
 // --- I2S (geteilte BCLK/WS, Full-Duplex) ---
 #define PIN_I2S_BCLK         16
 #define PIN_I2S_WS           17

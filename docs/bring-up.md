@@ -4,6 +4,34 @@ Reihenfolge für den Tag, an dem das Board ankommt. Ziel: erst **prüfen**, dann
 messen, dann entwickeln. Ablauf/Details: `docs/measurement-plan.md`,
 Messprotokoll: `scripts/new-measurement-session.sh`.
 
+## Ergebnisse des ersten Selbsttests (2026-10-12, Board nackt, ohne SIM)
+
+| Prüfung | Ergebnis |
+|---|---|
+| Chip / PSRAM | **ESP32-S3, 2 Kerne, 16 MB Flash, PSRAM 8189 kB** → **N16R8 bestätigt** (qio_opi korrekt) |
+| USB | COM8, `VID:PID 303A:1001` (Espressif USB-Serial/JTAG), MAC 94:a9:90:e5:0f:cc |
+| **I2C PMU-Bus (Wire, 15/7)** | **AXP2101 @ 0x34 gefunden** ✓ |
+| I2C Sensor-Bus (Wire1, 1/2) | 0 Geräte – korrekt, noch nichts verdrahtet |
+| PMU | antwortet; **kein Akku angeschlossen** (0 mV), TS-Pin-Detection deaktiviert ✓ |
+| LIS3DH | nicht gefunden – noch nicht verdrahtet ✓ |
+| Modem | `AT` ✓; ohne SIM: `+CCID`/`+CPIN?` → ERROR, `+CSQ: 99,99`, `+CEREG: 0,2` (sucht) ✓ |
+| Modem PSM/eDRX | **`AT+CPSMS?`/`+CPSMS=?`/`+CEDRXS?`/`+CEDRXS=?` → ERROR** → mit SIM erneut prüfen (evtl. erst nach Netzregistrierung gültig) |
+| GNSS | Antennen-Power ✓, GNSS an ✓, **kein Fix** (indoor) → mit Sichtverbindung wiederholen |
+| WLAN | **8 Netze** (bestes -44 dBm) → **integrierte PCB-Antenne arbeitet** ✓ |
+| BLE | **18 Geräte** gefunden ✓ |
+| I2S-Ton / Mikrofon / Piezo / Taster | Test läuft; ohne verdrahtete Bauteile: Mikrofonpegel 0, Taster „nicht gedrückt“ ✓ erwartet |
+| Werksfirmware | IDF v4.4.2, 4-MB-Partitionslayout; **Backup: `firmware/backup/factory-2026-10-12.bin`** |
+
+**Zwei Erkenntnisse aus dem Selbsttest (beide im Code behoben):**
+1. Ein zweiter PWRKEY-Puls bei bereits laufendem Modem verwirrt es → der Test
+   prüft jetzt zuerst, ob `AT` antwortet.
+2. Das Board hat **zwei getrennte I2C-Busse**: PMU (AXP2101) auf **15/7** (belegt)
+   und unsere Sensoren auf **1/2** – im Arduino-Code `Wire` (PMU) vs. `Wire1` (Sensor).
+
+**Nächste Schritte:** Peripherie auf dem Breadboard verdrahten (LIS3DH, INMP441,
+MAX98357A, Taster, Piezo) → Selbsttest erneut → GNSS mit Sichtverbindung →
+Akku anschließen und M1 messen → SIM einlegen und Modem-Teil (M3/M4) wiederholen.
+
 ## 0. Auspacken und prüfen (ohne Strom!)
 
 | Schritt | Worauf achten |
