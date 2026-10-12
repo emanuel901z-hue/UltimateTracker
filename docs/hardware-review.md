@@ -68,18 +68,32 @@ werden – dieser fehlte in der ursprünglichen Stückliste.
 
 ## 5. Offen: SMS-Funktion
 
-- Der AT-Befehlssatz der SIM7070/7080/7090-Serie enthält den kompletten
-  SMS-Befehlssatz (`AT+CMGS`, `AT+CMGR`, `AT+CNMI`, …).
-- TinyGSM implementiert eine SMS-Klasse für den SIM7080.
-- Community-Bericht (M5Stack U137, gleicher Modemtyp): SMS senden/empfangen funktioniert.
-- **Aber:** LilyGO deklariert SMS für dieses Board als ❌ und ihr `SendSMS`-Beispiel
-  bricht für `TINY_GSM_MODEM_SIM7080` mit `#error` ab.
-- Entscheidend für die Architektur: Im **PSM** ist das Modem nicht erreichbar –
-  eine FIND-SMS würde erst beim nächsten Wake zugestellt (Minuten bis Stunden).
-  RI (GPIO 3) weckt nur, solange das Modem registriert bleibt (kostet Ruhestrom).
+**Neubewertung 2026-10-12 – zwei getrennte Fragen:**
 
-Entscheidung: Suchalarm über **Polling/Suchmodus** (30–60 s), SMS erst nach
-Breadboard-Test als optionaler Zusatzpfad.
+**(a) Kann das Modul SMS?** Wahrscheinlich ja, es ist kein Hardware-Limit:
+- Der SIMCom-AT-Befehlssatz (SIM7070/7080/7090) enthält das komplette
+  SMS-Kapitel (`AT+CMGF/CMGS/CMGL/CNMI/CPMS/CSMS/…`).
+- TinyGSM implementiert eine SMS-Klasse für den SIM7080.
+- Community-Bericht (M5Stack U137, gleicher Modemtyp): Senden **und** Empfangen läuft.
+- LilyGOs `#error "This modem not sms function"` ist eine **pauschale Sperre ihrer
+  Beispiel-Sketches** (die für die A76xx/SIM7676-Familie geschrieben sind), keine
+  Hardware-Aussage.
+- **Eigener Test (ohne SIM, 2026-10-12):** alle SMS-AT-Befehle → ERROR
+  (auch `AT+CMGS=?`) – ohne SIM erwartbar, **nicht aussagekräftig**.
+  Modul-Firmware: `ATI → R1951.07`, `AT+CGMR → Revision:1951B17SIM7080`.
+
+**(b) Erlaubt das Netz SMS?** **Hier liegt der eigentliche Blocker** (1NCE-Doku):
+- MO-SMS (Gerät → 1NCE-Plattform) ✅, MT-SMS nur **A2P** über die 1NCE-API ✅.
+- **Kein P2P-MT-SMS**: Ein Handy kann dem Gerät **keine** SMS schicken ❌
+  → die geplante „FIND per SMS von den Eltern" ist mit 1NCE **nicht umsetzbar**.
+- **SMS ist über NB-IoT nicht möglich** ❌ → nur im LTE-M-Modus (unser Code
+  bevorzugt LTE-M: `AT+CNMP=38`, `AT+CMNB=1`).
+- MT-SMS bleibt bis zu 24 h pending und wird beim nächsten Attach zugestellt
+  → taugt als *queued* Weckruf, nicht für sofortige Reaktion.
+
+**Entscheidung:** Primärpfad bleibt **HTTP-Polling** (D-003). SMS nur optional und
+**serververmittelt** über die 1NCE-API (Aufwand: API-Client + Token). Details:
+`docs/sms.md`.
 
 ## 6. Korrigiert: Audio-Mathematik
 

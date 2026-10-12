@@ -187,6 +187,8 @@ void modem_test(Stream& modem, Stream& console) {
     return;
   }
   at_query(modem, "ATE0", 1000);
+  console.printf("      ATI (Modell) → %s\n", at_query(modem, "ATI", 3000).c_str());
+  console.printf("      +CGMR (Firmware) → %s\n", at_query(modem, "AT+CGMR", 3000).c_str());
   console.printf("      +CCID → %s\n", at_query(modem, "AT+CCID", 3000).c_str());
   console.printf("      +CPIN? → %s\n", at_query(modem, "AT+CPIN?", 3000).c_str());
   console.printf("      +CSQ → %s\n", at_query(modem, "AT+CSQ", 3000).c_str());
@@ -355,6 +357,87 @@ void button_test(Stream& console) {
   line(console, "      (ohne Druck ist das normal: dann beim nächsten Durchlauf drücken)");
 }
 
+String wait_any(Stream& modem, uint32_t timeout_ms) {
+  String response;
+  const uint32_t start = millis();
+  while (millis() - start < timeout_ms) {
+    while (modem.available()) response += static_cast<char>(modem.read());
+    if (response.indexOf("OK") >= 0 || response.indexOf("ERROR") >= 0) break;
+    delay(20);
+  }
+  response.replace("\r", "");
+  response.trim();
+  return response;
+}
+
+String read_line(Stream& console, uint32_t timeout_ms) {
+  String line;
+  const uint32_t start = millis();
+  while (millis() - start < timeout_ms) {
+    while (console.available()) {
+      const char value = static_cast<char>(console.read());
+      if (value == '\r' || value == '\n') {
+        if (line.length() > 0) return line;
+      } else if (value >= ' ') {
+        line += value;
+      }
+    }
+    delay(20);
+  }
+  return line;
+}
+
+// --- SMS (M4) ---------------------------------------------------------------
+
+void sms_capability(Stream& modem, Stream& console) {
+  line(console, "[SMS] Fähigkeitsprüfung (AT-Seite):");
+  console.printf("      +CMGF=1 (Textmodus) → %s\n", at_query(modem, "AT+CMGF=1", 3000).c_str());
+  console.printf("      +CSCS=\"GSM\" → %s\n", at_query(modem, "AT+CSCS=\"GSM\"", 3000).c_str());
+  console.printf("      +CPMS? → %s\n", at_query(modem, "AT+CPMS?", 3000).c_str());
+  console.printf("      +CSMS? → %s\n", at_query(modem, "AT+CSMS?", 3000).c_str());
+  console.printf("      +CMGS=? → %s\n", at_query(modem, "AT+CMGS=?", 3000).c_str());
+  console.printf("      +CSCA? → %s\n", at_query(modem, "AT+CSCA?", 3000).c_str());
+  console.printf("      +CNMI=2,1,0,0,0 → %s\n", at_query(modem, "AT+CNMI=2,1,0,0,0", 3000).c_str());
+  console.printf("      +CMGL=\"REC UNREAD\" → %s\n",
+                 at_query(modem, "AT+CMGL=\"REC UNREAD\"", 5000).c_str());
+  line(console, "      Hinweis 1NCE: SMS nur Device<->Plattform (A2P), nur im LTE-M-Modus.");
+}
+
+void sms_send(Stream& modem, Stream& console) {
+  line(console, "[SMS] Test-SMS – Zielnummer eingeben (z. B. +4917...), 30 s Zeit:");
+  const String number = read_line(console, 30000);
+  if (number.length() < 5) {
+    line(console, "      keine (gültige) Nummer – abgebrochen");
+    return;
+  }
+  console.printf("      sende an %s ...\n", number.c_str());
+
+  at_query(modem, "AT+CMGF=1", 2000);
+  while (modem.available()) modem.read();
+  modem.print("AT+CMGS=\"");
+  modem.print(number);
+  modem.print("\"\r\n");
+
+  bool prompt = false;
+  const uint32_t start = millis();
+  while (millis() - start < 10000) {
+    if (modem.available() && modem.read() == '>') {
+      prompt = true;
+      break;
+    }
+    delay(10);
+  }
+  if (!prompt) {
+    line(console, "      kein \">\"-Prompt → CMGS abgelehnt (SIM/Netz/Format prüfen)");
+    return;
+  }
+  modem.print("UltimateTracker Test-SMS");
+  modem.write(26);  // Ctrl-Z = senden
+  const String response = wait_any(modem, 30000);
+  console.printf("      Antwort: %s\n", response.c_str());
+  line(console, "      Erfolg = \"+CMGS: <n>\" + OK");
+}
+
 // --- Funk (integrierte PCB-Antenne am Modul) --------------------------------
 
 void wifi_test(Stream& console) {
@@ -410,6 +493,7 @@ void run_all(Stream& modem, Stream& console) {
   pmu_test(console);
   lis3dh_test(console);
   modem_test(modem, console);
+  sms_capability(modem, console);
   gnss_test(modem, console);
   tone_test(console);
   mic_test(console);
@@ -422,6 +506,7 @@ void run_all(Stream& modem, Stream& console) {
   line(console, "Kommandos: [r] alles erneut  [m] Modem  [g] GNSS  [t] Ton");
   line(console, "           [i] I2S/Mikrofon  [p] Piezo  [l] LIS3DH  [b] Taster");
   line(console, "           [w] WLAN-Scan  [n] BLE-Scan");
+  line(console, "           [c] SMS-Fähigkeit prüfen  [x] Test-SMS senden");
   line(console, "           [s] Deep Sleep 60 s (für die Strommessung M1)  [h] Hilfe");
   line(console, "=========================================================");
 }
@@ -440,6 +525,8 @@ void loop(Stream& modem, Stream& console) {
     case 'b': button_test(console); break;
     case 'w': wifi_test(console); break;
     case 'n': ble_test(console); break;
+    case 'c': sms_capability(modem, console); break;
+    case 'x': sms_send(modem, console); break;
     case 's':
       line(console, "Deep Sleep für 60 s – jetzt Strom messen (M1) ...");
       delay(500);
@@ -447,7 +534,7 @@ void loop(Stream& modem, Stream& console) {
       esp_deep_sleep_start();
       break;
     case 'h':
-      line(console, "r=alles m=Modem g=GNSS t=Ton i=Mikrofon p=Piezo l=LIS3DH b=Taster w=WLAN n=BLE s=Sleep h=Hilfe");
+      line(console, "r=alles m=Modem g=GNSS t=Ton i=Mikrofon p=Piezo l=LIS3DH b=Taster w=WLAN n=BLE c=SMS-Fähigkeit x=SMS senden s=Sleep h=Hilfe");
       break;
     default:
       break;

@@ -1,15 +1,16 @@
 # Identitäten & SMS-Pfad
 
 Wie Tracker, SIM und Beacons eindeutig adressiert werden – und was SMS leisten
-kann (und was nicht).
+kann (und was nicht). **Stand 2026-10-12 korrigiert:** Die frühere Annahme
+„Gerät ↔ Eltern direkt per SMS" ist mit 1NCE **nicht** möglich.
 
 ## 1. Wer ist wer: IMEI, MSISDN, Beacon-IDs
 
 | Identität | Quelle | Verwendung |
 |---|---|---|
 | **IMEI** (SIM7080G) | Modem, per `AT+GSN` | **Primär-ID** des Trackers: Traccar-OsmAnd (`id=…`) und Bridge (`device_id`) |
-| **MSISDN** (1NCE-Rufnummer) | SIM-Vertrag / 1NCE-Portal | SMS-Adresse (Gerät ↔ Eltern; später ggf. Server → Gerät) |
-| **Beacon-ID** (Apple/Google) | Key-Generierung, `docs/findmy.md` | eigenes „Gerät“ in Traccar/Bridge für Find-My-Positionen |
+| **MSISDN** (1NCE-Rufnummer) | SIM-Vertrag / 1NCE-Portal | SMS-Adresse (siehe Abschnitt 2 – nur gegen die 1NCE-Plattform) |
+| **Beacon-ID** (Apple/Google) | Key-Generierung, `docs/findmy.md` | eigenes „Gerät" in Traccar/Bridge für Find-My-Positionen |
 | Gerätename | Eltern-UI | Anzeige |
 
 Die Bridge führt eine **Geräte-Registry** (`devices`-Tabelle):
@@ -20,42 +21,67 @@ Traccar `database.registerUnknown`) und können in der UI ergänzt werden.
 API (Parent-Token): `GET /api/v1/parent/devices`,
 `PUT /api/v1/parent/devices/{id}`, `DELETE /api/v1/parent/devices/{id}`.
 
-## 2. SMS-Pfade – Bestandsaufnahme
+## 2. SMS mit 1NCE – was das Netz erlaubt (und was nicht)
 
-| Pfad | Weg | Status |
+Quelle: 1NCE Developer Hub (SMS Services – Features & Limitations).
+
+| Pfad | Möglich? | Anmerkung |
 |---|---|---|
-| Gerät → Eltern | Tracker sendet SMS direkt an die Elternnummer (Modem) | **optional**, erst nach M4 (SMS-Support am SIM7080G unbestätigt) |
-| Eltern → Gerät | SMS an die MSISDN; Gerät liest sie beim nächsten Wake | **optional**, Latenz Minuten–Stunden (PSM!) |
-| Server → Gerät | Server braucht SMS-Gateway (Provider-API oder lokales GSM-/LTE-Modem) | **nicht implementiert**, nicht nötig solange Polling funktioniert |
-| Gerät → Server | SMS an Empfangsnummer + Gateway, das in die Bridge einspeist | **nicht implementiert** |
+| Gerät → 1NCE-Plattform (MO-SMS) | ✅ | „Any device with a 1NCE SIM can send MO-SMS messages." Empfang über Portal/API. |
+| Server → Gerät (MT-SMS, A2P) | ✅ | Nur über die **1NCE-API/Portal**, mit Auth-Token. Bis zu 24 h pending, wird beim nächsten Attach zugestellt. |
+| **Handy → Gerät (P2P-MT-SMS)** | ❌ | „it is not possible to send a message to a device with a 1NCE SIM using a mobile phone" |
+| Gerät → Handy | ❌ | 1NCE liefert MO-SMS nur an die Plattform; Weiterleitung per „SMS forwarding" an einen eigenen Server. |
+| SMS über **NB-IoT** | ❌ | „SMS is not possible with NB-IoT" → **LTE-M (Cat-M1) erzwingen** (`AT+CNMP=38`, `AT+CMNB=1`). |
+| Kontingent | 250 SMS | In der 1NCE IoT Lifetime Flat enthalten. |
 
-**Fazit:** Alle Funktionen laufen heute über **HTTP-Polling** (Datenpfad,
-Entscheidung D-003). SMS ist ein Zusatzpfad für Notfall/Komfort und hängt an
-Messung **M4**. Wenn SMS genutzt wird, dann am einfachsten **Gerät ↔ Eltern
-direkt** (ohne Serverbeteiligung).
+**Fazit für die Architektur:** Es gibt **keinen direkten Gerät-↔-Eltern-SMS-Weg**.
+SMS ist nur *serververmittelt* nutzbar (1NCE-API in der Bridge) – und selbst dann
+nur als **queued Weckruf** (Zustellung beim nächsten Netz-Attach), nicht als
+sofortige Aktion. Der Primärpfad bleibt deshalb **HTTP-Polling** (D-003).
 
-## 3. SMS-Kommandos (Spezifikation für den Fall der Aktivierung)
+## 3. Ist das ein Hardware-Problem des SIM7080G?
 
-Format: `UT <PIN> <Befehl> [Argument]`, Beispiel: `UT 4711 FIND`.
-Nur Nummern aus einer Whitelist (in der Firmware hinterlegt) werden akzeptiert;
-Antworten gehen an die Absendernummer.
+**Nein.** Das Modul unterstützt SMS:
 
-| Befehl | Wirkung | Antwort |
+- Der SIMCom-AT-Befehlssatz der SIM7070/7080/7090-Serie enthält das komplette
+  3GPP-TS-27.005-SMS-Kapitel (`AT+CMGF`, `AT+CMGS`, `AT+CMGL`, `AT+CNMI`, `AT+CPMS`, `AT+CSMS`, …).
+- TinyGSM implementiert eine SMS-Klasse für den SIM7080.
+- Community-Berichte (M5Stack U137, gleicher Modemtyp): Senden **und** Empfangen funktioniert.
+
+LilyGOs pauschales `#error "This modem not sms function"` in ihren Beispielen ist
+eine **Absicherung ihrer Beispiel-Sketches** (die für die A76xx/SIM7670-Familie
+geschrieben sind; dort gilt teils „kein SMS/Voice"), **keine Hardware-Aussage**.
+Wahrscheinlichster Grund für die Pauschale: nie mit einem SMS-fähigen Netz getestet.
+
+**Verifikation läuft über M4:** Die Bring-up-Firmware prüft jetzt die
+SMS-Fähigkeit (`c`) und kann eine Test-SMS senden (`x`) – siehe `docs/bring-up.md`.
+
+**Stand 2026-10-12 (ohne SIM):** Alle SMS-AT-Befehle liefern auf diesem Board
+**ERROR** (`+CMGF`, `+CSCS`, `+CPMS?`, `+CSMS?`, `+CMGS=?`, `+CSCA?`, `+CNMI`, `+CMGL`) –
+ohne SIM erwartbar (der SMS-Dienst braucht die SIM-Speicher), also **kein Beweis**
+für oder gegen SMS. Modul-Firmware hier: `ATI → R1951.07`,
+`AT+CGMR → Revision:1951B17SIM7080`. Endgültige Klärung mit SIM per `c`/`x`.
+
+## 4. SMS-Kommandos – Neubewertung
+
+Die frühere Spezifikation (`UT <PIN> FIND/LOC/…` per SMS von den Eltern) ist mit
+1NCE **nicht umsetzbar** (kein P2P-MT-SMS). Falls SMS doch genutzt werden soll,
+dann serververmittelt:
+
+| Richtung | Weg | Nutzen |
 |---|---|---|
-| `FIND` | Suchalarm (Piezo-Intervallton) für N Minuten | `OK FIND <min>` |
-| `STOP` | Suchalarm beenden | `OK STOP` |
-| `LOC` | einmalige Positionsmeldung per SMS | `LOC <lat>,<lon>,<hdop>,<batt>` |
-| `BATT` | Akkustand | `BATT <prozent>` |
-| `INFO` | Status (Netz, letzter Fix, Firmware) | `INFO …` |
+| Server → Gerät | 1NCE-API (`POST` MT-SMS), Gerät liest per `AT+CMGL` beim Attach | Weckruf/Suchmodus, wenn Polling zu langsam wäre |
+| Gerät → Server | `AT+CMGS` an die 1NCE-Plattform, Server holt per API ab | Notfall-Alarm (z. B. „Akku leer", „SOS") |
 
-Sicherheit & Kosten: PIN verpflichtend; unbekannte Nummern ignorieren und loggen;
-Rate-Limit (z. B. max. 10 SMS/Stunde) gegen Missbrauch und Kosten.
+Sicherheit: Der Server-Token der 1NCE-API gehört in `server/.env` (nie ins Repo);
+Kommandos vom Gerät werden über die Absendernummer/das Gerätekonto zugeordnet.
 
-## 4. Offene Punkte
+## 5. Offene Punkte
 
-1. **M4**: SMS senden/empfangen am SIM7080G prüfen (`docs/measurement-plan.md`).
-2. RI-Wake (GPIO 3) testen: weckt eine eingehende SMS den ESP32? Nur mit
-   registriertem Modem (nicht im PSM) – kostet Ruhestrom.
-3. Falls Server-seitige SMS gewünscht: Gateway wählen (lokales LTE-Modem am
-   Server oder Provider-API) und in der Bridge als Adapter ergänzen
-   (`SMS_PROVIDER`-Konfiguration).
+1. **M4 (Bring-up `c`/`x`):** SMS-Fähigkeit mit der echten 1NCE-SIM testen –
+   `AT+CMGF`, `AT+CMGS=?`, `AT+CPMS?`, Senden an eine Nummer, Empfang per `AT+CMGL`.
+2. `AT+CPSMS?`/`AT+CEDRXS?` lieferten ohne SIM **ERROR** (siehe `docs/bring-up.md`) –
+   mit SIM erneut prüfen; relevant für die B1-Entscheidung.
+3. Entscheidung: Wollen wir die **1NCE-API** überhaupt integrieren (SMS-Weckruf),
+   oder bleibt es beim reinen HTTP-Polling? (Kosten: API-Client in der Bridge,
+   Token-Verwaltung.)

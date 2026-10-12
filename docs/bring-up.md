@@ -14,7 +14,9 @@ Messprotokoll: `scripts/new-measurement-session.sh`.
 | I2C Sensor-Bus (Wire1, 1/2) | 0 Geräte – korrekt, noch nichts verdrahtet |
 | PMU | antwortet; **kein Akku angeschlossen** (0 mV), TS-Pin-Detection deaktiviert ✓ |
 | LIS3DH | nicht gefunden – noch nicht verdrahtet ✓ |
-| Modem | `AT` ✓; ohne SIM: `+CCID`/`+CPIN?` → ERROR, `+CSQ: 99,99`, `+CEREG: 0,2` (sucht) ✓ |
+| Modem | `AT` ✓; Modell/Firmware: `ATI` → **R1951.07**, `AT+CGMR` → **Revision:1951B17SIM7080** |
+| Modem ohne SIM | `+CCID`/`+CPIN?` → ERROR, `+CSQ: 99,99`, `+CEREG: 0,2` (sucht) ✓ erwartet |
+| **SMS-AT-Befehle (ohne SIM)** | **alle → ERROR** (`+CMGF`, `+CSCS`, `+CPMS?`, `+CSMS?`, `+CMGS=?`, `+CSCA?`, `+CNMI`, `+CMGL`) – ohne SIM erwartbar (SMS-Dienst braucht die SIM-Speicher), **nicht aussagekräftig** → mit SIM per `c`/`x` wiederholen |
 | Modem PSM/eDRX | **`AT+CPSMS?`/`+CPSMS=?`/`+CEDRXS?`/`+CEDRXS=?` → ERROR** → mit SIM erneut prüfen (evtl. erst nach Netzregistrierung gültig) |
 | GNSS | Antennen-Power ✓, GNSS an ✓, **kein Fix** (indoor) → mit Sichtverbindung wiederholen |
 | WLAN | **8 Netze** (bestes -44 dBm) → **integrierte PCB-Antenne arbeitet** ✓ |
