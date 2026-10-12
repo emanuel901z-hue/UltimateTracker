@@ -5,7 +5,8 @@
 //  * Klick auf die Benachrichtigung öffnet/fokussiert die UI
 //  * Minimaler Offline-Cache der Startseite
 
-const CACHE = 'ut-shell-v1';
+// v2: neue UI-Struktur (Tabs) – alte Offline-Kopie wird ersetzt.
+const CACHE = 'ut-shell-v2';
 const SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
