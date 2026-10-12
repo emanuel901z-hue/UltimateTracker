@@ -1,0 +1,55 @@
+{
+  "_kommentar": [
+    "Beispiel: die 1NCE-API über den GENERIC-Template-Provider beschrieben.",
+    "Zeigt, dass ein beliebiger Anbieter (1NCE, EMnify, Twilio Super SIM, Soracom,",
+    "Hologram, Telnyx …) ohne Codeänderung angebunden werden kann.",
+    "Zugangsdaten stehen als ${…}-Platzhalter in server/.env – nie hier.",
+    "Aktivieren:  SIM_PROVIDER=generic  und  SIM_PROVIDER_CONFIG=/etc/ut/providers/active.json",
+    "Details: docs/sim-providers.md"
+  ],
+  "name": "1nce-generic",
+  "base_url": "https://api.1nce.com/management-api",
+  "auth": {
+    "type": "oauth2",
+    "token_url": "https://api.1nce.com/management-api/oauth/token",
+    "client_id": "${1NCE_API_CLIENTID}",
+    "client_secret": "${1NCE_API_CLIENTSECRET}",
+    "grant_type": "client_credentials",
+    "basic_auth": true,
+    "token_field": "access_token"
+  },
+  "endpoints": {
+    "list_sims": {"method": "GET", "path": "/v2/sims", "items": "$"},
+    "send_sms": {
+      "method": "POST",
+      "path": "/v2/sims/{iccid}/sms",
+      "body": {"payload": "{text}", "source_address": "{source}"}
+    },
+    "list_sms": {"method": "GET", "path": "/v2/sims/{iccid}/sms", "items": "$"},
+    "sms_quota": {"method": "GET", "path": "/v2/sims/{iccid}/quota/sms"}
+  },
+  "fields": {
+    "sim": {
+      "iccid": "iccid",
+      "msisdn": "msisdn",
+      "status": "status",
+      "label": "label",
+      "imei": "imei",
+      "quota_sms": "current_quota_SMS"
+    },
+    "sms": {
+      "id": "id",
+      "text": "payload",
+      "direction": "sms_type",
+      "state": "status",
+      "source": "source_address",
+      "submitted": "submit_date",
+      "delivered": "delivery_date"
+    },
+    "quota": {"remaining": "volume", "total": "total_volume"}
+  },
+  "maps": {
+    "direction": {"1": "MT", "2": "MO"},
+    "state": {"2": "PENDING", "4": "DELIVERED", "5": "FAILED", "6": "EXPIRED"}
+  }
+}

@@ -21,7 +21,7 @@ jobs:
           docker compose --profile google-minimal config -q
 
   bridge:
-    name: Bridge (Syntax + Import)
+    name: Bridge (Syntax + Unit-Tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m py_compile server/audio-bridge/app/main.py
+      - name: Unit-Tests der Provider-Schicht
+        working-directory: server/audio-bridge
+        run: python -m unittest discover -s tests -v
 
   smoke:
     name: Smoke-Test gegen den Stack

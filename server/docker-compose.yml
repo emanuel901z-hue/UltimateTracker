@@ -74,6 +74,8 @@ services:
       DATA_DIR: /data
     volumes:
       - audio-data:/data
+      # Provider-Konfigurationen (Template für andere SIM-Anbieter, docs/sim-providers.md)
+      - ./sim-providers:/etc/ut/providers:ro
     depends_on:
       - traccar
     healthcheck:

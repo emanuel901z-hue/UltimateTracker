@@ -25,6 +25,8 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
+from app.providers import get_provider
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 AUDIO_DIR = DATA_DIR / "audio"
 FIRMWARE_DIR = DATA_DIR / "firmware"
@@ -67,13 +69,9 @@ RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
 APPRISE_URLS = os.environ.get("APPRISE_URLS", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@example.org")
 
-# --- 1NCE API (SMS, docs/1NCE, docs/sms.md) ---------------------------------
-# Die Zugangsdaten heißen im 1NCE-Portal "1NCE_API_CLIENTID"/"…SECRET"; beide
-# Schreibweisen werden akzeptiert (führende Ziffer ist als Shell-Variable ungültig).
-NCE_API_BASE = os.environ.get("NCE_API_BASE", "https://api.1nce.com/management-api")
-NCE_CLIENT_ID = os.environ.get("1NCE_API_CLIENTID") or os.environ.get("NCE_API_CLIENTID", "")
-NCE_CLIENT_SECRET = os.environ.get("1NCE_API_CLIENTSECRET") or os.environ.get("NCE_API_CLIENTSECRET", "")
-NCE_SOURCE_ADDRESS = os.environ.get("NCE_SMS_SOURCE", "12345")
+# SIM-/SMS-Anbieter (anbieterneutral, docs/sim-providers.md):
+#   SIM_PROVIDER        = nce | generic | none   (Default: nce, wenn Zugangsdaten da)
+#   SIM_PROVIDER_CONFIG = Pfad zu einer JSON-Konfiguration für "generic"
 POLL_INTERVAL_S = env_int("POLL_INTERVAL_S", 900)
 SEARCH_POLL_INTERVAL_S = env_int("SEARCH_POLL_INTERVAL_S", 60)
 
@@ -419,60 +417,37 @@ def push_async(title: str, body: str) -> None:
     asyncio.create_task(asyncio.to_thread(send_push, title, body))
 
 
-# --- 1NCE-API-Client --------------------------------------------------------
+# --- SIM-Provider (anbieterneutral) -----------------------------------------
 
-_nce_token = {"value": "", "expires_at": 0.0}
-
-
-def nce_configured() -> bool:
-    return bool(NCE_CLIENT_ID and NCE_CLIENT_SECRET)
+_sim_provider = None
+_sim_provider_loaded = False
 
 
-def nce_token() -> str:
-    """Bearer-Token holen (OAuth2 client_credentials mit Basic-Auth)."""
-    if not nce_configured():
-        raise RuntimeError("1NCE-Zugangsdaten fehlen (1NCE_API_CLIENTID/…SECRET)")
-    now = time.time()
-    if _nce_token["value"] and _nce_token["expires_at"] > now + 30:
-        return _nce_token["value"]
-
-    import requests
-
-    response = requests.post(
-        f"{NCE_API_BASE}/oauth/token",
-        auth=(NCE_CLIENT_ID, NCE_CLIENT_SECRET),
-        json={"grant_type": "client_credentials"},
-        timeout=20,
-    )
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Token-Anfrage fehlgeschlagen (HTTP {response.status_code}): {response.text[:160]}"
-        )
-    data = response.json()
-    token = str(data.get("access_token") or "")
-    if not token:
-        raise RuntimeError("Antwort ohne access_token")
-    _nce_token["value"] = token
-    _nce_token["expires_at"] = now + float(data.get("expires_in") or 3600)
-    return token
-
-
-def nce_request(method: str, path: str, **kwargs):
-    """API-Aufruf mit Bearer-Token. Rückgabe: (status_code, payload)."""
-    import requests
-
-    response = requests.request(
-        method,
-        f"{NCE_API_BASE}{path}",
-        headers={"Authorization": f"Bearer {nce_token()}", "Accept": "application/json"},
-        timeout=30,
-        **kwargs,
-    )
+def load_provider_config() -> dict | None:
+    """JSON-Konfiguration für den Generic-Provider (SIM_PROVIDER_CONFIG)."""
+    path = os.environ.get("SIM_PROVIDER_CONFIG", "").strip()
+    if not path:
+        return None
     try:
-        payload = response.json()
-    except ValueError:
-        payload = response.text
-    return response.status_code, payload
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except FileNotFoundError:
+        print(f"[provider] Konfiguration nicht gefunden: {path}", flush=True)
+    except json.JSONDecodeError as exc:
+        print(f"[provider] Konfiguration ist kein gültiges JSON: {exc}", flush=True)
+    return None
+
+
+def sim_provider():
+    """Provider-Singleton – hält z. B. den OAuth-Token im Cache."""
+    global _sim_provider, _sim_provider_loaded
+    if not _sim_provider_loaded:
+        _sim_provider_loaded = True
+        try:
+            _sim_provider = get_provider(config=load_provider_config())
+        except Exception as exc:
+            print(f"[provider] {exc}", flush=True)
+    return _sim_provider
 
 
 # --- Retention --------------------------------------------------------------
@@ -709,7 +684,8 @@ def healthz() -> dict:
         "retention_days": RETENTION_DAYS,
         "notifications": bool(APPRISE_URLS),
         "push_subscriptions": push_subscription_count(),
-        "sms_api": nce_configured(),
+        "sim_provider": sim_provider().name if sim_provider() else None,
+        "sms_api": bool(sim_provider() and sim_provider().configured()),
     }
 
 
@@ -1087,39 +1063,32 @@ def device_delete(device_id: str) -> dict:
 
 @app.get("/api/v1/parent/sms/status", dependencies=[Depends(require_parent)])
 def sms_status() -> dict:
-    """SIMs des 1NCE-Kontos inkl. SMS-Kontingent (read-only)."""
-    if not nce_configured():
+    """SIMs des Kontos inkl. SMS-Kontingent (anbieterneutral)."""
+    provider = sim_provider()
+    if provider is None or not provider.configured():
         return {
             "configured": False,
-            "hint": "1NCE_API_CLIENTID und 1NCE_API_CLIENTSECRET in server/.env setzen",
+            "provider": provider.name if provider else None,
+            "hint": "SIM_PROVIDER und Zugangsdaten in server/.env setzen (docs/sim-providers.md)",
         }
     try:
-        status, sims = nce_request("GET", "/v2/sims")
+        sims = provider.list_sims()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"1NCE nicht erreichbar: {exc}")
-    if status != 200 or not isinstance(sims, list):
-        raise HTTPException(status_code=502, detail=f"1NCE: HTTP {status} {str(sims)[:200]}")
+        raise HTTPException(status_code=502, detail=f"SIM-Provider nicht erreichbar: {exc}")
     return {
         "configured": True,
+        "provider": provider.name,
         "count": len(sims),
-        "sims": [
-            {
-                "iccid": str(sim.get("iccid") or ""),
-                "msisdn": sim.get("msisdn"),
-                "status": sim.get("status"),
-                "label": sim.get("label"),
-                "imei": sim.get("imei"),
-                "sms_quota": sim.get("current_quota_SMS"),
-                "quota_status": sim.get("quota_status_SMS"),
-            }
-            for sim in sims[:10]
-        ],
+        "sims": [sim.as_dict() for sim in sims[:10]],
     }
 
 
 @app.post("/api/v1/parent/sms", dependencies=[Depends(require_parent)])
 async def sms_send(request: Request) -> dict:
-    """MT-SMS an den Tracker senden (1NCE A2P). Body: {"iccid": "…", "text": "…"}"""
+    """MT-SMS an den Tracker senden (serververmittelt). Body: {"iccid": "…", "text": "…"}"""
+    provider = sim_provider()
+    if provider is None or not provider.configured():
+        raise HTTPException(status_code=503, detail="Kein SIM-Provider konfiguriert")
     try:
         body = await request.json()
     except Exception:
@@ -1131,43 +1100,34 @@ async def sms_send(request: Request) -> dict:
     if len(text) > 160:
         raise HTTPException(status_code=400, detail="maximal 160 Zeichen (kein Multipart-Versand)")
     try:
-        status, payload = nce_request(
-            "POST",
-            f"/v2/sims/{iccid}/sms",
-            json={"source_address": NCE_SOURCE_ADDRESS, "payload": text},
-        )
+        result = provider.send_sms(iccid, text)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"1NCE nicht erreichbar: {exc}")
-    if status not in (200, 201):
-        raise HTTPException(status_code=502, detail=f"1NCE: HTTP {status} {str(payload)[:200]}")
-    sms_id = payload.get("id") if isinstance(payload, dict) else None
-    return {"sent": True, "iccid": iccid, "id": sms_id, "hint": "Zustellung beim nächsten Netz-Attach"}
+        raise HTTPException(status_code=502, detail=f"SMS-Versand fehlgeschlagen: {exc}")
+    return {
+        "sent": True,
+        "iccid": iccid,
+        "provider": provider.name,
+        "id": result.get("id"),
+        "hint": "Zustellung beim nächsten Netz-Attach",
+    }
 
 
 @app.get("/api/v1/parent/sms", dependencies=[Depends(require_parent)])
 def sms_list(iccid: str, limit: int = 20) -> dict:
     """MT-/MO-SMS einer SIM (Plattform → Gerät bzw. Gerät → Plattform)."""
+    provider = sim_provider()
+    if provider is None or not provider.configured():
+        raise HTTPException(status_code=503, detail="Kein SIM-Provider konfiguriert")
     try:
-        status, messages = nce_request("GET", f"/v2/sims/{iccid}/sms")
+        messages = provider.list_sms(iccid, limit)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"1NCE nicht erreichbar: {exc}")
-    if status != 200 or not isinstance(messages, list):
-        raise HTTPException(status_code=502, detail=f"1NCE: HTTP {status} {str(messages)[:200]}")
-    directions = {1: "MT", 2: "MO"}
-    states = {2: "PENDING", 4: "DELIVERED", 5: "FAILED", 6: "EXPIRED"}
-    normalised = [
-        {
-            "id": msg.get("id"),
-            "direction": directions.get(msg.get("sms_type"), msg.get("sms_type")),
-            "state": states.get(msg.get("status"), msg.get("status")),
-            "payload": msg.get("payload"),
-            "source": msg.get("source_address"),
-            "submit_date": msg.get("submit_date"),
-            "delivery_date": msg.get("delivery_date"),
-        }
-        for msg in messages[: max(1, min(limit, 100))]
-    ]
-    return {"iccid": iccid, "total": len(messages), "messages": normalised}
+        raise HTTPException(status_code=502, detail=f"SMS-Abfrage fehlgeschlagen: {exc}")
+    return {
+        "iccid": iccid,
+        "provider": provider.name,
+        "total": len(messages),
+        "messages": [message.as_dict() for message in messages],
+    }
 
 
 # --- Find My (Apple / Google) ----------------------------------------------

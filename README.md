@@ -31,7 +31,8 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/simulation.md` | Tests/Simulation ohne Hardware (Simulator, native Tests, QEMU) |
 | `docs/deployment.md` | Server-Deployment (WSL, Docker, Thin Client) |
 | `docs/findmy.md` | Apple/Google Find My: Gegenstücke, Setup, Grenzen (experimentell) |
-| `docs/sms.md` | Identitäten (IMEI/MSISDN) und SMS-Pfad |
+| `docs/sms.md` | Identitäten (IMEI/MSISDN) und SMS-Pfad (1NCE: A2P) |
+| `docs/sim-providers.md` | Anbieterneutrale SIM-/SMS-Schicht + Template für andere MVNOs |
 | `docs/decisions.md` | Entscheidungsprotokoll (ADR-Kurzform) |
 | `firmware/` | ESP32-S3-Firmware (PlatformIO, Skelett) |
 | `server/` | Docker-Stack: Traccar + Audio-Bridge |

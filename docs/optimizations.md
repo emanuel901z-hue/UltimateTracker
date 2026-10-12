@@ -14,6 +14,7 @@ die aktuelle Basis läuft.
 | A4b **Web-Push + PWA** (VAPID, Service Worker, Abo-Verwaltung) | ✅ umgesetzt + getestet (Schlüssel, Abo, Versandpfad, Cleanup) |
 | Hardware-Phase vorbereitet: `docs/bring-up.md`, Mess-Session-Generator | ✅ |
 | **1NCE-SMS-API** (OAuth2, SIM-/SMS-Endpunkte, UI-Karte) | ✅ umgesetzt + mit echtem Konto getestet (read-only; SIM fehlt noch) |
+| **Provider-Schicht** (`SimProvider`, nce/generic, 16 Unit-Tests) | ✅ anbieterneutral – 1NCE läuft sowohl als Code-Provider als auch über das JSON-Template (`docs/sim-providers.md`) |
 | A5 Sync-Endpunkt (`POST /api/v1/device/sync`) | ✅ Server-Seite umgesetzt + getestet; Firmware folgt (B4) |
 | A6 Bridge-Härtung (WAL, Upload-Limit, Fail-fast, Retention) | ✅ umgesetzt + getestet |
 | A7 Log-Rotation + Backup-Skript | ✅ umgesetzt (`scripts/backup-volumes.sh`) |
