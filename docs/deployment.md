@@ -100,6 +100,14 @@ curl -s "http://localhost:5055/?id=TEST123&lat=48.1372&lon=11.5756&batt=87&times
 
 ## 5b. Eltern-UI: Benutzer & Anmeldung (mehrere Kinder, mehrere Eltern)
 
+**Erststart ohne Terminal:** Existiert noch kein Konto, zeigt die UI beim ersten
+Aufruf „**Konto anlegen**" (der erste Benutzer wird Administrator – wie bei
+Traccar). Danach übernimmt der Setup-Assistent (Abschnitt 5c). Eine
+`server/.env` ist dafür **nicht nötig**: `DEVICE_TOKEN`, `PARENT_TOKEN` und der
+Traccar-Administrator entstehen automatisch; die Tokens liegen in der Datenbank
+und überleben Neustarts. Der Assistent zeigt den Device-Token zum Kopieren an
+(für die Firmware-Einrichtung).
+
 Die Eltern-UI hat einen **richtigen Login** (Benutzerkonten mit PBKDF2-Hashes,
 Sitzungstoken, 30 Tage gültig). Der erste Administrator entsteht beim Start aus
 `server/.env`:
