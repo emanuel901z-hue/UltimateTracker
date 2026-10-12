@@ -18,6 +18,12 @@
 # Internet-Betrieb: echte Domains in SITE_* eintragen, TLS_ARG=du@example.org,
 # Ports 80/443 freigeben – Caddy holt die Zertifikate automatisch.
 
+# Global: Für Verbindungen OHNE SNI (Browser senden bei IP-Adressen kein SNI)
+# verwendet Caddy dieses Zertifikat – nötig für https://<host-ip>/
+{
+	default_sni {$SITE_LAN:localhost}
+}
+
 {$SITE_AUDIO:audio.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
@@ -40,4 +46,16 @@
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
 	reverse_proxy macless-haystack:6176
+}
+
+# ---------------------------------------------------------------------------
+# LAN-/Schnellzugriff: nackter Hostname oder IP-Adresse (z. B. https://10.1.9.15/)
+# landet direkt in der Eltern-UI – dem Einstiegspunkt.
+# In server/.env setzen:  SITE_LAN=10.1.9.15   (oder der Rechnername)
+# Ohne Eintrag bedient der Block nur "localhost".
+# ---------------------------------------------------------------------------
+{$SITE_LAN:localhost} localhost {
+	tls {$TLS_ARG:internal}
+	encode zstd gzip
+	reverse_proxy audio-bridge:8085
 }

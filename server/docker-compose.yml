@@ -106,6 +106,7 @@ services:
       SITE_TRACCAR: ${SITE_TRACCAR:-traccar.localhost}
       SITE_FINDMY: ${SITE_FINDMY:-findmy.localhost}
       SITE_APPLE: ${SITE_APPLE:-apple.localhost}
+      SITE_LAN: ${SITE_LAN:-localhost}
       TLS_ARG: ${TLS_ARG:-internal}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro

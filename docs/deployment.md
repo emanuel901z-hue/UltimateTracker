@@ -243,6 +243,26 @@ Config-Bind-Mounts (nur lesend). Die Container-Namen sind **nicht** mehr fest
 verdrahtet (`ut-*`), sondern vom Compose-Projekt abgeleitet – Skripte wie der
 Smoke-Test finden den Bridge-Container dynamisch.
 
+### 8.3 Zugriff vom Handy im LAN (WSL2 nutzt NAT!)
+
+WSL2 nutzt **NAT**: Die veröffentlichten Ports sind **nur auf `localhost`** sichtbar.
+Vom Handy ist `http://<host-ip>:8085` deshalb nicht erreichbar – das ist kein
+Konfigurationsfehler im Stack. Drei Wege:
+
+| Weg | Aufwand | Bemerkung |
+|---|---|---|
+| **Port-Weiterleitung auf dem Host** | `powershell -ExecutionPolicy Bypass -File scripts\windows-lan-forward.ps1` (als **Administrator**) | leitet 8085/8082/4321/80/443 per `netsh portproxy` auf die WSL-IP und öffnet die Firewall-Regeln. Nach jedem Distro-Neustart erneut ausführen (WSL-IP ändert sich) |
+| **Mirrored Networking** | `C:\Users\<du>\.wslconfig`: `[wsl2]` + `networkingMode=mirrored`, danach `wsl --shutdown` | WSL teilt sich die Host-IP → LAN-Zugriff ohne Weiterleitung (Windows 11 22H2+). Gilt für **alle** Distros |
+| **Tailscale** (empfohlen für „von außen") | in der WSL: `curl -fsSL https://tailscale.com/install.sh \| sh` + `sudo tailscale up` | eigenes Tailnet-Gerät, **kein** offener Port, Zugriff vom Handy überall – ohne DynDNS. Ideal, weil auf dem Windows-Host ohnehin Tailscale läuft |
+
+**HTTPS über die nackte IP:** In `server/.env` `SITE_LAN=10.1.9.15` setzen – Caddy
+stellt dafür ein Zertifikat aus. Wichtig: Browser senden bei **IP-Adressen kein
+SNI**; deshalb steht im Caddyfile zusätzlich `default_sni {$SITE_LAN:localhost}`.
+Ohne das schlägt der TLS-Handshake fehl („internal error", HTTP 000).
+Das Zertifikat stammt aus der internen Caddy-CA → auf dem Handy einmalig
+`caddy-root.crt` importieren (Abschnitt 6). Für den Schnelltest genügt
+`http://<host-ip>:8085` (über die Port-Weiterleitung oben).
+
 ## 9. Operationszentrale & Internet-Betrieb
 
 ### 10.1 Was gehört wohin (und warum nicht alles in Traccar)
