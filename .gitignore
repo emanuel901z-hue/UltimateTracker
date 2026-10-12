@@ -19,6 +19,10 @@ server/audio-bridge/data/
 *.db
 *.sqlite3
 
+# Firmware-Backups (Werks-Image, große Binärdateien – lokal behalten)
+firmware/backup/
+*.bin
+
 # Lokal erzeugte Zugangsdaten (nie committen)
 ADMIN-ZUGANG.txt
 server/ADMIN-ZUGANG.txt
