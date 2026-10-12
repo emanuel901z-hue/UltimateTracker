@@ -1,0 +1,51 @@
+{
+  "_kommentar": [
+    "Vorlage: EMnify (deutscher Anbieter, international Cat-M/NB-IoT) über den",
+    "GENERIC-Provider. NICHT getestet – Feldnamen/Pfade vor dem Einsatz gegen",
+    "https://cdn.emnify.net/api/doc/ prüfen (Stand 2026-10).",
+    "Besonderheit: Der Token wird per eigenem Body geholt",
+    "  POST /api/v1/authenticate  {\"application_token\": \"…\"}  →  auth_token",
+    "SMS hängt an EMnify an einem 'endpoint' (SIM+Gerät) – die ICCID wird über",
+    "fields.sim.provider_id = \"id\" auf die Endpoint-ID abgebildet.",
+    "Zugangsdaten: EMNIFY_APPLICATION_TOKEN in server/.env"
+  ],
+  "name": "emnify",
+  "base_url": "https://cdn.emnify.net/api/v1",
+  "auth": {
+    "type": "oauth2",
+    "token_url": "https://cdn.emnify.net/api/v1/authenticate",
+    "token_body": {"application_token": "${EMNIFY_APPLICATION_TOKEN}"},
+    "token_field": "auth_token",
+    "basic_auth": false
+  },
+  "endpoints": {
+    "list_sims": {"method": "GET", "path": "/endpoint", "items": "$"},
+    "send_sms": {
+      "method": "POST",
+      "path": "/endpoint/{provider_id}/sms",
+      "body": {"source_address": "{source}", "payload": "{text}"}
+    },
+    "list_sms": {"method": "GET", "path": "/endpoint/{provider_id}/sms", "items": "$"}
+  },
+  "fields": {
+    "sim": {
+      "iccid": "sim.iccid",
+      "msisdn": "msisdn",
+      "status": "status.description",
+      "label": "name",
+      "provider_id": "id"
+    },
+    "sms": {
+      "id": "id",
+      "text": "payload",
+      "direction": "sms_type",
+      "source": "source_address",
+      "submitted": "submit_date",
+      "delivered": "delivery_date"
+    }
+  },
+  "maps": {
+    "direction": {"1": "MT", "2": "MO"},
+    "state": {"2": "PENDING", "4": "DELIVERED", "5": "FAILED"}
+  }
+}

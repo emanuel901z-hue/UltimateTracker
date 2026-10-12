@@ -11,7 +11,7 @@ class ProviderError(RuntimeError):
 
 class SimInfo:
     def __init__(self, iccid: str, msisdn: str = "", status: str = "", label: str = "",
-                 imei: str = "", quota_sms=None, raw: dict | None = None):
+                 imei: str = "", quota_sms=None, raw: dict | None = None, provider_id: str = ""):
         self.iccid = iccid
         self.msisdn = msisdn
         self.status = status
@@ -19,6 +19,10 @@ class SimInfo:
         self.imei = imei
         self.quota_sms = quota_sms
         self.raw = raw or {}
+        # Interne ID des Anbieters (z. B. Twilio SIM-SID, Onomondo sim_id,
+        # EMnify endpoint_id). Viele APIs adressieren SIMs nicht über die ICCID –
+        # dann wird beim Versand darüber aufgelöst.
+        self.provider_id = provider_id or iccid
 
     def as_dict(self) -> dict:
         return {
@@ -83,3 +87,21 @@ class SimProvider(ABC):
     @abstractmethod
     def list_sms(self, iccid: str, limit: int = 20) -> list[SmsMessage]:
         """MT-/MO-Verlauf einer SIM."""
+
+    # --- optionale Fähigkeiten (Standard: nicht unterstützt) ----------------
+
+    def supports_watch(self) -> bool:
+        """Kann der Anbieter SMS in Echtzeit melden (Push/WebSocket)?"""
+        return False
+
+    async def watch_sms(self, iccid: str, callback) -> None:
+        """Echtzeit-Benachrichtigungen; ruft `callback(SmsMessage)` auf.
+
+        Läuft bis zum Abbruch (asyncio.CancelledError) – die Implementierung
+        kümmert sich um Wiederverbindung.
+        """
+        raise NotImplementedError(f"{self.name} unterstützt keine Echtzeit-Meldungen")
+
+    def network_location(self, iccid: str) -> dict | None:
+        """Netzbasierte Position (falls der Anbieter das kann)."""
+        return None

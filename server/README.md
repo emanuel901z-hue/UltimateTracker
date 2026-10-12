@@ -48,6 +48,7 @@ docker compose logs -f audio-bridge
 | GET | `/api/v1/parent/sms/status` | Parent-Token | 1NCE-Konto: SIMs + SMS-Kontingent |
 | POST | `/api/v1/parent/sms` | Parent-Token | MT-SMS an den Tracker (`{iccid, text}`) |
 | GET | `/api/v1/parent/sms?iccid=` | Parent-Token | MT-/MO-SMS-Verlauf einer SIM |
+| GET | `/api/v1/parent/sim/messages` | Parent-Token | per Echtzeit-Subscription empfangene SMS |
 
 Token-Header: `X-Auth-Token: <token>`.
 

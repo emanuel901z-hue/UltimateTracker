@@ -71,8 +71,10 @@ APPRISE_URLS = os.environ.get("APPRISE_URLS", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@example.org")
 
 # SIM-/SMS-Anbieter (anbieterneutral, docs/sim-providers.md):
-#   SIM_PROVIDER        = nce | generic | none   (Default: nce, wenn Zugangsdaten da)
+#   SIM_PROVIDER        = nce | whereversim | generic | none
 #   SIM_PROVIDER_CONFIG = Pfad zu einer JSON-Konfiguration für "generic"
+#   SMS_SUBSCRIBE       = 1 → Echtzeit-SMS des Anbieters abonnieren (falls unterstützt)
+SMS_SUBSCRIBE = os.environ.get("SMS_SUBSCRIBE", "").strip().lower() in ("1", "true", "yes", "on")
 POLL_INTERVAL_S = env_int("POLL_INTERVAL_S", 900)
 SEARCH_POLL_INTERVAL_S = env_int("SEARCH_POLL_INTERVAL_S", 60)
 
@@ -170,6 +172,17 @@ def init_db() -> None:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(devices)")}
         if "iccid" not in columns:
             conn.execute("ALTER TABLE devices ADD COLUMN iccid TEXT NOT NULL DEFAULT ''")
+        # Per Echtzeit-Subscription empfangene SMS (docs/sim-providers.md)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS sim_sms (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   iccid TEXT NOT NULL DEFAULT '',
+                   direction TEXT NOT NULL DEFAULT '',
+                   originator TEXT NOT NULL DEFAULT '',
+                   text TEXT NOT NULL DEFAULT '',
+                   received_at TEXT NOT NULL
+               )"""
+        )
 
 
 def now_iso() -> str:
@@ -451,6 +464,52 @@ def sim_provider():
     return _sim_provider
 
 
+async def watch_sim_messages() -> None:
+    """Echtzeit-SMS des Anbieters abonnieren (falls unterstützt).
+
+    Eingehende Nachrichten landen in der Tabelle `sim_sms`; Nachrichten **vom
+    Gerät** (MO) lösen zusätzlich eine Eltern-Benachrichtigung aus – das ist der
+    Pfad für „Tracker meldet sich per SMS", ohne auf das Polling zu warten.
+    """
+    provider = sim_provider()
+    if provider is None or not provider.configured():
+        print("[sms-watch] kein SIM-Provider konfiguriert", flush=True)
+        return
+    if not provider.supports_watch():
+        print(f"[sms-watch] {provider.name} unterstützt keine Echtzeit-SMS", flush=True)
+        return
+
+    with db() as conn:
+        rows = conn.execute("SELECT DISTINCT iccid FROM devices WHERE iccid != ''").fetchall()
+    iccids = [str(row["iccid"]) for row in rows]
+    if not iccids:
+        print("[sms-watch] keine ICCID in der Geräte-Registry – Echtzeit-SMS inaktiv", flush=True)
+        return
+
+    async def handle(sms) -> None:
+        iccid = str(sms.raw.get("iccid") or "")
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO sim_sms(iccid, direction, originator, text, received_at) "
+                "VALUES(?, ?, ?, ?, ?)",
+                (iccid, sms.direction, sms.source, sms.text, now_iso()),
+            )
+        label = "vom Tracker" if sms.direction == "MO" else "an den Tracker"
+        print(f"[sms-watch] SMS {label}: {sms.text[:60]!r}", flush=True)
+        if sms.direction == "MO":  # Gerät → Server: Eltern sofort informieren
+            push_async("SMS vom Tracker", sms.text[:120] or "(leer)")
+            notify_async("SMS vom Tracker", sms.text[:200] or "(leer)")
+
+    print(f"[sms-watch] Echtzeit-SMS aktiv für {len(iccids)} SIM(s)", flush=True)
+    tasks = [asyncio.create_task(provider.watch_sms(iccid, handle)) for iccid in iccids]
+    try:
+        await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        for task in tasks:
+            task.cancel()
+        raise
+
+
 # --- Retention --------------------------------------------------------------
 
 
@@ -666,11 +725,14 @@ def forward_to_traccar(loc: dict) -> bool:
 async def lifespan(_: FastAPI):
     validate_config()
     init_db()
-    task = asyncio.create_task(retention_loop())
+    retention = asyncio.create_task(retention_loop())
+    watch = asyncio.create_task(watch_sim_messages()) if SMS_SUBSCRIBE else None
     try:
         yield
     finally:
-        task.cancel()
+        retention.cancel()
+        if watch is not None:
+            watch.cancel()
 
 
 app = FastAPI(title="UltimateTracker Audio-Bridge", version="0.3.0", lifespan=lifespan)
@@ -690,6 +752,7 @@ def healthz() -> dict:
         "push_subscriptions": push_subscription_count(),
         "sim_provider": sim_provider().name if sim_provider() else None,
         "sms_api": bool(sim_provider() and sim_provider().configured()),
+        "sms_subscribe": SMS_SUBSCRIBE,
     }
 
 
@@ -1060,6 +1123,16 @@ def device_delete(device_id: str) -> dict:
     with db() as conn:
         conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
     return {"deleted": device_id}
+
+
+@app.get("/api/v1/parent/sim/messages", dependencies=[Depends(require_parent)])
+def sim_messages(limit: int = 50) -> dict:
+    """Per Echtzeit-Subscription empfangene SMS (Gerät → Server / Server → Gerät)."""
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM sim_sms ORDER BY id DESC LIMIT ?", (max(1, min(limit, 200)),)
+        ).fetchall()
+    return {"count": len(rows), "messages": [dict(row) for row in rows]}
 
 
 # --- 1NCE-SMS (serververmittelt, docs/sms.md) -------------------------------

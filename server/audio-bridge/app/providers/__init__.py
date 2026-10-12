@@ -8,6 +8,7 @@ entweder als Code (`nce.py`) oder rein konfigurationsgetrieben (`generic.py`).
 from .base import SimInfo, SmsMessage, SimProvider, ProviderError  # noqa: F401
 from .generic import GenericProvider
 from .nce import NceProvider
+from .whereversim import WhereverSimProvider
 
 
 def get_provider(name: str | None = None, config: dict | None = None) -> SimProvider | None:
@@ -26,6 +27,8 @@ def get_provider(name: str | None = None, config: dict | None = None) -> SimProv
         return None
     if chosen in ("nce", "1nce"):
         return NceProvider()
+    if chosen in ("whereversim", "wherever", "wvs"):
+        return WhereverSimProvider()
     if chosen in ("generic", "custom", "template"):
         return GenericProvider(config)
-    raise ProviderError(f"Unbekannter SIM-Provider: {chosen!r} (erwartet: nce, generic, none)")
+    raise ProviderError(f"Unbekannter SIM-Provider: {chosen!r} (erwartet: nce, whereversim, generic, none)")

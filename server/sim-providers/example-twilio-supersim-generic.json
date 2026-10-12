@@ -1,0 +1,47 @@
+{
+  "_kommentar": [
+    "Vorlage: Twilio Super SIM (global, Cat-M/NB-IoT) über den GENERIC-Provider.",
+    "NICHT getestet – Feldnamen/Pfade vor dem Einsatz gegen",
+    "https://www.twilio.com/docs/iot/supersim prüfen (Stand 2026-10).",
+    "Auth: Basic (Account SID + Auth Token aus der Twilio-Konsole).",
+    "Besonderheit: Super SIM adressiert SIMs über die SID, nicht die ICCID →",
+    "fields.sim.provider_id = \"sid\". SMS-Befehle gehen als Formulardaten raus",
+    "(deshalb \"encoding\": \"form\").",
+    "Zugangsdaten: TWILIO_ACCOUNT_SID und TWILIO_AUTH_TOKEN in server/.env"
+  ],
+  "name": "twilio-supersim",
+  "base_url": "https://supersim.api.twilio.com",
+  "auth": {
+    "type": "basic",
+    "username": "${TWILIO_ACCOUNT_SID}",
+    "password": "${TWILIO_AUTH_TOKEN}"
+  },
+  "endpoints": {
+    "list_sims": {"method": "GET", "path": "/v1/Sims", "items": "sims"},
+    "send_sms": {
+      "method": "POST",
+      "path": "/v1/SmsCommands",
+      "encoding": "form",
+      "body": {"Sim": "{provider_id}", "Payload": "{text}"}
+    },
+    "list_sms": {"method": "GET", "path": "/v1/SmsCommands", "items": "sms_commands"}
+  },
+  "fields": {
+    "sim": {
+      "iccid": "iccid",
+      "msisdn": "msisdn",
+      "status": "status",
+      "label": "friendly_name",
+      "provider_id": "sid"
+    },
+    "sms": {
+      "id": "sid",
+      "text": "payload",
+      "direction": "direction",
+      "submitted": "date_created"
+    }
+  },
+  "maps": {
+    "direction": {"to_sim": "MT", "from_sim": "MO"}
+  }
+}

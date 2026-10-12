@@ -29,6 +29,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m py_compile server/audio-bridge/app/main.py
+      - name: Test-Abhängigkeiten installieren
+        run: pip install requests websockets
       - name: Unit-Tests der Provider-Schicht
         working-directory: server/audio-bridge
         run: python -m unittest discover -s tests -v

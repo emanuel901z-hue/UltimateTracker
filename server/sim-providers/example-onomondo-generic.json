@@ -1,0 +1,45 @@
+{
+  "_kommentar": [
+    "Vorlage: Onomondo (dänischer Anbieter, international Cat-M/NB-IoT) über den",
+    "GENERIC-Provider. NICHT getestet – Feldnamen vor dem Einsatz gegen",
+    "https://docs.onomondo.com/ prüfen (Stand 2026-10).",
+    "Auth: Header 'Authorization: Bearer <API-Key>' (Schlüssel im Portal erzeugen).",
+    "Besonderheit: SIMs werden über die interne sim_id adressiert, nicht über die",
+    "ICCID → fields.sim.provider_id = \"id\" bildet das ab.",
+    "Hinweis: /sms/usage/{sim_id} liefert Nutzungs-/Zustellinformationen, nicht den",
+    "Nachrichtentext (Onomondo liefert SMS-Inhalte primär per Webhook/Connector).",
+    "Zugangsdaten: ONOMONDO_API_KEY in server/.env"
+  ],
+  "name": "onomondo",
+  "base_url": "https://api.onomondo.com",
+  "auth": {
+    "type": "header",
+    "header_name": "Authorization",
+    "header_value": "Bearer ${ONOMONDO_API_KEY}"
+  },
+  "endpoints": {
+    "list_sims": {"method": "GET", "path": "/sims", "items": "$"},
+    "send_sms": {
+      "method": "POST",
+      "path": "/sms/{provider_id}",
+      "body": {"from": "UltimateTracker", "text": "{text}"}
+    },
+    "list_sms": {"method": "GET", "path": "/sms/usage/{provider_id}", "items": "$"}
+  },
+  "fields": {
+    "sim": {
+      "iccid": "iccid",
+      "msisdn": "msisdn",
+      "status": "state",
+      "label": "label",
+      "provider_id": "id"
+    },
+    "sms": {
+      "id": "id",
+      "text": "text",
+      "direction": "direction",
+      "source": "from",
+      "submitted": "created_at"
+    }
+  }
+}

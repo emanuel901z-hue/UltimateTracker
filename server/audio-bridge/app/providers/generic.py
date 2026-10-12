@@ -100,6 +100,7 @@ class GenericProvider(SimProvider):
         self.fields = self.config.get("fields") or {}
         self.maps = self.config.get("maps") or {}
         self._token = {"value": "", "expires_at": 0.0}
+        self._sims_cache = {"value": None, "expires_at": 0.0}
 
     # --- Auth ---------------------------------------------------------------
     def configured(self) -> bool:
@@ -115,7 +116,11 @@ class GenericProvider(SimProvider):
         if auth_type == "header":
             return bool(self.auth.get("header_name"))
         if auth_type == "oauth2":
-            return bool(self.auth.get("token_url") and self.auth.get("client_id"))
+            # Entweder Basic-Auth mit client_id/secret ODER ein eigener Token-Body
+            # (z. B. EMnify: {"application_token": …}).
+            has_token_body = isinstance(self.auth.get("token_body"), dict)
+            return bool(self.auth.get("token_url")
+                        and (has_token_body or self.auth.get("client_id")))
         return True
 
     def _headers(self) -> dict:
@@ -135,13 +140,20 @@ class GenericProvider(SimProvider):
 
         import requests
 
-        body = {"grant_type": str(self.auth.get("grant_type") or "client_credentials")}
-        kwargs = {"json": body, "timeout": 20}
-        if self.auth.get("basic_auth", True):
-            kwargs["auth"] = (self.auth.get("client_id"), self.auth.get("client_secret"))
+        token_body = self.auth.get("token_body")
+        if isinstance(token_body, dict):
+            body = dict(token_body)          # z. B. {"application_token": "${EMNIFY_TOKEN}"}
+            use_basic = bool(self.auth.get("basic_auth", False))
         else:
-            body["client_id"] = self.auth.get("client_id")
-            body["client_secret"] = self.auth.get("client_secret")
+            body = {"grant_type": str(self.auth.get("grant_type") or "client_credentials")}
+            use_basic = bool(self.auth.get("basic_auth", True))
+            if not use_basic:
+                body["client_id"] = self.auth.get("client_id")
+                body["client_secret"] = self.auth.get("client_secret")
+
+        kwargs = {"json": body, "timeout": 20}
+        if use_basic:
+            kwargs["auth"] = (self.auth.get("client_id"), self.auth.get("client_secret"))
 
         response = requests.post(str(self.auth.get("token_url")), **kwargs)
         if response.status_code != 200:
@@ -165,7 +177,12 @@ class GenericProvider(SimProvider):
         method = str(spec.get("method") or "GET").upper()
         kwargs = {"headers": self._headers(), "timeout": 30}
         if spec.get("body"):
-            kwargs["json"] = fill_template(spec["body"], values)
+            filled = fill_template(spec["body"], values)
+            # Manche APIs erwarten Formulardaten statt JSON (z. B. Twilio).
+            if str(spec.get("encoding") or "json").lower() == "form":
+                kwargs["data"] = filled
+            else:
+                kwargs["json"] = filled
         auth_type = str(self.auth.get("type") or "none").lower()
         if auth_type == "basic":
             kwargs["auth"] = (self.auth.get("username"), self.auth.get("password"))
@@ -198,15 +215,17 @@ class GenericProvider(SimProvider):
         fields = self.fields.get("sim") or {}
         result = []
         for item in self._items(spec, payload):
+            iccid = str(dig(item, fields.get("iccid", "iccid")) or "")
             result.append(
                 SimInfo(
-                    iccid=str(dig(item, fields.get("iccid", "iccid")) or ""),
+                    iccid=iccid,
                     msisdn=str(dig(item, fields.get("msisdn", "msisdn")) or ""),
                     status=str(dig(item, fields.get("status", "status")) or ""),
                     label=str(dig(item, fields.get("label", "label")) or ""),
                     imei=str(dig(item, fields.get("imei", "imei")) or ""),
                     quota_sms=dig(item, fields.get("quota_sms")) if fields.get("quota_sms") else None,
                     raw=item if isinstance(item, dict) else {},
+                    provider_id=str(dig(item, fields.get("provider_id")) or "") if fields.get("provider_id") else "",
                 )
             )
         return result
@@ -223,8 +242,35 @@ class GenericProvider(SimProvider):
             "total": dig(payload, fields.get("total", "total_volume")),
         }
 
+    def _resolve_provider_id(self, iccid: str) -> str:
+        """Anbieter-ID zu einer ICCID (z. B. Twilio SID, Onomondo sim_id).
+
+        Ohne Feld `provider_id` in der Konfiguration ist das die ICCID selbst.
+        """
+        fields = self.fields.get("sim") or {}
+        if not fields.get("provider_id"):
+            return iccid
+        now = time.time()
+        if self._sims_cache["value"] is None or self._sims_cache["expires_at"] < now:
+            self._sims_cache["value"] = self.list_sims()
+            self._sims_cache["expires_at"] = now + 300
+        for sim in self._sims_cache["value"]:
+            if sim.iccid == iccid:
+                return sim.provider_id
+        # nicht gefunden: Cache verwerfen und ein zweites Mal versuchen
+        self._sims_cache["value"] = self.list_sims()
+        self._sims_cache["expires_at"] = time.time() + 300
+        for sim in self._sims_cache["value"]:
+            if sim.iccid == iccid:
+                return sim.provider_id
+        return iccid
+
     def send_sms(self, iccid: str, text: str) -> dict:
-        status, payload = self._call("send_sms", {"iccid": iccid, "text": text, "source": "12345"})
+        provider_id = self._resolve_provider_id(iccid)
+        status, payload = self._call(
+            "send_sms",
+            {"iccid": iccid, "provider_id": provider_id, "text": text, "source": "12345"},
+        )
         if status not in (200, 201, 202):
             raise ProviderError(f"{self.name} SMS-Versand: HTTP {status} {str(payload)[:160]}")
 
