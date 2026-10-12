@@ -19,6 +19,9 @@ server/audio-bridge/data/
 *.db
 *.sqlite3
 
+# Lokal exportierte Caddy-CA (nur für Geräte-Import nötig)
+server/caddy-root.crt
+
 # Firmware-Backups (Werks-Image, große Binärdateien – lokal behalten)
 firmware/backup/
 *.bin
