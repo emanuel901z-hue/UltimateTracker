@@ -184,14 +184,20 @@
       <div class="card">
         <h2>Karte</h2>
         <div class="row-tight">
-          <button id="map-load">Karte hier laden</button>
-          <a id="map-link" href="#" target="_blank" rel="noopener">in neuem Tab öffnen</a>
+          <button id="map-load" class="primary">Karte laden</button>
+          <button id="map-refresh" hidden>Positionen aktualisieren</button>
+          <a id="map-link" href="#" target="_blank" rel="noopener">Traccar öffnen (Verlauf, Geofences)</a>
         </div>
         <div id="map-wrap" class="mt" hidden>
-          <iframe id="map" title="Traccar-Karte (Standorte und Verlauf)" loading="lazy"></iframe>
+          <div id="map" role="img" aria-label="Karte mit den letzten Positionen der Tracker"></div>
+          <p class="hint" id="map-legend" role="status" aria-live="polite"></p>
         </div>
-        <p class="hint">Die Karte kommt aus Traccar. Für Verlauf, Geofences und Berichte
-          dort „in neuem Tab öffnen" – die Anmeldung gilt dank Single Sign-on weiter.</p>
+        <p class="hint">
+          Die Karte kommt direkt aus der Bridge – <strong>keine zweite Anmeldung</strong>.
+          Sie zeigt die jeweils letzte Position je Kind (Marker) und je Find-My-Beacon (Kreis).
+          Für Verlauf, Geofences und Berichte „Traccar öffnen" – dort gilt Traccars eigenes
+          Konto (einmalig pro Browser).
+        </p>
       </div>
     </section>
 
@@ -718,18 +724,88 @@ async function loadServices() {
   }
 }
 
-function embedMap() {
-  const url = $('map-link').href;
-  if (!url || url === '#' || $('map').src === url) return;
-  $('map').src = url;
-  $('map-wrap').hidden = false;
+// --- Karte (Leaflet, selbst gehostet – ohne zweite Anmeldung) ---------------
+let leafletMap = null;
+let markerLayer = null;
+let mapInterval = null;
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
-$('map-load').addEventListener('click', embedMap);
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = '/static/vendor/leaflet/leaflet.css';
+    document.head.appendChild(css);
+    const script = document.createElement('script');
+    script.src = '/static/vendor/leaflet/leaflet.js';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Leaflet konnte nicht geladen werden'));
+    document.head.appendChild(script);
+  });
+}
+
+async function loadMap() {
+  if (!state.token) return;
+  try {
+    await loadLeaflet();
+  } catch (err) {
+    $('map-legend').textContent = err.message;
+    return;
+  }
+  const res = await fetch('/api/v1/parent/map', { headers: headers() });
+  if (!res.ok) { $('map-legend').textContent = 'Karte: HTTP ' + res.status; return; }
+  const data = await res.json();
+
+  if (!leafletMap) {
+    leafletMap = L.map('map', { zoomControl: true });
+    L.tileLayer(data.tiles, { attribution: data.attribution, maxZoom: 19 }).addTo(leafletMap);
+    leafletMap.setView([51.163, 10.447], 5);
+  }
+  if (markerLayer) markerLayer.remove();
+  markerLayer = L.layerGroup().addTo(leafletMap);
+
+  const bounds = [];
+  data.trackers.forEach((tracker) => {
+    L.marker([tracker.latitude, tracker.longitude]).addTo(markerLayer).bindPopup(
+      '<strong>' + escapeHtml(tracker.name) + '</strong><br>' +
+      (tracker.battery != null ? Math.round(tracker.battery) + ' % · ' : '') + fmt(tracker.received_at));
+    bounds.push([tracker.latitude, tracker.longitude]);
+  });
+  data.beacons.forEach((beacon) => {
+    L.circleMarker([beacon.latitude, beacon.longitude], { radius: 7, weight: 2, color: '#8ab6ff' })
+      .addTo(markerLayer)
+      .bindPopup(escapeHtml(beacon.provider + ' / ' + beacon.beacon_id) + '<br>' + fmt(beacon.received_at));
+    bounds.push([beacon.latitude, beacon.longitude]);
+  });
+  if (bounds.length) leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+
+  $('map-legend').textContent = data.trackers.length + ' Tracker · ' + data.beacons.length +
+    ' Find-My-Beacon(s) · Stand ' + new Date().toLocaleTimeString();
+  $('map-wrap').hidden = false;
+  $('map-refresh').hidden = false;
+  if (!mapInterval) {
+    mapInterval = setInterval(() => { if (!document.hidden) loadMap(); }, 60000);
+  }
+  leafletMap.invalidateSize();
+  // Nach dem Einblenden noch einmal messen, sonst bleiben Kacheln grau.
+  setTimeout(() => leafletMap && leafletMap.invalidateSize(), 300);
+}
+
+$('map-load').addEventListener('click', loadMap);
+$('map-refresh').addEventListener('click', loadMap);
 document.addEventListener('click', (event) => {
   const target = event.target;
   if (!target || !target.dataset) return;
-  if (target.dataset.embed === 'traccar') embedMap();
+  if (target.dataset.embed === 'traccar') {
+    selectTab(document.getElementById('tab-karte'), false);
+    loadMap();
+  }
   if (target.dataset.child) {
     state.device = target.dataset.child;
     localStorage.setItem('ut_device', state.device);
@@ -1044,6 +1120,7 @@ function selectTab(tab, moveFocus = true) {
   localStorage.setItem('ut_tab', tab.id);
   if (moveFocus) tab.focus();
   if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); }
+  if (tab.id === 'tab-karte' && leafletMap) leafletMap.invalidateSize();
   if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); }
   if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); }
   if (tab.id === 'tab-konto') loadUsers();

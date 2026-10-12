@@ -17,8 +17,9 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 - **Sprachnachrichten in beide Richtungen**: Kind drückt PTT, Eltern antworten
   über eine Web-Oberfläche (auch als PWA aufs Handy installierbar)
 - **Suchalarm** (Piezo) und **Bewegungs-Wake** über einen Beschleunigungssensor
-- **Operationszentrale** für die Eltern: Karte (Traccar eingebettet), Kinder-Übersicht,
-  Nachrichten, Geräteverwaltung, Benutzerkonten mit Login, SIM-/SMS-Verwaltung,
+- **Operationszentrale** für die Eltern: **eigene Karte** (Leaflet, selbst
+  gehostet – ohne zweite Anmeldung), Kinder-Übersicht, Nachrichten,
+  Geräteverwaltung, Benutzerkonten mit Login, SIM-/SMS-Verwaltung,
   Firmware-Updates, Monitoring, Einstellungen und Backup an einer Stelle
 - **Optional**: Apple-/Google-Find-My-Anbindung als Zusatzortung (experimentell)
 

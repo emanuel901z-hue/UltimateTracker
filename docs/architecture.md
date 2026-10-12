@@ -111,6 +111,7 @@ Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes),
 | POST | `/api/v1/auth/password` | Sitzung | eigenes Passwort ändern (andere Sitzungen enden) |
 | POST | `/api/v1/auth/users/{id}/password` | Admin | Passwort zurücksetzen (ohne altes Passwort) |
 | GET | `/api/v1/parent/overview` | Parent | alle Kinder (Akku, letzte Position, Suchmodus) |
+| GET | `/api/v1/parent/map` | Parent | Kartendaten (letzte Position je Tracker/Beacon + Kacheln) |
 | GET | `/api/v1/parent/services` | Parent | Status aller Dienste (eine Oberfläche) |
 | POST | `/api/v1/parent/firmware` | Parent-Token | Firmware-Binary hochladen (Version, SHA256 serverseitig) |
 | GET | `/api/v1/parent/firmware` | Parent-Token | Firmware-Liste |

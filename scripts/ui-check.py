@@ -154,6 +154,10 @@ async def run(chrome: str, base: str, out: Path, username: str) -> int:
                                deviceScaleFactor=scale, mobile=width < 600)
                 for tab in TABS:
                     await cdp.evaluate(f"document.getElementById('tab-{tab}').click()")
+                    if tab == "karte":
+                        # Karte erst auf Klick laden (Leaflet wird lazy geholt)
+                        await cdp.evaluate("document.getElementById('map-load').click()")
+                        await asyncio.sleep(3.5)
                     await asyncio.sleep(0.9)
                     shot = await cdp.send("Page.captureScreenshot", format="png", captureBeyondViewport=True)
                     (out / f"{viewport}-{tab}.png").write_bytes(base64.b64decode(shot["data"]))

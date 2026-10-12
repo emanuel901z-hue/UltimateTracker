@@ -137,9 +137,23 @@ durch.
 | Dienst | Zugangsschutz | Eigene Anmeldung zusätzlich |
 |---|---|---|
 | Eltern-UI/API | Benutzerkonto (PBKDF2 + Sitzungstoken) | – |
-| Traccar (Karte) | über die Bridge-Session (Caddy) | **ja** – Traccar-Konto, einmal pro Browser |
+| Karte in der UI | läuft über die Bridge (`/api/v1/parent/map`) | **keine** ✓ |
+| Traccar (Verlauf, Geofences, Berichte) | über die Bridge-Session (Caddy) | **ja** – Traccar-Konto, einmal pro Browser |
 | Google-Find-Hub-WebUI | über die Bridge-Session (Caddy) | **ja** – Basic-Auth, einmal pro Browser |
 | Apple (macless-haystack) | über die Bridge-Session (Caddy) | optional (`endpoint_user`) |
+
+**Warum die Karte nicht mehr eingebettet wird:** Traccar verlangt sein eigenes
+Konto, und in einem iframe hält diese Sitzung wegen der Third-Party-Cookie-
+Blockade der Browser oft nicht – man meldet sich also immer wieder an. Deshalb
+zeichnet die Eltern-UI die Karte **selbst** (Leaflet, selbst gehostet in
+`static/vendor/leaflet/`) aus `/api/v1/parent/map`: letzte Position je Kind
+(Marker) und je Find-My-Beacon (Kreis). Traccar bleibt für Verlauf, Geofences
+und Berichte verlinkt.
+
+**Kacheln:** Standard sind OpenStreetMap-Kacheln (`MAP_TILES` in `server/.env`)
+– dabei sieht der Kachelserver, welche Ausschnitte abgerufen werden. Für „keine
+externen Aufrufe" einen eigenen Kachelserver eintragen; die Karte funktioniert
+auch ohne Kacheln (Marker + Umriss bleiben sichtbar).
 
 **Cookies:** Beim Zugriff über `*.localhost` setzt die Bridge `Domain=localhost`
 – damit gilt die Anmeldung für `audio.`, `traccar.`, `findmy.` und

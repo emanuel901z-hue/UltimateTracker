@@ -255,5 +255,29 @@ curl -s -X PUT -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
 SIZE=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/maintenance/backup" | wc -c)
 [ "$SIZE" -gt 1000 ] && pass "Backup herunterladbar ($SIZE Bytes)" || fail "Backup zu klein: $SIZE"
 
+echo "20) Karte (Kartendaten direkt aus der Bridge)"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/parent/map")
+[ "$CODE" = "401" ] && pass "Karte ohne Anmeldung gesperrt (HTTP 401)" || fail "Karten-Schutz: $CODE"
+MAP=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/map")
+echo "$MAP" | grep -q '"tiles"' && pass "Kartendaten abrufbar" || fail "Kartendaten fehlgeschlagen"
+CHECK=$(printf '%s' "$MAP" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+problems = []
+if not str(data.get('tiles', '')).startswith('http'):
+    problems.append('keine Kachel-URL')
+for key in ('trackers', 'beacons'):
+    if key not in data:
+        problems.append(key + ' fehlt')
+for tracker in data.get('trackers', []):
+    if not (-90 <= tracker['latitude'] <= 90 and -180 <= tracker['longitude'] <= 180):
+        problems.append('unplausible Koordinaten')
+print('; '.join(problems))
+")
+[ -z "$CHECK" ] && pass "Kacheln + Marker plausibel" || fail "Karte: $CHECK"
+curl -s -o /dev/null -w "" -H "X-Auth-Token: $PTOK" "$BASE/static/vendor/leaflet/leaflet.js"
+LEAFLET=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/static/vendor/leaflet/leaflet.js")
+[ "$LEAFLET" = "200" ] && pass "Leaflet wird ausgeliefert (selbst gehostet)" || fail "Leaflet: HTTP $LEAFLET"
+
 echo
 echo "Alle Smoke-Tests bestanden."

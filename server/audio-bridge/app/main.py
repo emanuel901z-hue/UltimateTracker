@@ -75,6 +75,10 @@ PARENT_TOKEN = os.environ.get("PARENT_TOKEN", "")
 WEBHOOK_TOKEN = os.environ.get("TRACCAR_WEBHOOK_TOKEN", "")
 FINDMY_TOKEN = os.environ.get("FINDMY_TOKEN", "")
 TRACCAR_FORWARD_URL = os.environ.get("TRACCAR_FORWARD_URL", "")
+# Kartenkacheln für die eingebaute Karte (Leaflet). Standard: OpenStreetMap –
+# wer keine externen Aufrufe will, zeigt MAP_TILES auf einen eigenen Kachelserver.
+MAP_TILES = os.environ.get("MAP_TILES", "https://tile.openstreetmap.org/{z}/{x}/{y}.png").strip()
+MAP_ATTRIBUTION = os.environ.get("MAP_ATTRIBUTION", "© OpenStreetMap-Mitwirkende").strip()
 SEARCH_MODE_MINUTES = env_int("SEARCH_MODE_MINUTES", 30)
 MAX_UPLOAD_MB = env_float("MAX_UPLOAD_MB", 2.0)
 RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
@@ -1025,6 +1029,49 @@ async def settings_put(request: Request) -> dict:
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON-Objekt erwartet")
     return {"values": settings_update(body)}
+
+
+@app.get("/api/v1/parent/map", dependencies=[Depends(require_parent)])
+def parent_map() -> dict:
+    """Kartendaten: letzte Position je Tracker, letzte Position je Find-My-Beacon,
+    Kachel-URL und Attribution.
+
+    Bewusst ohne Traccar: die Karte in der Eltern-UI braucht damit **keine**
+    zweite Anmeldung (Traccar verlangt sein eigenes Konto, und im iframe hält
+    die Sitzung wegen Third-Party-Cookie-Blockade oft nicht).
+    """
+    with db() as conn:
+        trackers = []
+        for device in conn.execute("SELECT id, name FROM devices ORDER BY created_at").fetchall():
+            position = conn.execute(
+                "SELECT latitude, longitude, battery, received_at FROM positions "
+                "WHERE device_id = ? ORDER BY id DESC LIMIT 1",
+                (device["id"],),
+            ).fetchone()
+            if position is None:
+                continue
+            trackers.append({
+                "device_id": device["id"],
+                "name": device["name"] or device["id"],
+                "latitude": position["latitude"],
+                "longitude": position["longitude"],
+                "battery": position["battery"],
+                "received_at": position["received_at"],
+            })
+        beacons = [
+            dict(row) for row in conn.execute(
+                "SELECT provider, beacon_id, latitude, longitude, received_at FROM findmy_locations "
+                "WHERE id IN (SELECT MAX(id) FROM findmy_locations GROUP BY provider, beacon_id) "
+                "ORDER BY received_at DESC LIMIT 50"
+            ).fetchall()
+        ]
+    return {
+        "tiles": MAP_TILES,
+        "attribution": MAP_ATTRIBUTION,
+        "trackers": trackers,
+        "beacons": beacons,
+        "checked_at": now_iso(),
+    }
 
 
 @app.get("/api/v1/parent/system", dependencies=[Depends(require_parent)])
