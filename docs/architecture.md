@@ -102,6 +102,13 @@ Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes),
 | GET | `/api/v1/parent/status` | Parent-Token | Status-Dashboard (Position, Akku, Nachrichten, Poll) |
 | POST | `/api/v1/parent/search-mode` | Parent-Token | Suchmodus setzen/beenden |
 | POST | `/api/v1/parent/maintenance/cleanup` | Parent-Token | Retention manuell auslösen |
+| POST | `/api/v1/auth/login` | – | Anmeldung (Benutzer/Passwort) → Sitzungstoken |
+| POST | `/api/v1/auth/logout` | Sitzung | Sitzung beenden |
+| GET | `/api/v1/auth/me` | Sitzung/Token | aktueller Zugang |
+| GET/POST | `/api/v1/auth/users` | Admin | Benutzer auflisten/anlegen |
+| DELETE | `/api/v1/auth/users/{id}` | Admin | Benutzer löschen |
+| GET | `/api/v1/parent/overview` | Parent | alle Kinder (Akku, letzte Position, Suchmodus) |
+| GET | `/api/v1/parent/services` | Parent | Status aller Dienste (eine Oberfläche) |
 | POST | `/api/v1/parent/firmware` | Parent-Token | Firmware-Binary hochladen (Version, SHA256 serverseitig) |
 | GET | `/api/v1/parent/firmware` | Parent-Token | Firmware-Liste |
 | DELETE | `/api/v1/parent/firmware/{version}` | Parent-Token | Firmware-Version entfernen |

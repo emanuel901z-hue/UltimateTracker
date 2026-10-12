@@ -96,6 +96,30 @@ curl -s "http://localhost:5055/?id=TEST123&lat=48.1372&lon=11.5756&batt=87&times
   - `POST /api/v1/device/messages` (Multipart: `device_id`, `audio`)
   - `GET /api/v1/device/messages/{id}/audio`
 
+## 5b. Eltern-UI: Benutzer & Anmeldung (mehrere Kinder, mehrere Eltern)
+
+Die Eltern-UI hat einen **richtigen Login** (Benutzerkonten mit PBKDF2-Hashes,
+Sitzungstoken, 30 Tage gültig). Der erste Administrator entsteht beim Start aus
+`server/.env`:
+
+```env
+PARENT_USER=admin
+PARENT_PASSWORD=…        # mindestens 10 Zeichen, nicht in der Sperrliste
+```
+
+Weitere Zugänge (zweiter Elternteil, Großeltern) legt ein Administrator in der
+UI/API an:
+`POST /api/v1/auth/users {"username": "…", "password": "…", "role": "parent|admin"}`.
+
+Der feste `PARENT_TOKEN` bleibt als **Rückfallweg** bestehen (Skripte,
+Smoke-Test, Erstinstallation) und gilt als Administrator.
+
+**Mehrere Kinder:** Die Karte „Kinder" zeigt alle Tracker mit Akkustand, letzter
+Position und Suchmodus; „auswählen" schaltet Status, Nachrichten und Aufnahme auf
+das jeweilige Kind um. Der **Suchmodus ist pro Kind** (`device_id`) – bei fünf
+Kindern piept also nur das gesuchte. Nachrichten und Positionen werden je Gerät
+geführt; Traccar zeigt ohnehin alle Geräte auf der Karte.
+
 ## 6. TLS (Profil `tls`, vor dem Produktiveinsatz!)
 
 ```bash

@@ -49,6 +49,12 @@ docker compose logs -f audio-bridge
 | POST | `/api/v1/parent/sms` | Parent-Token | MT-SMS an den Tracker (`{iccid, text}`) |
 | GET | `/api/v1/parent/sms?iccid=` | Parent-Token | MT-/MO-SMS-Verlauf einer SIM |
 | GET | `/api/v1/parent/sim/messages` | Parent-Token | per Echtzeit-Subscription empfangene SMS |
+| POST | `/api/v1/auth/login` | – | Anmeldung (Benutzer/Passwort) |
+| POST | `/api/v1/auth/logout` | Sitzung | Sitzung beenden |
+| GET | `/api/v1/auth/me` | Sitzung/Token | aktueller Zugang |
+| GET/POST | `/api/v1/auth/users` | Admin | Benutzer verwalten |
+| GET | `/api/v1/parent/overview` | Parent | alle Kinder auf einen Blick |
+| GET | `/api/v1/parent/services` | Parent | Status aller Dienste |
 
 Token-Header: `X-Auth-Token: <token>`.
 

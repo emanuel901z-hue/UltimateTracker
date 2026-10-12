@@ -44,12 +44,40 @@
 <body>
 <h1>UltimateTracker – Eltern</h1>
 
-<label>Parent-Token
-  <input id="token" type="password" autocomplete="off">
+<div class="card" id="login-card">
+  <h2>Anmeldung</h2>
+  <div class="row">
+    <div><label>Benutzername <input id="login-user" type="text" autocomplete="username"></label></div>
+    <div><label>Passwort <input id="login-pass" type="password" autocomplete="current-password"></label></div>
+  </div>
+  <div class="row-tight">
+    <button id="login">Anmelden</button>
+    <span class="muted" id="login-state"></span>
+  </div>
+  <details class="mt">
+    <summary class="muted">Stattdessen API-Token verwenden (Skripte, Erstinstallation)</summary>
+    <label class="mt">Parent-Token <input id="token" type="password" autocomplete="off"></label>
+  </details>
+</div>
+
+<div class="card" id="user-bar" hidden>
+  <span id="user-name" class="muted">–</span>
+  <button id="logout" class="linkish">Abmelden</button>
+</div>
+
+<div id="app" hidden>
+<label>Kind / Tracker
+  <select id="device"><option value="">– bitte anmelden –</option></select>
 </label>
-<label>Gerät (Tracker-ID / IMEI)
-  <select id="device"><option value="">– bitte Token eingeben –</option></select>
-</label>
+
+<div class="card">
+  <h2>Kinder</h2>
+  <ul id="children"><li class="muted">– wird geladen –</li></ul>
+  <div class="muted mt">
+    Alle Tracker auf einen Blick: Akkustand, letzte Position, Suchmodus – pro Kind.
+    „auswählen" schaltet Status, Nachrichten und Aufnahme auf dieses Kind um.
+  </div>
+</div>
 
 <div class="card" id="status-card">
   <h2>Status</h2>
@@ -132,6 +160,7 @@
 
 <h2>Nachrichten</h2>
 <ul id="list"></ul>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -240,8 +269,10 @@ $('search').addEventListener('change', async (e) => {
   if (!state.token) { setStatus('Bitte Token angeben.'); return; }
   const fd = new FormData();
   fd.append('active', e.target.checked ? 'true' : 'false');
+  if (state.device) fd.append('device_id', state.device);
   const res = await fetch('/api/v1/parent/search-mode', { method: 'POST', headers: headers(), body: fd });
   setStatus(res.ok ? (e.target.checked ? 'Suchmodus aktiv.' : 'Suchmodus beendet.') : 'Fehler: HTTP ' + res.status);
+  loadChildren();
 });
 
 // --- Listen ---
@@ -449,9 +480,49 @@ function embedMap() {
 
 $('map-load').addEventListener('click', embedMap);
 document.addEventListener('click', (event) => {
-  const key = event.target && event.target.dataset ? event.target.dataset.embed : null;
-  if (key === 'traccar') embedMap();
+  const target = event.target;
+  if (!target || !target.dataset) return;
+  if (target.dataset.embed === 'traccar') embedMap();
+  if (target.dataset.child) {
+    state.device = target.dataset.child;
+    localStorage.setItem('ut_device', state.device);
+    $('device').value = state.device;
+    load();
+  }
+  if (target.dataset.search) {
+    const fd = new FormData();
+    fd.append('active', 'true');
+    fd.append('device_id', target.dataset.search);
+    fetch('/api/v1/parent/search-mode', { method: 'POST', headers: headers(), body: fd })
+      .then((res) => {
+        setStatus(res.ok ? 'Suchmodus gestartet.' : 'Fehler: HTTP ' + res.status);
+        loadChildren();
+      });
+  }
 });
+
+// --- Kinder-Übersicht (mehrere Tracker) ---
+async function loadChildren() {
+  if (!state.token) return;
+  const res = await fetch('/api/v1/parent/overview', { headers: headers() });
+  if (!res.ok) { $('children').innerHTML = '<li class="muted">HTTP ' + res.status + '</li>'; return; }
+  const data = await res.json();
+  if (!data.children.length) {
+    $('children').innerHTML = '<li class="muted">Noch keine Tracker registriert – unten unter „Geräte" anlegen.</li>';
+    return;
+  }
+  $('children').innerHTML = data.children.map((child) => {
+    const battery = child.battery === null || child.battery === undefined
+      ? 'Akku –' : 'Akku ' + Math.round(child.battery) + ' %';
+    const seen = child.last_position_at ? 'zuletzt ' + fmt(child.last_position_at) : 'noch keine Position';
+    const pending = child.pending_messages ? ' · ' + child.pending_messages + ' Nachricht(en) offen' : '';
+    const search = child.search_mode ? ' · Suchmodus aktiv' : '';
+    return '<li><strong>' + child.name + '</strong> <span class="muted">' + battery + ' · ' + seen +
+      pending + search + '</span>' +
+      ' <button class="linkish" data-child="' + child.device_id + '">auswählen</button>' +
+      ' <button class="linkish" data-search="' + child.device_id + '">Suchmodus</button></li>';
+  }).join('');
+}
 
 async function loadStatus() {
   const box = $('status-body');
@@ -480,13 +551,86 @@ async function loadStatus() {
 }
 
 function load() { loadStatus(); loadMessages(); loadFindMy(); }
-$('refresh').addEventListener('click', () => { loadDevices(); load(); });
+$('refresh').addEventListener('click', () => { loadDevices(); load(); loadChildren(); });
 
-loadDevices();
-load();
-refreshPushState();
-loadSmsStatus();
-loadServices();
+// --- Anmeldung / Sitzung ---
+function showApp(user) {
+  $('login-card').hidden = true;
+  $('app').hidden = false;
+  $('user-bar').hidden = false;
+  $('user-name').textContent = 'Angemeldet als ' + ((user && user.username) || 'Token') +
+    (user && user.role ? ' (' + user.role + ')' : '');
+  loadDevices();
+  load();
+  loadChildren();
+  loadServices();
+  loadSmsStatus();
+  refreshPushState();
+}
+
+function showLogin(message) {
+  $('login-card').hidden = false;
+  $('app').hidden = true;
+  $('user-bar').hidden = true;
+  $('login-state').textContent = message || '';
+}
+
+async function currentUser(token) {
+  if (!token) return null;
+  try {
+    const res = await fetch('/api/v1/auth/me', { headers: { 'X-Auth-Token': token } });
+    return res.ok ? await res.json() : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+$('login').addEventListener('click', async () => {
+  const username = $('login-user').value.trim();
+  const password = $('login-pass').value;
+  if (!username || !password) { $('login-state').textContent = 'Benutzername und Passwort angeben'; return; }
+  $('login-state').textContent = 'anmelden …';
+  const res = await fetch('/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { $('login-state').textContent = data.detail || ('HTTP ' + res.status); return; }
+  state.token = data.token;
+  localStorage.setItem('ut_token', state.token);
+  $('login-pass').value = '';
+  showApp(data.user);
+});
+
+$('login-pass').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') $('login').click();
+});
+
+$('logout').addEventListener('click', async () => {
+  await fetch('/api/v1/auth/logout', { method: 'POST', headers: headers() });
+  state.token = '';
+  localStorage.removeItem('ut_token');
+  showLogin('abgemeldet');
+});
+
+$('token').value = state.token;
+$('token').addEventListener('input', (e) => {
+  state.token = e.target.value.trim();
+  localStorage.setItem('ut_token', state.token);
+});
+
+// Start: gespeicherten Zugang prüfen (Sitzungstoken oder API-Token)
+(async () => {
+  const user = await currentUser(state.token);
+  if (user) {
+    showApp(user);
+  } else {
+    state.token = '';
+    localStorage.removeItem('ut_token');
+    showLogin('');
+  }
+})();
 setInterval(loadServices, 30000);
 </script>
 </body>

@@ -26,6 +26,13 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from app.auth import (  # noqa: E402
+    hash_password,
+    new_session_token,
+    password_problem,
+    session_expiry,
+    verify_password,
+)
 from app.providers import get_provider
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
@@ -183,6 +190,24 @@ def init_db() -> None:
                    received_at TEXT NOT NULL
                )"""
         )
+        # Benutzerkonten + Sitzungen (Login für die Eltern-UI)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS users (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   username TEXT UNIQUE NOT NULL,
+                   password_hash TEXT NOT NULL,
+                   role TEXT NOT NULL DEFAULT 'parent',
+                   created_at TEXT NOT NULL
+               )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS sessions (
+                   token TEXT PRIMARY KEY,
+                   user_id INTEGER NOT NULL,
+                   created_at TEXT NOT NULL,
+                   expires_at TEXT NOT NULL
+               )"""
+        )
 
 
 def now_iso() -> str:
@@ -204,14 +229,20 @@ def state_set(key: str, value: str) -> None:
         )
 
 
-def search_mode_active() -> bool:
-    until = state_get("search_mode_until")
-    return bool(until) and float(until) > time.time()
+def search_mode_active(device_id: str | None = None) -> bool:
+    """Suchmodus – pro Gerät (mehrere Kinder!), mit Fallback auf den globalen Wert."""
+    keys = [f"search_mode_until:{device_id}"] if device_id else []
+    keys.append("search_mode_until")
+    for key in keys:
+        until = state_get(key)
+        if until and float(until) > time.time():
+            return True
+    return False
 
 
-def next_poll_seconds(battery: float | None = None) -> int:
+def next_poll_seconds(battery: float | None = None, device_id: str | None = None) -> int:
     """Server-getriebenes Poll-Intervall (docs/optimizations.md A5/B4)."""
-    if search_mode_active():
+    if search_mode_active(device_id):
         return SEARCH_POLL_INTERVAL_S
     if battery is not None and battery < 15:
         return POLL_INTERVAL_S * 2
@@ -253,9 +284,73 @@ def require_device(x_auth_token: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="Ungültiges Device-Token")
 
 
+def users_count() -> int:
+    with db() as conn:
+        return int(conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"])
+
+
+def session_user(token: str | None) -> dict | None:
+    """Angemeldeten Benutzer zu einem Sitzungstoken liefern (None = ungültig)."""
+    if not token:
+        return None
+    with db() as conn:
+        row = conn.execute(
+            "SELECT s.expires_at, u.id, u.username, u.role FROM sessions s "
+            "JOIN users u ON u.id = s.user_id WHERE s.token = ?",
+            (token,),
+        ).fetchone()
+    if row is None:
+        return None
+    if row["expires_at"] < now_iso():  # ISO-Strings sind vergleichbar (UTC)
+        with db() as conn:
+            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        return None
+    return {"id": row["id"], "username": row["username"], "role": row["role"]}
+
+
 def require_parent(x_auth_token: str | None = Header(default=None)) -> None:
-    if not token_ok(PARENT_TOKEN, x_auth_token):
-        raise HTTPException(status_code=401, detail="Ungültiges Parent-Token")
+    """Zugang für Eltern: Sitzungstoken (Login) **oder** fester API-Token."""
+    if token_ok(PARENT_TOKEN, x_auth_token):
+        return
+    if session_user(x_auth_token) is not None:
+        return
+    raise HTTPException(status_code=401, detail="Nicht angemeldet")
+
+
+def require_admin(x_auth_token: str | None = Header(default=None)) -> dict:
+    """Nur Administratoren (Benutzerverwaltung). Der API-Token gilt als Admin."""
+    if token_ok(PARENT_TOKEN, x_auth_token):
+        return {"id": 0, "username": "token", "role": "admin"}
+    user = session_user(x_auth_token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Nicht angemeldet")
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Nur für Administratoren")
+    return user
+
+
+def ensure_admin_user() -> None:
+    """Ersten Administrator aus PARENT_USER/PARENT_PASSWORD anlegen (falls leer)."""
+    with db() as conn:
+        count = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+    if count > 0:
+        return
+    username = (os.environ.get("PARENT_USER") or "admin").strip() or "admin"
+    password = (os.environ.get("PARENT_PASSWORD") or "").strip()
+    if not password:
+        print("[auth] Noch kein Benutzer und PARENT_PASSWORD nicht gesetzt – "
+              "Anmeldung per API-Token möglich, Benutzer über die UI/API anlegen", flush=True)
+        return
+    problem = password_problem(password)
+    if problem:
+        print(f"[auth] PARENT_PASSWORD abgelehnt: {problem}", flush=True)
+        return
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO users(username, password_hash, role, created_at) VALUES(?, ?, 'admin', ?)",
+            (username, hash_password(password), now_iso()),
+        )
+    print(f"[auth] Administrator '{username}' angelegt", flush=True)
 
 
 # --- Audio-Hilfsfunktionen --------------------------------------------------
@@ -760,6 +855,7 @@ def forward_to_traccar(loc: dict) -> bool:
 async def lifespan(_: FastAPI):
     validate_config()
     init_db()
+    ensure_admin_user()
     retention = asyncio.create_task(retention_loop())
     watch = asyncio.create_task(watch_sim_messages()) if SMS_SUBSCRIBE else None
     try:
@@ -811,6 +907,141 @@ def services_overview() -> dict:
     return payload
 
 
+# --- Anmeldung (Eltern-UI) --------------------------------------------------
+
+
+@app.post("/api/v1/auth/login")
+async def auth_login(request: Request) -> dict:
+    """Anmeldung mit Benutzername und Passwort → Sitzungstoken."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    username = str(body.get("username") or "").strip()
+    password = str(body.get("password") or "")
+    with db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    if row is None or not verify_password(password, row["password_hash"]):
+        await asyncio.sleep(0.5)  # bremst Durchprobieren
+        raise HTTPException(status_code=401, detail="Benutzername oder Passwort falsch")
+    token = new_session_token()
+    expires = session_expiry()
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO sessions(token, user_id, created_at, expires_at) VALUES(?, ?, ?, ?)",
+            (token, row["id"], now_iso(), expires),
+        )
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now_iso(),))
+    return {
+        "token": token,
+        "expires_at": expires,
+        "user": {"username": row["username"], "role": row["role"]},
+    }
+
+
+@app.post("/api/v1/auth/logout")
+async def auth_logout(request: Request) -> dict:
+    """Sitzung beenden (Token wird ungültig)."""
+    token = str(request.headers.get("x-auth-token") or "")
+    with db() as conn:
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    return {"logged_out": True}
+
+
+@app.get("/api/v1/auth/me")
+def auth_me(x_auth_token: str | None = Header(default=None)) -> dict:
+    """Aktuell angemeldeter Zugang (Sitzung oder API-Token)."""
+    if token_ok(PARENT_TOKEN, x_auth_token):
+        return {"username": "token", "role": "admin", "kind": "token"}
+    user = session_user(x_auth_token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Nicht angemeldet")
+    return {**user, "kind": "session"}
+
+
+@app.get("/api/v1/auth/users", dependencies=[Depends(require_admin)])
+def users_list() -> dict:
+    with db() as conn:
+        rows = conn.execute("SELECT id, username, role, created_at FROM users ORDER BY id").fetchall()
+    return {"users": [dict(row) for row in rows]}
+
+
+@app.post("/api/v1/auth/users", dependencies=[Depends(require_admin)])
+async def users_create(request: Request) -> dict:
+    """Weiteren Zugang anlegen (z. B. zweiter Elternteil)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    username = str(body.get("username") or "").strip()
+    password = str(body.get("password") or "")
+    role = "admin" if str(body.get("role") or "parent") == "admin" else "parent"
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="username und password erforderlich")
+    problem = password_problem(password)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    try:
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO users(username, password_hash, role, created_at) VALUES(?, ?, ?, ?)",
+                (username, hash_password(password), role, now_iso()),
+            )
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Benutzername ist schon vergeben")
+    return {"created": username, "role": role}
+
+
+@app.delete("/api/v1/auth/users/{user_id}", dependencies=[Depends(require_admin)])
+def users_delete(user_id: int) -> dict:
+    with db() as conn:
+        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Unbekannter Benutzer")
+        count = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+        if count <= 1:
+            raise HTTPException(status_code=400, detail="Der letzte Benutzer kann nicht gelöscht werden")
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    return {"deleted": row["username"]}
+
+
+@app.get("/api/v1/parent/overview", dependencies=[Depends(require_parent)])
+def parent_overview() -> dict:
+    """Alle Kinder auf einen Blick – für Familien mit mehreren Trackern."""
+    with db() as conn:
+        devices = conn.execute("SELECT * FROM devices ORDER BY created_at").fetchall()
+        children = []
+        for device in devices:
+            position = conn.execute(
+                "SELECT latitude, longitude, battery, received_at FROM positions "
+                "WHERE device_id = ? ORDER BY id DESC LIMIT 1",
+                (device["id"],),
+            ).fetchone()
+            message = conn.execute(
+                "SELECT created_at, direction FROM messages WHERE device_id = ? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (device["id"],),
+            ).fetchone()
+            pending = conn.execute(
+                "SELECT COUNT(*) AS n FROM messages WHERE device_id = ? AND direction = 'out' "
+                "AND status = 'new'",
+                (device["id"],),
+            ).fetchone()["n"]
+            children.append({
+                "device_id": device["id"],
+                "name": device["name"] or device["id"],
+                "imei": device["imei"] or device["id"],
+                "msisdn": device["msisdn"] or "",
+                "battery": position["battery"] if position else None,
+                "last_position_at": position["received_at"] if position else None,
+                "last_message_at": message["created_at"] if message else None,
+                "pending_messages": pending,
+                "search_mode": search_mode_active(device["id"]),
+            })
+    return {"children": children, "count": len(children)}
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {
@@ -823,6 +1054,7 @@ def healthz() -> dict:
         "sim_provider": sim_provider().name if sim_provider() else None,
         "sms_api": bool(sim_provider() and sim_provider().configured()),
         "sms_subscribe": SMS_SUBSCRIBE,
+        "users": users_count(),
     }
 
 
@@ -983,8 +1215,8 @@ async def device_sync(request: Request) -> dict:
 
     return {
         "server_time": now_iso(),
-        "search_mode": search_mode_active(),
-        "next_poll_s": next_poll_seconds(battery),
+        "search_mode": search_mode_active(device_id),
+        "next_poll_s": next_poll_seconds(battery, device_id),
         "message": message,
         "ota": offer,
         "config": {"audio_volume": None},
@@ -1101,19 +1333,23 @@ def parent_audio(message_id: str) -> FileResponse:
 
 
 @app.post("/api/v1/parent/search-mode", dependencies=[Depends(require_parent)])
-def set_search_mode(active: bool = Form(True), minutes: int | None = Form(None)) -> dict:
-    """Suchmodus setzen/beenden (Tracker pollt dann häufiger und piept)."""
+def set_search_mode(active: bool = Form(True), minutes: int | None = Form(None),
+                    device_id: str | None = Form(None)) -> dict:
+    """Suchmodus setzen/beenden – pro Kind (device_id), sonst global."""
     duration = minutes if minutes else SEARCH_MODE_MINUTES
     until = time.time() + duration * 60 if active else 0
-    state_set("search_mode_until", str(until))
+    key = f"search_mode_until:{device_id}" if device_id else "search_mode_until"
+    state_set(key, str(until))
     if active:
-        notify_async("Suchmodus aktiv", f"Der Tracker piept jetzt {duration} Minuten lang.")
-        push_async("Suchmodus aktiv", f"Der Tracker piept jetzt {duration} Minuten lang.")
+        suffix = f" (Gerät {device_id})" if device_id else ""
+        notify_async("Suchmodus aktiv", f"Der Tracker piept jetzt {duration} Minuten lang.{suffix}")
+        push_async("Suchmodus aktiv", f"Der Tracker piept jetzt {duration} Minuten lang.{suffix}")
     return {
         "search_mode": active,
         "until": until,
         "minutes": duration if active else 0,
-        "next_poll_s": next_poll_seconds(),
+        "device_id": device_id,
+        "next_poll_s": next_poll_seconds(None, device_id),
     }
 
 
@@ -1145,8 +1381,8 @@ def parent_status(device_id: str) -> dict:
         "last_position": dict(position) if position else None,
         "last_message": dict(message) if message else None,
         "pending_messages": pending,
-        "search_mode": search_mode_active(),
-        "next_poll_s": next_poll_seconds(battery),
+        "search_mode": search_mode_active(device_id),
+        "next_poll_s": next_poll_seconds(battery, device_id),
         "last_beacon": dict(beacon) if beacon else None,
     }
 

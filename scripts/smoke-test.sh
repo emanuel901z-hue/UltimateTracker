@@ -15,6 +15,8 @@ WEB="${WEB:-http://localhost:8082}"
 cd "$SERVER_DIR"
 DTOK=$(grep '^DEVICE_TOKEN=' .env | cut -d= -f2)
 PTOK=$(grep '^PARENT_TOKEN=' .env | cut -d= -f2)
+PARENT_USER=$(grep '^PARENT_USER=' .env | cut -d= -f2- || true)
+PARENT_PASSWORD=$(grep '^PARENT_PASSWORD=' .env | cut -d= -f2- || true)
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -168,6 +170,27 @@ print('; '.join(problems))
 ")
 [ -z "$CHECK" ] && pass "Dienste vollständig (Traccar erreichbar, Karte einbettbar, Apple dabei)" \
   || fail "Übersicht: $CHECK"
+
+echo "17) Anmeldung & Mehrkind-Übersicht"
+LOGIN_FAIL=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"definitiv-falsch-1234"}' "$BASE/api/v1/auth/login")
+[ "$LOGIN_FAIL" = "401" ] && pass "Falsches Passwort abgelehnt (HTTP 401)" || fail "Login-Schutz: $LOGIN_FAIL"
+NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/parent/overview")
+[ "$NOAUTH" = "401" ] && pass "Ohne Anmeldung kein Zugriff (HTTP 401)" || fail "Zugriffsschutz: $NOAUTH"
+curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/auth/me" | grep -q '"kind":"token"' \
+  && pass "API-Token funktioniert weiterhin" || fail "API-Token abgelehnt"
+curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/overview" | grep -q '"children"' \
+  && pass "Kinder-Übersicht abrufbar" || fail "Kinder-Übersicht fehlgeschlagen"
+if [ -n "${PARENT_PASSWORD:-}" ]; then
+  SESSION=$(curl -s -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${PARENT_USER:-admin}\",\"password\":\"${PARENT_PASSWORD}\"}" \
+    "$BASE/api/v1/auth/login" | python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+  [ -n "$SESSION" ] && pass "Anmeldung mit Benutzer/Passwort erfolgreich" || fail "Anmeldung fehlgeschlagen"
+  curl -s -H "X-Auth-Token: $SESSION" "$BASE/api/v1/parent/overview" | grep -q '"children"' \
+    && pass "Sitzungstoken funktioniert für die API" || fail "Sitzungstoken abgelehnt"
+else
+  echo "  SKIP - PARENT_PASSWORD nicht gesetzt (Login-Test übersprungen)"
+fi
 
 echo
 echo "Alle Smoke-Tests bestanden."
