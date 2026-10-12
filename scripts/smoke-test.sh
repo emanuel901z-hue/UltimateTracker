@@ -192,5 +192,46 @@ else
   echo "  SKIP - PARENT_PASSWORD nicht gesetzt (Login-Test übersprungen)"
 fi
 
+echo "18) Passwort ändern / zurücksetzen (temporärer Benutzer)"
+TMPUSER="smoke-$$"
+TMPPW1="Smoke-Passwort-1"
+TMPPW2="Smoke-Passwort-2"
+curl -s -X POST -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TMPUSER\",\"password\":\"$TMPPW1\",\"role\":\"parent\"}" \
+  "$BASE/api/v1/auth/users" | grep -q "\"created\":\"$TMPUSER\"" \
+  && pass "Temporärer Benutzer angelegt" || fail "Benutzer anlegen fehlgeschlagen"
+
+TMP_SESSION=$(curl -s -X POST -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TMPUSER\",\"password\":\"$TMPPW1\"}" "$BASE/api/v1/auth/login" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+[ -n "$TMP_SESSION" ] && pass "Anmeldung als temporärer Benutzer" || fail "Anmeldung fehlgeschlagen"
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Auth-Token: $TMP_SESSION" \
+  -H 'Content-Type: application/json' -d "{\"current\":\"falsch-falsch\",\"new\":\"$TMPPW2\"}" \
+  "$BASE/api/v1/auth/password")
+[ "$CODE" = "401" ] && pass "Falsches aktuelles Passwort abgelehnt" || fail "Passwortwechsel-Schutz: $CODE"
+
+curl -s -X POST -H "X-Auth-Token: $TMP_SESSION" -H 'Content-Type: application/json' \
+  -d "{\"current\":\"$TMPPW1\",\"new\":\"$TMPPW2\"}" "$BASE/api/v1/auth/password" \
+  | grep -q '"changed":true' && pass "Eigenes Passwort geändert" || fail "Passwortwechsel fehlgeschlagen"
+
+curl -s -X POST -H 'Content-Type: application/json' -d "{\"username\":\"$TMPUSER\",\"password\":\"$TMPPW2\"}" \
+  "$BASE/api/v1/auth/login" | grep -q '"token"' \
+  && pass "Anmeldung mit neuem Passwort möglich" || fail "Neues Passwort funktioniert nicht"
+curl -s -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TMPUSER\",\"password\":\"$TMPPW1\"}" "$BASE/api/v1/auth/login" | grep -q "401" \
+  && pass "Altes Passwort abgelehnt" || fail "Altes Passwort funktioniert noch"
+
+TMPID=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/auth/users" \
+  | python3 -c "import json,sys; print(next(u['id'] for u in json.load(sys.stdin)['users'] if u['username']=='$TMPUSER'))" 2>/dev/null)
+curl -s -X POST -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+  -d '{"new":"Admin-Reset-Passwort-9"}' "$BASE/api/v1/auth/users/$TMPID/password" \
+  | grep -q '"reset"' && pass "Admin-Reset (ohne altes Passwort)" || fail "Admin-Reset fehlgeschlagen"
+curl -s -o /dev/null -w "%{http_code}" -H "X-Auth-Token: $TMP_SESSION" "$BASE/api/v1/auth/me" | grep -q "401" \
+  && pass "Sitzungen nach Reset ungültig" || fail "Alte Sitzung noch gültig"
+
+curl -s -X DELETE -H "X-Auth-Token: $PTOK" "$BASE/api/v1/auth/users/$TMPID" | grep -q '"deleted"' \
+  && pass "Temporärer Benutzer entfernt" || fail "Aufräumen fehlgeschlagen"
+
 echo
 echo "Alle Smoke-Tests bestanden."

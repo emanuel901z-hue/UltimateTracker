@@ -107,6 +107,8 @@ Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes),
 | GET | `/api/v1/auth/me` | Sitzung/Token | aktueller Zugang |
 | GET/POST | `/api/v1/auth/users` | Admin | Benutzer auflisten/anlegen |
 | DELETE | `/api/v1/auth/users/{id}` | Admin | Benutzer löschen |
+| POST | `/api/v1/auth/password` | Sitzung | eigenes Passwort ändern (andere Sitzungen enden) |
+| POST | `/api/v1/auth/users/{id}/password` | Admin | Passwort zurücksetzen (ohne altes Passwort) |
 | GET | `/api/v1/parent/overview` | Parent | alle Kinder (Akku, letzte Position, Suchmodus) |
 | GET | `/api/v1/parent/services` | Parent | Status aller Dienste (eine Oberfläche) |
 | POST | `/api/v1/parent/firmware` | Parent-Token | Firmware-Binary hochladen (Version, SHA256 serverseitig) |

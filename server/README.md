@@ -53,6 +53,8 @@ docker compose logs -f audio-bridge
 | POST | `/api/v1/auth/logout` | Sitzung | Sitzung beenden |
 | GET | `/api/v1/auth/me` | Sitzung/Token | aktueller Zugang |
 | GET/POST | `/api/v1/auth/users` | Admin | Benutzer verwalten |
+| POST | `/api/v1/auth/password` | Sitzung | eigenes Passwort ändern |
+| POST | `/api/v1/auth/users/{id}/password` | Admin | Passwort zurücksetzen |
 | GET | `/api/v1/parent/overview` | Parent | alle Kinder auf einen Blick |
 | GET | `/api/v1/parent/services` | Parent | Status aller Dienste |
 

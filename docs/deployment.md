@@ -114,6 +114,13 @@ UI/API an:
 Der feste `PARENT_TOKEN` bleibt als **Rückfallweg** bestehen (Skripte,
 Smoke-Test, Erstinstallation) und gilt als Administrator.
 
+**Passwörter:** Jeder Zugang kann sein eigenes Passwort in der UI ändern
+(„Passwort ändern" oben; dabei werden **alle anderen Sitzungen beendet**).
+Administratoren können in der Karte „Benutzer" ein Passwort **zurücksetzen**,
+ohne das alte zu kennen (z. B. wenn ein Elternteil es vergessen hat) – auch
+dabei enden die Sitzungen des betroffenen Kontos. Passwortregeln: mindestens
+10 Zeichen, keine Standardsperrwörter (`app/auth.py`).
+
 **Mehrere Kinder:** Die Karte „Kinder" zeigt alle Tracker mit Akkustand, letzter
 Position und Suchmodus; „auswählen" schaltet Status, Nachrichten und Aufnahme auf
 das jeweilige Kind um. Der **Suchmodus ist pro Kind** (`device_id`) – bei fünf

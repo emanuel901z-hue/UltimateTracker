@@ -63,6 +63,33 @@
 <div class="card" id="user-bar" hidden>
   <span id="user-name" class="muted">–</span>
   <button id="logout" class="linkish">Abmelden</button>
+  <details class="mt">
+    <summary class="muted">Passwort ändern</summary>
+    <div class="row mt">
+      <div><label>Aktuelles Passwort <input id="pw-current" type="password" autocomplete="current-password"></label></div>
+      <div><label>Neues Passwort <input id="pw-new" type="password" autocomplete="new-password"></label></div>
+      <div><label>Neues Passwort (Wiederholung) <input id="pw-repeat" type="password" autocomplete="new-password"></label></div>
+    </div>
+    <div class="row-tight">
+      <button id="password-save">Passwort ändern</button>
+      <span class="muted" id="pw-state"></span>
+    </div>
+    <div class="muted mt">Andere angemeldete Geräte werden dabei abgemeldet.</div>
+  </details>
+</div>
+
+<div class="card" id="users-card" hidden>
+  <h2>Benutzer</h2>
+  <ul id="users"><li class="muted">– wird geladen –</li></ul>
+  <div class="row">
+    <div><label>Neuer Benutzer <input id="new-user" type="text" autocomplete="off" placeholder="z. B. mama"></label></div>
+    <div><label>Passwort <input id="new-user-pass" type="password" autocomplete="new-password"></label></div>
+    <div><label>Rolle <select id="new-user-role"><option value="parent">parent</option><option value="admin">admin</option></select></label></div>
+  </div>
+  <div class="row-tight">
+    <button id="user-create">Benutzer anlegen</button>
+    <span class="muted" id="user-state"></span>
+  </div>
 </div>
 
 <div id="app" hidden>
@@ -167,6 +194,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   device: localStorage.getItem('ut_device') || '',
   token: localStorage.getItem('ut_token') || '',
+  user: null,
   recorder: null,
   chunks: [],
   blob: null,
@@ -499,6 +527,29 @@ document.addEventListener('click', (event) => {
         loadChildren();
       });
   }
+  if (target.dataset.reset) {
+    const name = target.dataset.name || 'Benutzer';
+    const next = window.prompt('Neues Passwort für ' + name + ' (mindestens 10 Zeichen):');
+    if (!next) return;
+    fetch('/api/v1/auth/users/' + target.dataset.reset + '/password', {
+      method: 'POST',
+      headers: { ...headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new: next }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      $('user-state').textContent = res.ok ? 'Passwort zurückgesetzt: ' + name : (data.detail || ('HTTP ' + res.status));
+    });
+  }
+  if (target.dataset.delete) {
+    const name = target.dataset.name || 'Benutzer';
+    if (!window.confirm('Benutzer "' + name + '" wirklich löschen?')) return;
+    fetch('/api/v1/auth/users/' + target.dataset.delete, { method: 'DELETE', headers: headers() })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        $('user-state').textContent = res.ok ? 'gelöscht: ' + name : (data.detail || ('HTTP ' + res.status));
+        loadUsers();
+      });
+  }
 });
 
 // --- Kinder-Übersicht (mehrere Tracker) ---
@@ -558,6 +609,7 @@ function showApp(user) {
   $('login-card').hidden = true;
   $('app').hidden = false;
   $('user-bar').hidden = false;
+  state.user = user || null;
   $('user-name').textContent = 'Angemeldet als ' + ((user && user.username) || 'Token') +
     (user && user.role ? ' (' + user.role + ')' : '');
   loadDevices();
@@ -566,7 +618,57 @@ function showApp(user) {
   loadServices();
   loadSmsStatus();
   refreshPushState();
+  loadUsers();
 }
+
+// --- Benutzerverwaltung (nur Administratoren) ---
+async function loadUsers() {
+  try {
+    const res = await fetch('/api/v1/auth/users', { headers: headers() });
+    if (!res.ok) { $('users-card').hidden = true; return; }
+    const data = await res.json();
+    $('users-card').hidden = false;
+    $('users').innerHTML = data.users.map((user) =>
+      '<li><strong>' + user.username + '</strong> <span class="muted">' + user.role + '</span>' +
+      ' <button class="linkish" data-reset="' + user.id + '" data-name="' + user.username + '">Passwort neu</button>' +
+      ((state.user && user.username === state.user.username)
+        ? '' : ' <button class="linkish" data-delete="' + user.id + '" data-name="' + user.username + '">löschen</button>') +
+      '</li>').join('');
+  } catch (err) {
+    $('users-card').hidden = true;
+  }
+}
+
+$('password-save').addEventListener('click', async () => {
+  const current = $('pw-current').value;
+  const next = $('pw-new').value;
+  if (next !== $('pw-repeat').value) { $('pw-state').textContent = 'Die neuen Passwörter stimmen nicht überein'; return; }
+  const res = await fetch('/api/v1/auth/password', {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current, new: next }),
+  });
+  const data = await res.json().catch(() => ({}));
+  $('pw-state').textContent = res.ok
+    ? 'Passwort geändert (andere Geräte abgemeldet)'
+    : (data.detail || ('HTTP ' + res.status));
+  if (res.ok) { $('pw-current').value = ''; $('pw-new').value = ''; $('pw-repeat').value = ''; }
+});
+
+$('user-create').addEventListener('click', async () => {
+  const username = $('new-user').value.trim();
+  const password = $('new-user-pass').value;
+  const role = $('new-user-role').value;
+  if (!username || !password) { $('user-state').textContent = 'Benutzername und Passwort angeben'; return; }
+  const res = await fetch('/api/v1/auth/users', {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, role }),
+  });
+  const data = await res.json().catch(() => ({}));
+  $('user-state').textContent = res.ok ? 'angelegt: ' + username : (data.detail || ('HTTP ' + res.status));
+  if (res.ok) { $('new-user').value = ''; $('new-user-pass').value = ''; loadUsers(); }
+});
 
 function showLogin(message) {
   $('login-card').hidden = false;

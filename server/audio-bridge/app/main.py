@@ -959,6 +959,61 @@ def auth_me(x_auth_token: str | None = Header(default=None)) -> dict:
     return {**user, "kind": "session"}
 
 
+@app.post("/api/v1/auth/password")
+async def auth_password(request: Request, x_auth_token: str | None = Header(default=None)) -> dict:
+    """Eigenes Passwort ändern (nur mit Anmeldung – nicht mit dem API-Token)."""
+    user = session_user(x_auth_token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Nur mit Anmeldung möglich (kein API-Token)")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    current = str(body.get("current") or "")
+    new = str(body.get("new") or "")
+
+    with db() as conn:
+        row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
+    if row is None or not verify_password(current, row["password_hash"]):
+        await asyncio.sleep(0.5)  # bremst Durchprobieren
+        raise HTTPException(status_code=401, detail="Aktuelles Passwort ist falsch")
+    problem = password_problem(new)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    if verify_password(new, row["password_hash"]):
+        raise HTTPException(status_code=400, detail="Das neue Passwort ist identisch mit dem alten")
+
+    with db() as conn:
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new), user["id"]))
+        # Alle anderen Sitzungen beenden – die aktuelle bleibt gültig.
+        conn.execute(
+            "DELETE FROM sessions WHERE user_id = ? AND token != ?",
+            (user["id"], x_auth_token or ""),
+        )
+    return {"changed": True, "other_sessions_ended": True}
+
+
+@app.post("/api/v1/auth/users/{user_id}/password", dependencies=[Depends(require_admin)])
+async def users_reset_password(user_id: int, request: Request) -> dict:
+    """Passwort eines Benutzers zurücksetzen (Administrator, ohne altes Passwort)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    new = str(body.get("new") or "")
+    problem = password_problem(new)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+
+    with db() as conn:
+        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Unbekannter Benutzer")
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new), user_id))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    return {"reset": row["username"], "sessions_ended": True}
+
+
 @app.get("/api/v1/auth/users", dependencies=[Depends(require_admin)])
 def users_list() -> dict:
     with db() as conn:
