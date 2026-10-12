@@ -31,6 +31,14 @@
   .mt { margin-top: .4rem; }
   .row-tight { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
   .grow { flex: 1 1 12rem; width: auto; }
+  /* Statuspunkte der Dienste-Übersicht */
+  .dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .45rem; background: #8b949e; }
+  .dot.up { background: #3fb950; }
+  .dot.error { background: #d29922; }
+  .dot.down { background: #f85149; }
+  .dot.na { background: #8b949e; }
+  .linkish { margin-left: .5rem; }
+  #map { width: 100%; height: 60vh; border: 1px solid #8884; border-radius: .4rem; }
 </style>
 </head>
 <body>
@@ -46,6 +54,26 @@
 <div class="card" id="status-card">
   <h2>Status</h2>
   <div id="status-body" class="muted">– keine Daten –</div>
+</div>
+
+<div class="card">
+  <h2>Dienste</h2>
+  <ul id="services"><li class="muted">– wird geladen –</li></ul>
+  <div class="muted mt">
+    Eine Oberfläche für alles: Karte, Find My (Google/Apple) und diese App.
+    Der Status wird alle 10 s geprüft; „öffnen" führt in den jeweiligen Dienst.
+  </div>
+</div>
+
+<div class="card">
+  <h2>Karte</h2>
+  <div class="row-tight">
+    <button id="map-load">Karte hier laden</button>
+    <a id="map-link" href="#" target="_blank" rel="noopener">in neuem Tab öffnen</a>
+  </div>
+  <div id="map-wrap" class="mt" hidden>
+    <iframe id="map" title="Traccar-Karte" loading="lazy"></iframe>
+  </div>
 </div>
 
 <div class="card">
@@ -361,6 +389,70 @@ $('sms-send').addEventListener('click', async () => {
     : 'Fehler: HTTP ' + res.status + (data.detail ? ' – ' + data.detail : '');
 });
 
+// --- Dienste-Übersicht + eingebettete Karte ---
+function serviceUrl(service) {
+  // Im HTTPS-Betrieb (Caddy) hat jeder Dienst seinen eigenen Hostnamen,
+  // sonst wird derselbe Host mit dem jeweiligen Port verwendet.
+  if (location.protocol === 'https:' && service.site_host) return 'https://' + service.site_host;
+  return 'http://' + location.hostname + ':' + service.port;
+}
+
+function statusClass(status) {
+  if (status === 'up') return 'up';
+  if (status === 'error') return 'error';
+  if (status === 'n/a') return 'na';
+  return 'down';
+}
+
+function statusLabel(status) {
+  return { up: 'erreichbar', down: 'nicht erreichbar', error: 'Fehler', 'n/a': 'ohne Port' }[status] || status;
+}
+
+async function loadServices() {
+  if (!state.token) {
+    $('services').innerHTML = '<li class="muted">Token eintragen, dann Status laden</li>';
+    return;
+  }
+  try {
+    const res = await fetch('/api/v1/parent/services', { headers: headers() });
+    if (!res.ok) {
+      $('services').innerHTML = '<li class="muted">Status: HTTP ' + res.status + '</li>';
+      return;
+    }
+    const data = await res.json();
+    $('services').innerHTML = data.services.map((service) => {
+      const cls = statusClass(service.status);
+      const label = statusLabel(service.status);
+      const link = service.port
+        ? ' <a class="linkish" href="' + serviceUrl(service) + '" target="_blank" rel="noopener">öffnen</a>'
+        : '';
+      const embed = service.embeddable
+        ? ' <button class="linkish" data-embed="' + service.key + '">einbetten</button>'
+        : '';
+      return '<li><span class="dot ' + cls + '" title="' + label + '"></span>' +
+        '<strong>' + service.name + '</strong> <span class="muted">' + service.description +
+        ' – ' + label + '</span>' + link + embed + '</li>';
+    }).join('');
+    const traccar = data.services.find((service) => service.key === 'traccar');
+    if (traccar && traccar.port) $('map-link').href = serviceUrl(traccar);
+  } catch (err) {
+    $('services').innerHTML = '<li class="muted">Fehler: ' + err.message + '</li>';
+  }
+}
+
+function embedMap() {
+  const url = $('map-link').href;
+  if (!url || url === '#' || $('map').src === url) return;
+  $('map').src = url;
+  $('map-wrap').hidden = false;
+}
+
+$('map-load').addEventListener('click', embedMap);
+document.addEventListener('click', (event) => {
+  const key = event.target && event.target.dataset ? event.target.dataset.embed : null;
+  if (key === 'traccar') embedMap();
+});
+
 async function loadStatus() {
   const box = $('status-body');
   if (!state.token || !state.device) { box.textContent = '– Gerät/Token wählen –'; return; }
@@ -394,6 +486,8 @@ loadDevices();
 load();
 refreshPushState();
 loadSmsStatus();
+loadServices();
+setInterval(loadServices, 30000);
 </script>
 </body>
 </html>

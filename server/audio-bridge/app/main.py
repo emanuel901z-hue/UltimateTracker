@@ -431,6 +431,41 @@ def push_async(title: str, body: str) -> None:
     asyncio.create_task(asyncio.to_thread(send_push, title, body))
 
 
+# --- Dienste-Übersicht („eine App": Status + Links aller Dienste) -----------
+
+# key, Anzeigename, Beschreibung, interner Host:Port, Port nach außen, SITE_*-Variable
+SERVICE_DEFS = [
+    ("bridge", "Eltern-UI/API", "Nachrichten, Status, Suchmodus, Geräte",
+     "audio-bridge:8085", 8085, "SITE_AUDIO"),
+    ("traccar", "Karte (Traccar)", "Positionen, Geofences, Verlauf",
+     "traccar:8082", 8082, "SITE_TRACCAR"),
+    ("google-findmy", "Google Find My", "Find-Hub-WebUI: Beacons, Scheduling",
+     "google-findmy-webui:4321", 4321, "SITE_FINDMY"),
+    ("apple-findmy", "Apple Find My", "macless-haystack: Beacons, Schlüssel",
+     "macless-haystack:6176", 6176, "SITE_APPLE"),
+    ("anisette", "Apple-Auth-Dienst", "Anisette (für die Apple-Bridge)",
+     "anisette:6969", 6969, None),
+    ("findmy-bridge", "Apple → Traccar", "automatische Beacon-Synchronisation",
+     None, None, None),
+]
+
+_services_cache = {"value": None, "expires_at": 0.0}
+
+
+def probe_http(host: str, port: int, path: str = "/", timeout: float = 2.0) -> str:
+    """Erreichbarkeit prüfen: 'up' (auch bei 401/404 – Hauptsache, es antwortet)."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}{path}", timeout=timeout) as response:
+            return "up" if response.status < 500 else "error"
+    except urllib.error.HTTPError as exc:
+        return "up" if exc.code < 500 else "error"
+    except Exception:
+        return "down"
+
+
 # --- SIM-Provider (anbieterneutral) -----------------------------------------
 
 _sim_provider = None
@@ -739,6 +774,41 @@ app = FastAPI(title="UltimateTracker Audio-Bridge", version="0.3.0", lifespan=li
 
 # Statische Dateien (Icons für PWA/apple-touch-icon, Service Worker liegt am Root)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/api/v1/parent/services", dependencies=[Depends(require_parent)])
+def services_overview() -> dict:
+    """Status und Adressen aller Dienste – Grundlage für die Übersicht in der UI.
+
+    Ergebnis wird 10 s gecacht, damit die Oberfläche die Dienste nicht hämmert.
+    """
+    now = time.time()
+    if _services_cache["value"] is not None and _services_cache["expires_at"] > now:
+        return _services_cache["value"]
+
+    result = []
+    for key, name, description, target, port, site_env in SERVICE_DEFS:
+        status = "n/a"
+        if target:
+            host, _, port_text = target.partition(":")
+            internal_port = int(port_text)
+            path = "/api/server" if key == "traccar" else "/"
+            status = probe_http(host, internal_port, path)
+        result.append({
+            "key": key,
+            "name": name,
+            "description": description,
+            "status": status,
+            "port": port,
+            "site_host": os.environ.get(site_env, "") if site_env else "",
+            # geprüft: Traccar liefert kein X-Frame-Options → einbettbar
+            "embeddable": key == "traccar",
+        })
+
+    payload = {"services": result, "checked_at": now_iso()}
+    _services_cache["value"] = payload
+    _services_cache["expires_at"] = now + 10
+    return payload
 
 
 @app.get("/healthz")

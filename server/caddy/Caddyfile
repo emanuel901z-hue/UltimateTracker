@@ -35,3 +35,9 @@
 	encode zstd gzip
 	reverse_proxy google-findmy-webui:4321
 }
+
+{$SITE_APPLE:apple.localhost} {
+	tls {$TLS_ARG:internal}
+	encode zstd gzip
+	reverse_proxy macless-haystack:6176
+}

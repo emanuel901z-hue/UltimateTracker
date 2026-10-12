@@ -105,6 +105,7 @@ services:
       SITE_AUDIO: ${SITE_AUDIO:-audio.localhost}
       SITE_TRACCAR: ${SITE_TRACCAR:-traccar.localhost}
       SITE_FINDMY: ${SITE_FINDMY:-findmy.localhost}
+      SITE_APPLE: ${SITE_APPLE:-apple.localhost}
       TLS_ARG: ${TLS_ARG:-internal}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro

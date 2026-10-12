@@ -100,9 +100,18 @@ curl -s "http://localhost:5055/?id=TEST123&lat=48.1372&lon=11.5756&batt=87&times
 
 ```bash
 cd ~/UltimateTracker/server
-# Hostnamen in .env setzen (SITE_AUDIO/SITE_TRACCAR/SITE_FINDMY, TLS_ARG)
+# Hostnamen in .env setzen (SITE_AUDIO/SITE_TRACCAR/SITE_FINDMY/SITE_APPLE, TLS_ARG)
 docker compose --profile tls up -d caddy
 ```
+
+Damit sind alle Oberflächen unter **einem** TLS-Frontdoor erreichbar:
+
+| Hostname (Default) | Dienst |
+|---|---|
+| `audio.localhost` | Eltern-UI/API (enthält die Dienste-Übersicht, s. u.) |
+| `traccar.localhost` | Traccar (Karte) |
+| `findmy.localhost` | Google-Find-Hub-WebUI |
+| `apple.localhost` | Apple-Oberfläche (macless-haystack, Profil `findmy`) |
 
 **LAN-Betrieb (Default, `TLS_ARG=internal`):** Caddy erzeugt eine eigene CA.
 Einmalig das Root-Zertifikat exportieren und auf den Geräten (Handys der Eltern!)
@@ -150,9 +159,19 @@ WSL2 leitet `localhost` automatisch weiter – es ist **kein** zweiter Stack nö
 
 | Dienst | URL im Windows-Browser |
 |---|---|
-| Eltern-UI/API | <http://localhost:8085> |
+| Eltern-UI/API (**Einstiegspunkt für alles**) | <http://localhost:8085> |
 | Traccar | <http://localhost:8082> |
 | Google-Find-My-WebUI | <http://localhost:4321> (Basic-Auth) |
+
+**„Eine App"-Übersicht:** Die Eltern-UI zeigt oben eine **Dienste-Karte** mit
+Live-Status aller Dienste (Karte, Find My Google/Apple, Anisette, Apple-Bridge)
+und Links dorthin. Die Traccar-Karte lässt sich zusätzlich **direkt einbetten**
+(Traccar liefert kein `X-Frame-Options`, das ist geprüft). Der Status wird
+serverseitig im Docker-Netz ermittelt (`GET /api/v1/parent/services`, 10 s gecacht).
+
+Im HTTPS-Betrieb werden die Links automatisch auf die `SITE_*`-Hostnamen
+umgestellt (z. B. `https://traccar.localhost`), sonst auf
+`http://<aktueller Host>:<Port>` – funktioniert also auch vom Handy im LAN.
 
 Für **HTTPS** (Profil `tls`): `.localhost`-Namen lösen im Browser auf 127.0.0.1
 auf, also <https://audio.localhost> / <https://traccar.localhost>. Damit die

@@ -148,5 +148,26 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Auth-Token: $PTOK" \
 [ "$CODE" = "502" ] && pass "Ungültige ICCID sauber beantwortet (HTTP 502)" \
   || fail "Unerwarteter Status bei ungültiger ICCID: $CODE"
 
+echo "16) Dienste-Übersicht (eine Oberfläche für alles)"
+SERVICES=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/services")
+echo "$SERVICES" | grep -q '"services"' && pass "Übersicht abrufbar" || fail "Übersicht fehlerhaft"
+CHECK=$(printf '%s' "$SERVICES" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+by_key = {service['key']: service for service in data['services']}
+problems = []
+if by_key.get('traccar', {}).get('status') != 'up':
+    problems.append('Traccar nicht als erreichbar gemeldet')
+if not by_key.get('traccar', {}).get('embeddable'):
+    problems.append('Karte nicht als einbettbar markiert')
+if by_key.get('findmy-bridge', {}).get('status') != 'n/a':
+    problems.append('findmy-bridge falsch bewertet')
+if 'apple-findmy' not in by_key:
+    problems.append('Apple-Eintrag fehlt')
+print('; '.join(problems))
+")
+[ -z "$CHECK" ] && pass "Dienste vollständig (Traccar erreichbar, Karte einbettbar, Apple dabei)" \
+  || fail "Übersicht: $CHECK"
+
 echo
 echo "Alle Smoke-Tests bestanden."
