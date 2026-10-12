@@ -51,6 +51,12 @@
   .entry { display: flex; flex-wrap: wrap; gap: .15rem .7rem; align-items: baseline; }
   .entry .who { font-weight: 600; }
   .entry .muted { font-variant-numeric: tabular-nums; }
+  /* Chat-Ansicht der Nachrichten */
+  .chat-head { display: flex; flex-wrap: wrap; gap: .3rem .6rem; align-items: baseline; justify-content: space-between; }
+  .badge { background: var(--line); color: var(--fg); border-radius: 999px; padding: .05rem .55rem; font-size: .8rem; white-space: nowrap; }
+  .chat.in > .chat-head .badge { background: var(--accent); color: var(--accent-fg); }
+  .chat.heard > .chat-head .badge { background: var(--ok); color: var(--card); }
+  .chat.out > .chat-head { color: var(--muted); }
   .row-tight { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; align-items: center; }
   .grow { flex: 1 1 14rem; width: auto; }
   .linkish { min-height: var(--tap); padding: .3rem .6rem; }
@@ -304,7 +310,13 @@
       </div>
       <div class="card">
         <h2>Nachrichten</h2>
+        <div class="row-tight">
+          <span class="muted" id="unheard" role="status" aria-live="polite">–</span>
+          <button id="mark-all" hidden>Alle als gehört markieren</button>
+        </div>
         <ul id="list" class="scroll" tabindex="0" role="region" aria-label="Nachrichtenliste"></ul>
+        <p class="hint">„neu" heißt: noch nicht angehört. Beim Abspielen wird die Nachricht
+          automatisch als gehört markiert (mit Zeitstempel).</p>
       </div>
     </section>
 
@@ -367,6 +379,11 @@
         </div>
         <p class="hint" id="sms-hint">Serververmittelt (1NCE A2P): Zustellung erfolgt beim nächsten
           Netz-Attach – kein Handy-↔-Gerät-SMS möglich. Details: <code>docs/sms.md</code>.</p>
+        <div class="row-tight">
+          <button id="sms-history">Verlauf laden</button>
+          <span class="muted" id="sms-history-state" role="status" aria-live="polite"></span>
+        </div>
+        <ul id="sms-list" class="scroll mt" tabindex="0" role="region" aria-label="SMS-Verlauf"></ul>
       </div>
     </section>
 
@@ -649,27 +666,117 @@ $('search').addEventListener('change', async (e) => {
 });
 
 // --- Listen ---
+function statusBadge(message) {
+  if (message.direction === 'in') {
+    return message.listened_at ? 'gehört ' + fmt(message.listened_at) : 'neu';
+  }
+  if (message.status === 'delivered') return 'abgeholt';
+  if (message.status === 'heard') return 'gehört';
+  return 'unterwegs';
+}
+
+async function markListened(messageId, row, badge) {
+  const res = await fetch('/api/v1/parent/messages/' + encodeURIComponent(messageId) + '/listened',
+    { method: 'POST', headers: headers() });
+  if (!res.ok) return;
+  badge.textContent = 'gehört ' + new Date().toLocaleString();
+  row.classList.add('heard');
+  loadMessages();
+  loadChildren();
+}
+
 async function loadMessages() {
   if (!state.token) return;
-  const res = await fetch('/api/v1/parent/messages', { headers: headers() });
+  const query = state.device ? '?device_id=' + encodeURIComponent(state.device) : '';
+  const res = await fetch('/api/v1/parent/messages' + query, { headers: headers() });
   if (!res.ok) { setStatus('Nachrichten: HTTP ' + res.status); return; }
   const data = await res.json();
   const list = $('list');
   list.innerHTML = '';
-  for (const m of data.messages) {
-    const li = document.createElement('li');
-    li.textContent = fmt(m.created_at) + ' – ' + (m.direction === 'in' ? 'vom Tracker' : 'an Tracker') + ' (' + m.status + ')';
+  for (const message of data.messages) {
+    const row = document.createElement('li');
+    row.className = 'chat ' + (message.direction === 'in' ? 'in' : 'out') +
+      (message.listened_at ? ' heard' : '');
+    const head = document.createElement('div');
+    head.className = 'chat-head';
+    const when = document.createElement('span');
+    when.textContent = (message.direction === 'in' ? 'vom Tracker' : 'an Tracker') + ' · ' + fmt(message.created_at);
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = statusBadge(message);
+    head.append(when, badge);
+    row.appendChild(head);
+
     const audio = document.createElement('audio');
     audio.controls = true;
-    fetch(m.audio_url, { headers: headers() })
+    audio.preload = 'none';
+    fetch(message.audio_url, { headers: headers() })
       .then((r) => r.blob())
       .then((b) => { audio.src = URL.createObjectURL(b); })
       .catch(() => {});
-    li.appendChild(audio);
-    list.appendChild(li);
+    if (message.direction === 'in' && !message.listened_at) {
+      audio.addEventListener('play', () => markListened(message.id, row, badge), { once: true });
+    }
+    row.appendChild(audio);
+    list.appendChild(row);
   }
   if (!data.messages.length) list.innerHTML = '<li class="muted">Noch keine Nachrichten.</li>';
+  $('unheard').textContent = data.unheard
+    ? data.unheard + ' neue Nachricht(en)'
+    : 'alles gehört';
+  $('mark-all').hidden = !data.unheard;
 }
+
+$('mark-all').addEventListener('click', async () => {
+  const res = await fetch('/api/v1/parent/messages/listened', { method: 'POST', headers: headers() });
+  const data = await res.json().catch(() => ({}));
+  setStatus(res.ok ? (data.marked || 0) + ' Nachricht(en) als gehört markiert' : 'Fehler: HTTP ' + res.status);
+  loadMessages();
+  loadChildren();
+});
+
+// --- SMS-Verlauf (vom Anbieter geladen, chat-artig) ---
+async function loadSmsHistory() {
+  const device = (setupState && setupState.device) || null;
+  const iccid = (device && device.iccid) || '';
+  if (!iccid) {
+    $('sms-history-state').textContent = 'Keine ICCID hinterlegt – Tab „Einrichtung", Schritt SIM.';
+    $('sms-list').innerHTML = '';
+    return;
+  }
+  $('sms-history-state').textContent = 'lade …';
+  const res = await fetch('/api/v1/parent/sms?iccid=' + encodeURIComponent(iccid), { headers: headers() });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    $('sms-history-state').textContent = data.detail || ('Fehler: HTTP ' + res.status);
+    return;
+  }
+  const data = await res.json();
+  const list = $('sms-list');
+  list.innerHTML = '';
+  for (const message of data.messages || []) {
+    const row = document.createElement('li');
+    row.className = 'chat ' + (message.direction === 'MO' ? 'in' : 'out');
+    const head = document.createElement('div');
+    head.className = 'chat-head';
+    const when = document.createElement('span');
+    when.textContent = (message.direction === 'MO' ? 'vom Tracker' : 'an Tracker') +
+      ' · ' + fmt(message.submitted || message.delivered || '');
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = message.state || 'unbekannt';
+    head.append(when, badge);
+    row.appendChild(head);
+    const text = document.createElement('p');
+    text.textContent = message.text || '(kein Text)';
+    row.appendChild(text);
+    list.appendChild(row);
+  }
+  if (!list.children.length) list.innerHTML = '<li class="muted">Kein SMS-Verlauf vorhanden.</li>';
+  $('sms-history-state').textContent = (data.messages || []).length + ' SMS · ICCID ' + iccid;
+}
+
+$('sms-history').addEventListener('click', loadSmsHistory);
 
 async function loadFindMy() {
   if (!state.token) return;
@@ -805,6 +912,8 @@ $('sms-send').addEventListener('click', async () => {
 function serviceUrl(service) {
   // Bevorzugt die Caddy-Adresse: nur dort greifen Single Sign-on und TLS.
   if (service.site_host && (location.protocol === 'https:' || service.sso_available)) {
+    // Traccar meldet sich über die Bridge automatisch an (kein zweites Login).
+    if (service.key === 'traccar') return 'https://' + service.site_host + '/_sso/traccar';
     return 'https://' + service.site_host;
   }
   return 'http://' + location.hostname + ':' + service.port;

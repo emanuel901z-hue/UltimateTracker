@@ -27,7 +27,7 @@ from pathlib import Path
 START_TIME = time.time()
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.auth import (  # noqa: E402
@@ -79,6 +79,10 @@ TRACCAR_FORWARD_URL = os.environ.get("TRACCAR_FORWARD_URL", "")
 # wer keine externen Aufrufe will, zeigt MAP_TILES auf einen eigenen Kachelserver.
 MAP_TILES = os.environ.get("MAP_TILES", "https://tile.openstreetmap.org/{z}/{x}/{y}.png").strip()
 MAP_ATTRIBUTION = os.environ.get("MAP_ATTRIBUTION", "© OpenStreetMap-Mitwirkende").strip()
+# Automatische Traccar-Anmeldung (Single Sign-on): Zugangsdaten des Traccar-Kontos.
+# Leer = kein Auto-Login (Traccar fragt dann selbst).
+TRACCAR_SSO_EMAIL = os.environ.get("TRACCAR_SSO_EMAIL", "").strip()
+TRACCAR_SSO_PASSWORD = os.environ.get("TRACCAR_SSO_PASSWORD", "").strip()
 SEARCH_MODE_MINUTES = env_int("SEARCH_MODE_MINUTES", 30)
 MAX_UPLOAD_MB = env_float("MAX_UPLOAD_MB", 2.0)
 RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
@@ -216,6 +220,10 @@ def init_db() -> None:
                    expires_at TEXT NOT NULL
                )"""
         )
+        # Migrationen (idempotent): Spalten für neuere Installationen ergänzen
+        message_columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+        if "listened_at" not in message_columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN listened_at TEXT")
 
 
 def now_iso() -> str:
@@ -1374,6 +1382,50 @@ def parent_overview() -> dict:
     return {"children": children, "count": len(children)}
 
 
+@app.get("/_sso/traccar")
+def sso_traccar(request: Request) -> Response:
+    """Automatische Anmeldung in Traccar – läuft über Caddy auf dem Traccar-Host.
+
+    Ablauf: Die Eltern-UI verlinkt auf https://<SITE_TRACCAR>/_sso/traccar.
+    Caddy leitet diesen Pfad an die Bridge (gleicher Hostname!), die Bridge
+    meldet sich serverseitig mit den hinterlegten Traccar-Zugangsdaten an und
+    gibt das dabei entstehende JSESSIONID-Cookie an den Browser weiter. Dadurch
+    gilt die Anmeldung der Eltern-UI auch für Traccar – ohne zweite Eingabe.
+    """
+    token = session_token(request)
+    if not (token_ok(PARENT_TOKEN, token) or session_user(token) is not None):
+        entry = os.environ.get("SITE_AUDIO", "") or "audio.localhost"
+        return RedirectResponse(f"https://{entry}/", status_code=302)
+
+    if not (TRACCAR_SSO_EMAIL and TRACCAR_SSO_PASSWORD):
+        return RedirectResponse("/", status_code=302)  # kein Auto-Login konfiguriert
+
+    payload = urllib.parse.urlencode(
+        {"email": TRACCAR_SSO_EMAIL, "password": TRACCAR_SSO_PASSWORD}
+    ).encode()
+    request_login = urllib.request.Request(
+        "http://traccar:8082/api/session",
+        data=payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    cookie = ""
+    try:
+        with urllib.request.urlopen(request_login, timeout=8) as response:
+            raw = response.headers.get("Set-Cookie", "")
+            cookie = next((part.split(";")[0] for part in raw.split(",")
+                           if "JSESSIONID=" in part), "")
+    except Exception as exc:
+        print(f"[sso] Traccar-Anmeldung fehlgeschlagen: {exc!r}", flush=True)
+
+    redirect = RedirectResponse("/", status_code=302)
+    if cookie:
+        suffix = "; Path=/; HttpOnly; SameSite=Lax"
+        if request_is_https(request):
+            suffix += "; Secure"
+        redirect.headers["Set-Cookie"] = cookie + suffix
+    return redirect
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {
@@ -1623,6 +1675,34 @@ async def parent_upload(device_id: str = Form(...), audio: UploadFile = File(...
     return {"id": msg_id, "converted": ok}
 
 
+@app.post("/api/v1/parent/messages/listened", dependencies=[Depends(require_parent)])
+def messages_all_listened() -> dict:
+    """Alle eingegangenen Nachrichten als gehört markieren (Chat-Status)."""
+    with db() as conn:
+        cursor = conn.execute(
+            "UPDATE messages SET listened_at = ?, status = 'heard' "
+            "WHERE direction = 'in' AND listened_at IS NULL",
+            (now_iso(),),
+        )
+        marked = cursor.rowcount
+    return {"marked": marked}
+
+
+@app.post("/api/v1/parent/messages/{message_id}/listened", dependencies=[Depends(require_parent)])
+def message_listened(message_id: str) -> dict:
+    """Eine Nachricht als gehört markieren."""
+    stamp = now_iso()
+    with db() as conn:
+        row = conn.execute("SELECT id FROM messages WHERE id = ?", (message_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Unbekannte Nachricht")
+        conn.execute(
+            "UPDATE messages SET listened_at = ?, status = 'heard' WHERE id = ?",
+            (stamp, message_id),
+        )
+    return {"id": message_id, "listened_at": stamp, "status": "heard"}
+
+
 @app.get("/api/v1/parent/messages", dependencies=[Depends(require_parent)])
 def parent_list(device_id: str | None = None, limit: int = 50) -> dict:
     sql = "SELECT * FROM messages"
@@ -1634,7 +1714,13 @@ def parent_list(device_id: str | None = None, limit: int = 50) -> dict:
     args.append(max(1, min(limit, 200)))
     with db() as conn:
         rows = conn.execute(sql, args).fetchall()
+        unheard = conn.execute(
+            "SELECT COUNT(*) AS n FROM messages WHERE direction = 'in' AND listened_at IS NULL "
+            + ("AND device_id = ?" if device_id else ""),
+            ([device_id] if device_id else []),
+        ).fetchone()["n"]
     return {
+        "unheard": unheard,
         "messages": [
             {
                 "id": r["id"],
@@ -1642,6 +1728,7 @@ def parent_list(device_id: str | None = None, limit: int = 50) -> dict:
                 "device_id": r["device_id"],
                 "created_at": r["created_at"],
                 "status": r["status"],
+                "listened_at": r["listened_at"] if "listened_at" in r.keys() else None,
                 "duration_ms": r["duration_ms"],
                 "audio_url": f"/api/v1/parent/messages/{r['id']}/audio",
             }

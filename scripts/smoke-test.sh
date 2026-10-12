@@ -300,5 +300,27 @@ print('; '.join(problems))
 ")
 [ -z "$CHECK" ] && pass "Alle Assistenten-Schritte vorhanden" || fail "Setup: $CHECK"
 
+echo "22) Chat-Status (gehört) und Traccar-Auto-Login"
+MESSAGES=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages")
+echo "$MESSAGES" | grep -q '"unheard"' && pass "Nachrichtenliste mit Neu-Zähler" || fail "unheard fehlt"
+FIRST=$(printf '%s' "$MESSAGES" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(data['messages'][0]['id'] if data.get('messages') else '')
+")
+if [ -n "$FIRST" ]; then
+  curl -s -X POST -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages/$FIRST/listened" \
+    | grep -q '"status":"heard"' && pass "Nachricht als gehört markiert" || fail "Markieren fehlgeschlagen"
+else
+  echo "  SKIP - keine Nachricht zum Markieren"
+fi
+curl -s -X POST -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages/listened" | grep -q '"marked"' \
+  && pass "Alle als gehört markierbar" || fail "Sammel-Markierung fehlgeschlagen"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Auth-Token: $PTOK" \
+  "$BASE/api/v1/parent/messages/000000000000/listened")
+[ "$CODE" = "404" ] && pass "Unbekannte Nachricht sauber beantwortet (HTTP 404)" || fail "404 erwartet, kam $CODE"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/_sso/traccar")
+[ "$CODE" = "302" ] && pass "Traccar-Auto-Login leitet ohne Anmeldung um (HTTP 302)" || fail "SSO-Antwort: $CODE"
+
 echo
 echo "Alle Smoke-Tests bestanden."

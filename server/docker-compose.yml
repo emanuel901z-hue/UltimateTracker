@@ -108,6 +108,10 @@ services:
       SITE_APPLE: ${SITE_APPLE:-apple.localhost}
       SITE_LAN: ${SITE_LAN:-localhost}
       TLS_ARG: ${TLS_ARG:-internal}
+      # Automatische Anmeldung in den angeschlossenen Diensten (Single Sign-on):
+      # Basic-Auth-Werte als base64 von "benutzer:passwort".
+      WEBUI_BASIC_AUTH: ${WEBUI_BASIC_AUTH:-}
+      APPLE_BASIC_AUTH: ${APPLE_BASIC_AUTH:-}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

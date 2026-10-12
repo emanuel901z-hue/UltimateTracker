@@ -138,9 +138,26 @@ durch.
 |---|---|---|
 | Eltern-UI/API | Benutzerkonto (PBKDF2 + Sitzungstoken) | – |
 | Karte in der UI | läuft über die Bridge (`/api/v1/parent/map`) | **keine** ✓ |
-| Traccar (Verlauf, Geofences, Berichte) | über die Bridge-Session (Caddy) | **ja** – Traccar-Konto, einmal pro Browser |
-| Google-Find-Hub-WebUI | über die Bridge-Session (Caddy) | **ja** – Basic-Auth, einmal pro Browser |
-| Apple (macless-haystack) | über die Bridge-Session (Caddy) | optional (`endpoint_user`) |
+| Traccar (Verlauf, Geofences, Berichte) | über die Bridge-Session (Caddy) | **automatisch** ✓ (siehe unten) |
+| Google-Find-Hub-WebUI | über die Bridge-Session (Caddy) | automatisch, wenn `WEBUI_BASIC_AUTH` gesetzt ist |
+| Apple (macless-haystack) | über die Bridge-Session (Caddy) | automatisch, wenn `APPLE_BASIC_AUTH` gesetzt ist |
+
+**Automatische Traccar-Anmeldung (Cookie):** Die Eltern-UI verlinkt Traccar auf
+`https://<SITE_TRACCAR>/_sso/traccar`. Caddy leitet diesen Pfad an die Bridge –
+**auf demselben Hostnamen**, deshalb darf die Bridge das Traccar-Sitzungscookie
+setzen. Sie meldet sich serverseitig mit `TRACCAR_SSO_EMAIL`/`TRACCAR_SSO_PASSWORD`
+aus `server/.env` an (Werte stehen in `ADMIN-ZUGANG.txt`) und gibt das
+`JSESSIONID`-Cookie an den Browser weiter. Ergebnis: **kein zweites Login** ✓
+(im Browser verifiziert).
+
+**Basic-Auth der Find-My-Oberflächen:** Caddy schickt die Zugangsdaten
+automatisch mit, damit der Browser nicht fragt:
+
+```bash
+printf '%s' 'benutzer:passwort' | base64 -w0     # → WEBUI_BASIC_AUTH / APPLE_BASIC_AUTH in server/.env
+```
+
+Leer gelassen fragt die jeweilige Oberfläche wie bisher selbst.
 
 **Warum die Karte nicht mehr eingebettet wird:** Traccar verlangt sein eigenes
 Konto, und in einem iframe hält diese Sitzung wegen der Third-Party-Cookie-

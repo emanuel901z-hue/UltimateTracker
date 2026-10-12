@@ -25,6 +25,11 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
   gehostet – ohne zweite Anmeldung), Kinder-Übersicht, Nachrichten,
   Geräteverwaltung, Benutzerkonten mit Login, SIM-/SMS-Verwaltung,
   Firmware-Updates, Monitoring, Einstellungen und Backup an einer Stelle
+- **Nachrichten wie im Chat**: Richtung, Zeitpunkt, Status (neu / gehört mit
+  Zeitstempel / unterwegs / abgeholt) – beim Abspielen wird automatisch als
+  gehört markiert, dazu ein Neu-Zähler und „alle als gehört markieren"
+- **SMS-Verlauf** (vom Anbieter geladen) im gleichen Chat-Stil, inkl. Zustand
+  (PENDING/DELIVERED/FAILED)
 - **Optional**: Apple-/Google-Find-My-Anbindung als Zusatzortung (experimentell)
 
 ## Aufbau
