@@ -42,7 +42,11 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   vom WSL-Sync ausgenommen; der Pre-Commit-Hook (`scripts/git-hooks/pre-commit`)
   blockt `.env`-Dateien und Secret-Muster. Nach dem Klonen installieren:
   `cp scripts/git-hooks/pre-commit .git/hooks/pre-commit`.
-- **Verifikation:** `bash scripts/smoke-test.sh` (19 Gruppen) und
+- **Setup-Assistent:** Die Schritte sind serverseitig prüfbar (`GET /api/v1/parent/setup`)
+  und werden in der UI als `SETUP_STEPS`/`SETUP_OPTIONAL` gespiegelt. Ein neuer
+  Schritt braucht: Eintrag im Endpunkt, Markup (`#setup-step-<key>`), Eintrag in
+  `SETUP_STEPS`/`SETUP_TITLES` und – wenn optional – in `SETUP_OPTIONAL`.
+- **Verifikation:** `bash scripts/smoke-test.sh` (21 Gruppen) und
   `cd server/audio-bridge && python -m unittest discover -s tests` (Provider/Auth)
   müssen grün bleiben; Firmware zusätzlich `pio run` + `pio test -e native`.
 - Container-Namen nicht fest verdrahten (parallele Compose-Projekte, Testinstanz);

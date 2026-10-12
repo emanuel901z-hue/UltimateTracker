@@ -17,6 +17,10 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 - **Sprachnachrichten in beide Richtungen**: Kind drückt PTT, Eltern antworten
   über eine Web-Oberfläche (auch als PWA aufs Handy installierbar)
 - **Suchalarm** (Piezo) und **Bewegungs-Wake** über einen Beschleunigungssensor
+- **Setup-Assistent** beim ersten Login: führt Eltern Schritt für Schritt durch die
+  Geräte-Einführung (Tracker anlegen, SIM, Karte prüfen, Benachrichtigungen,
+  Funktionstest) – jeder Schritt wird serverseitig geprüft, „Weiter" erst wenn er
+  wirklich passt
 - **Operationszentrale** für die Eltern: **eigene Karte** (Leaflet, selbst
   gehostet – ohne zweite Anmeldung), Kinder-Übersicht, Nachrichten,
   Geräteverwaltung, Benutzerkonten mit Login, SIM-/SMS-Verwaltung,
@@ -77,7 +81,7 @@ docker compose up -d
 
 Details (WSL-Setup, TLS, LAN-/Internet-Betrieb, Betrieb & Wartung):
 [`docs/deployment.md`](docs/deployment.md). Tests: `bash scripts/smoke-test.sh`
-(19 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
+(21 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
 `python scripts/check-ui-a11y.py` (Quelltext: Labels, ARIA, Tab-Muster,
 Kontraste hell/dunkel, Bedienziele) und `python scripts/ui-check.py`
 (**headless Chrome**: rendert alle Tabs in Desktop- und Mobilansicht, legt

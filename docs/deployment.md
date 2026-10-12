@@ -167,6 +167,29 @@ kein Header-Login; dafür bräuchte es OpenID Connect). Die Caddy-Prüfung
 verhindert aber, dass überhaupt jemand ohne Eltern-Login hinkommt – und der
 Browser merkt sich die App-Anmeldungen danach.
 
+## 5c. Setup-Assistent (Einführung für Eltern)
+
+Beim ersten Login springt die UI automatisch in den Tab **„Einrichtung"**,
+solange noch kein Tracker Daten geliefert hat. Der Assistent führt in sieben
+Schritten durch die Einführung – und **prüft jeden Schritt serverseitig**
+(`GET /api/v1/parent/setup`), damit „Weiter" erst freigegeben wird, wenn der
+Schritt wirklich erledigt ist:
+
+| Schritt | Prüfung | überspringbar |
+|---|---|---|
+| Willkommen | – | – |
+| Tracker anlegen (IMEI + Name) | Gerät in der Registry | – |
+| SIM eintragen (ICCID/MSISDN) | ICCID gesetzt | ✓ |
+| Karte prüfen (Traccar) | Traccar erreichbar | ✓ |
+| Benachrichtigungen | Web-Push abonniert | ✓ |
+| Funktionstest (PTT drücken) | Position/Nachricht/Beacon angekommen | ✓ |
+| Fertig | Zusammenfassung + nächste Schritte | – |
+
+Nach der Einrichtung bleibt der Tab erhalten (zum Nachschlagen), die
+Übersichtsseite zeigt einen Hinweis, solange etwas offen ist. Fehleingaben
+werden feldbezogen und in Klartext gemeldet (z. B. „Die IMEI besteht aus genau
+15 Ziffern, ohne Leerzeichen."), und der Speichern-Knopf blockiert bis dahin.
+
 ## 6. TLS (Profil `tls`, vor dem Produktiveinsatz!)
 
 ```bash

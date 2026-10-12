@@ -1729,6 +1729,42 @@ def maintenance_cleanup() -> dict:
 # --- Geräte-Registry (Identitäten: IMEI ↔ MSISDN ↔ Name) --------------------
 
 
+@app.get("/api/v1/parent/setup", dependencies=[Depends(require_parent)])
+def setup_status() -> dict:
+    """Was fehlt noch, bis der Tracker läuft? Grundlage für den Setup-Assistenten.
+
+    Jeder Schritt ist einzeln prüfbar, damit die UI „Weiter" erst freigeben kann,
+    wenn der Schritt wirklich erledigt ist (DAU-sicher).
+    """
+    with db() as conn:
+        devices = [dict(row) for row in conn.execute(
+            "SELECT * FROM devices ORDER BY created_at").fetchall()]
+        positions = conn.execute("SELECT COUNT(*) AS n FROM positions").fetchone()["n"]
+        messages = conn.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"]
+        findmy = conn.execute("SELECT COUNT(*) AS n FROM findmy_locations").fetchone()["n"]
+        last_position = conn.execute(
+            "SELECT device_id, received_at FROM positions ORDER BY id DESC LIMIT 1").fetchone()
+
+    return {
+        "steps": {
+            "willkommen": True,
+            "geraet": bool(devices),
+            "sim": any(device.get("iccid") for device in devices),
+            "traccar": probe_http("traccar", 8082, "/api/server") == "up",
+            "benachrichtigungen": push_subscription_count() > 0,
+            "funktionstest": bool(positions or messages or findmy),
+        },
+        "device": devices[0] if devices else None,
+        "device_count": len(devices),
+        "counts": {"positions": positions, "messages": messages, "findmy": findmy},
+        "last_position": dict(last_position) if last_position else None,
+        "sso": {"available": caddy_available(),
+                "entry": os.environ.get("SITE_AUDIO", "") or "audio.localhost"},
+        "done": bool(devices) and bool(positions or messages),
+        "checked_at": now_iso(),
+    }
+
+
 @app.get("/api/v1/parent/devices", dependencies=[Depends(require_parent)])
 def devices_list() -> dict:
     with db() as conn:

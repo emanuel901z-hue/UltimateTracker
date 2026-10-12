@@ -148,6 +148,7 @@
   </div>
 
   <nav class="tabs" role="tablist" aria-label="Bereiche">
+    <button role="tab" id="tab-einrichtung" aria-controls="panel-einrichtung" aria-selected="false" tabindex="-1">Einrichtung</button>
     <button role="tab" id="tab-uebersicht" aria-controls="panel-uebersicht" aria-selected="true">Übersicht</button>
     <button role="tab" id="tab-karte" aria-controls="panel-karte" aria-selected="false" tabindex="-1">Karte</button>
     <button role="tab" id="tab-nachricht" aria-controls="panel-nachricht" aria-selected="false" tabindex="-1">Nachricht</button>
@@ -157,7 +158,125 @@
   </nav>
 
   <main id="main">
-    <section role="tabpanel" id="panel-uebersicht" aria-labelledby="tab-uebersicht" tabindex="0">
+    <section role="tabpanel" id="panel-einrichtung" aria-labelledby="tab-einrichtung" tabindex="0" hidden>
+      <div class="card">
+        <h2>Einrichtung</h2>
+        <p class="hint" id="setup-progress" role="status" aria-live="polite">Schritt 1 von 7</p>
+
+        <div id="setup-step-willkommen">
+          <h3>Willkommen</h3>
+          <p>Dieser Assistent richtet den Tracker ein – in der Reihenfolge, in der es
+            sinnvoll ist. Du kannst jederzeit mit „Zurück" korrigieren; optionale Schritte
+            lassen sich überspringen.</p>
+          <ul>
+            <li><strong>Tracker</strong> (fertig geflasht und mit Akku)</li>
+            <li><strong>SIM-Karte</strong> eingelegt (für Ortung unterwegs)</li>
+            <li><strong>IMEI</strong> zur Hand (Aufkleber auf dem Modem oder in der
+              Bring-up-Konsole mit <code>AT+GSN</code>)</li>
+          </ul>
+          <p class="hint">Es geht los mit: Tracker anlegen → SIM → Karte prüfen →
+            Benachrichtigungen → Funktionstest.</p>
+        </div>
+
+        <div id="setup-step-geraet" hidden>
+          <h3>1 · Tracker anlegen</h3>
+          <p class="hint">Die <strong>IMEI</strong> steht auf dem Aufkleber des SIM7080G-Modems
+            (15 Ziffern). Der Name ist frei wählbar – z. B. der Vorname des Kindes.</p>
+          <label for="s-imei">IMEI (15 Ziffern)
+            <input id="s-imei" type="text" inputmode="numeric" maxlength="15" pattern="[0-9]{15}"
+                   placeholder="860000000000000" aria-describedby="s-imei-error">
+          </label>
+          <p class="field-error" id="s-imei-error"></p>
+          <label for="s-name">Name
+            <input id="s-name" type="text" maxlength="64" placeholder="z. B. Mia"
+                   aria-describedby="s-name-error">
+          </label>
+          <p class="field-error" id="s-name-error"></p>
+          <div class="row-tight">
+            <button id="s-save" class="primary">Tracker speichern</button>
+            <span class="muted" id="s-state" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <div id="setup-step-sim" hidden>
+          <h3>2 · SIM eintragen (optional)</h3>
+          <p class="hint">Nur für den SMS-Pfad nötig. Die <strong>ICCID</strong> steht auf der
+            SIM-Karte bzw. im Portal deines Anbieters (z. B. 1NCE). Die Rufnummer ist optional.</p>
+          <label for="s-iccid">ICCID (19–22 Ziffern)
+            <input id="s-iccid" type="text" inputmode="numeric" maxlength="22" aria-describedby="s-iccid-error">
+          </label>
+          <p class="field-error" id="s-iccid-error"></p>
+          <label for="s-msisdn">MSISDN / Rufnummer (optional)
+            <input id="s-msisdn" type="tel" inputmode="tel" pattern="\+?[0-9]{6,15}"
+                   placeholder="+491700000000" aria-describedby="s-msisdn-error">
+          </label>
+          <p class="field-error" id="s-msisdn-error"></p>
+          <div class="row-tight">
+            <button id="s-sim-save" class="primary">SIM speichern</button>
+            <span class="muted" id="s-sim-state" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <div id="setup-step-traccar" hidden>
+          <h3>3 · Karte prüfen</h3>
+          <p id="setup-traccar-state" role="status" aria-live="polite">– wird geprüft –</p>
+          <p class="hint">Dein Tracker meldet sich in Traccar automatisch an (gleiche IMEI).
+            Für Verlauf, Geofences und Berichte öffnest du Traccar aus der Dienste-Liste –
+            dort gilt Traccars eigenes Konto (einmalig pro Browser). Die Karte in dieser
+            App braucht keine zweite Anmeldung.</p>
+        </div>
+
+        <div id="setup-step-benachrichtigungen" hidden>
+          <h3>4 · Benachrichtigungen</h3>
+          <p class="hint">Damit du bei einer Sprachnachricht sofort informiert wirst. Push
+            braucht eine sichere Verbindung (HTTPS oder localhost).</p>
+          <div class="row-tight">
+            <button id="s-push">Auf diesem Gerät aktivieren</button>
+            <span class="muted" id="setup-push-state" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <div id="setup-step-funktionstest" hidden>
+          <h3>5 · Funktionstest</h3>
+          <p>Drücke am Tracker den <strong>PTT-Knopf</strong> (kurz halten, dann sprechen).
+            Sobald die Nachricht ankommt, erscheint sie unter „Nachrichten".</p>
+          <div class="row-tight">
+            <button id="s-check">Jetzt prüfen</button>
+            <span class="muted" id="setup-check-state" role="status" aria-live="polite"></span>
+          </div>
+          <p class="hint">Klappt es nicht? Tracker kurz vom Strom nehmen, Akku prüfen und
+            erneut versuchen. Ohne Netz sucht der Tracker selbstständig weiter.</p>
+        </div>
+
+        <div id="setup-step-fertig" hidden>
+          <h3>Fertig 🎉</h3>
+          <p id="setup-summary"></p>
+          <ul>
+            <li><strong>Suchmodus</strong> (Tab „Nachricht"): Tracker piept und meldet sich öfter.</li>
+            <li><strong>Karte</strong>: letzte Position je Kind, aktualisiert im Minutentakt.</li>
+            <li><strong>Betrieb</strong>: Einstellungen, Aufräumen, Backup.</li>
+            <li><strong>Konto</strong>: weitere Eltern anlegen, eigenes Passwort ändern.</li>
+          </ul>
+        </div>
+
+        <div class="row-tight mt">
+          <button id="setup-back">Zurück</button>
+          <button id="setup-next" class="primary">Weiter</button>
+          <button id="setup-skip" hidden>Überspringen</button>
+        </div>
+      </div>
+    </section>
+
+    <section role="tabpanel" id="panel-uebersicht" aria-labelledby="tab-uebersicht" tabindex="0" hidden>
+      <div class="card" id="setup-hint" hidden>
+        <h2>Einrichtung noch offen</h2>
+        <p class="hint">Der Assistent führt Schritt für Schritt durch die Geräte-Einführung:
+          Tracker anlegen, SIM, Benachrichtigungen, Funktionstest.</p>
+        <div class="row-tight">
+          <button id="setup-open" class="primary">Einrichtung starten</button>
+          <span class="muted" id="setup-hint-state" role="status" aria-live="polite"></span>
+        </div>
+      </div>
       <div class="card" id="sso-hint" hidden>
         <h2>Single Sign-on verfügbar</h2>
         <p class="hint">
@@ -1006,6 +1125,7 @@ function showApp(user) {
   loadUsers();
   loadSystem();
   loadSettings();
+  loadSetup();
 }
 
 // --- Benutzerverwaltung (nur Administratoren) ---
@@ -1135,7 +1255,8 @@ function selectTab(tab, moveFocus = true) {
   });
   localStorage.setItem('ut_tab', tab.id);
   if (moveFocus) tab.focus();
-  if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); }
+  if (tab.id === 'tab-einrichtung') loadSetup();
+  if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); loadSetup(); }
   if (tab.id === 'tab-karte' && leafletMap) leafletMap.invalidateSize();
   if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); }
   if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); }
@@ -1259,9 +1380,149 @@ function updateSmsCounter() {
 }
 $('sms-text').addEventListener('input', updateSmsCounter);
 
+// --- Setup-Assistent (Eltern durch die Geräte-Einführung führen) ------------
+const SETUP_STEPS = ['willkommen', 'geraet', 'sim', 'traccar', 'benachrichtigungen',
+  'funktionstest', 'fertig'];
+const SETUP_TITLES = {
+  willkommen: 'Willkommen', geraet: 'Tracker anlegen', sim: 'SIM eintragen',
+  traccar: 'Karte prüfen', benachrichtigungen: 'Benachrichtigungen',
+  funktionstest: 'Funktionstest', fertig: 'Fertig',
+};
+const SETUP_OPTIONAL = new Set(['sim', 'traccar', 'benachrichtigungen', 'funktionstest']);
+let setupIndex = 0;
+let setupState = null;
+
+async function loadSetup() {
+  if (!state.token) return;
+  try {
+    const res = await fetch('/api/v1/parent/setup', { headers: headers() });
+    if (!res.ok) return;
+    setupState = await res.json();
+  } catch (err) {
+    return;
+  }
+  $('setup-hint').hidden = setupState.done;
+  $('setup-hint-state').textContent = setupState.done ? '' : (setupState.device
+    ? 'Gerät: ' + (setupState.device.name || setupState.device.id)
+    : 'Noch kein Tracker angelegt');
+  $('setup-traccar-state').textContent = setupState.steps.traccar
+    ? 'Traccar ist erreichbar – dein Tracker meldet sich dort automatisch an.'
+    : 'Traccar antwortet gerade nicht. Läuft der Server? (docker compose ps)';
+  $('setup-push-state').textContent = setupState.steps.benachrichtigungen ? 'aktiviert ✓' : '';
+  $('setup-check-state').textContent = setupState.steps.funktionstest
+    ? 'Es sind bereits Daten angekommen ✓'
+    : 'Noch keine Daten – Knopf am Tracker drücken, dann erneut prüfen.';
+  $('setup-summary').textContent = setupState.done
+    ? 'Der Tracker ist eingerichtet und hat sich schon gemeldet. Alles Weitere findest du in den Tabs.'
+    : 'Der Tracker ist angelegt. Sobald er sich das erste Mal meldet, erscheint er auf der Karte.';
+  updateSetupButtons();
+  // Beim ersten Besuch automatisch in die Einrichtung springen, solange offen.
+  if (!setupState.done && !localStorage.getItem('ut_setup_seen')) {
+    localStorage.setItem('ut_setup_seen', '1');
+    selectTab(document.getElementById('tab-einrichtung'), false);
+    showSetupStep(0);
+  }
+}
+
+function updateSetupButtons() {
+  const step = SETUP_STEPS[setupIndex];
+  $('setup-progress').textContent = 'Schritt ' + (setupIndex + 1) + ' von ' +
+    SETUP_STEPS.length + ' · ' + SETUP_TITLES[step];
+  $('setup-back').disabled = setupIndex === 0;
+  const done = Boolean(setupState && setupState.steps[step]);
+  const optional = SETUP_OPTIONAL.has(step);
+  $('setup-next').disabled = !(done || optional);
+  $('setup-next').textContent = setupIndex === SETUP_STEPS.length - 1
+    ? 'Assistent beenden'
+    : (done || optional ? 'Weiter' : (step === 'geraet' ? 'Erst Tracker speichern' : 'Weiter'));
+  $('setup-skip').hidden = !(optional && !done);
+}
+
+function showSetupStep(index) {
+  setupIndex = Math.max(0, Math.min(SETUP_STEPS.length - 1, index));
+  SETUP_STEPS.forEach((key, position) => {
+    document.getElementById('setup-step-' + key).hidden = position !== setupIndex;
+  });
+  updateSetupButtons();
+}
+
+$('setup-back').addEventListener('click', () => showSetupStep(setupIndex - 1));
+$('setup-next').addEventListener('click', () => {
+  if (setupIndex === SETUP_STEPS.length - 1) {
+    selectTab(document.getElementById('tab-uebersicht'), false);
+    return;
+  }
+  showSetupStep(setupIndex + 1);
+});
+$('setup-skip').addEventListener('click', () => showSetupStep(setupIndex + 1));
+$('setup-open').addEventListener('click', () => {
+  selectTab(document.getElementById('tab-einrichtung'), false);
+  showSetupStep(0);
+});
+$('s-push').addEventListener('click', () => $('push-enable').click());
+
+$('s-save').addEventListener('click', async () => {
+  const imei = $('s-imei').value.trim();
+  const name = $('s-name').value.trim();
+  const okImei = /^[0-9]{15}$/.test(imei)
+    ? fieldError($('s-imei'), '')
+    : fieldError($('s-imei'), 'Die IMEI besteht aus genau 15 Ziffern, ohne Leerzeichen.');
+  const okName = requireText($('s-name'), 'Der Name', 2);
+  if (!okImei || !okName) return;
+  $('s-state').textContent = 'wird gespeichert …';
+  const res = await fetch('/api/v1/parent/devices/' + encodeURIComponent(imei), {
+    method: 'PUT',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, imei }),
+  });
+  $('s-state').textContent = res.ok ? 'gespeichert ✓' : ('Fehler: HTTP ' + res.status);
+  if (res.ok) {
+    await loadDevices();
+    await loadSetup();
+    showSetupStep(setupIndex + 1);
+  }
+});
+
+$('s-sim-save').addEventListener('click', async () => {
+  const device = setupState && setupState.device;
+  if (!device) {
+    $('s-sim-state').textContent = 'Bitte zuerst den Tracker anlegen (Schritt 1).';
+    return;
+  }
+  const iccid = $('s-iccid').value.trim();
+  const okIccid = !iccid || /^[0-9]{19,22}$/.test(iccid)
+    ? fieldError($('s-iccid'), '')
+    : fieldError($('s-iccid'), 'Die ICCID besteht aus 19–22 Ziffern (ohne Leerzeichen).');
+  const okPhone = optionalPhone($('s-msisdn'));
+  if (!okIccid || !okPhone) return;
+  $('s-sim-state').textContent = 'wird gespeichert …';
+  const res = await fetch('/api/v1/parent/devices/' + encodeURIComponent(device.id), {
+    method: 'PUT',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: device.name || device.id, imei: device.imei || '',
+      msisdn: $('s-msisdn').value.trim(), iccid, notes: device.notes || '',
+    }),
+  });
+  $('s-sim-state').textContent = res.ok ? 'gespeichert ✓' : ('Fehler: HTTP ' + res.status);
+  if (res.ok) {
+    await loadSetup();
+    showSetupStep(setupIndex + 1);
+  }
+});
+
+$('s-check').addEventListener('click', async () => {
+  $('setup-check-state').textContent = 'prüfe …';
+  await loadSetup();
+  $('setup-check-state').textContent = setupState.steps.funktionstest
+    ? 'Es ist etwas angekommen ✓'
+    : 'Noch nichts angekommen – Knopf am Tracker drücken und erneut prüfen.';
+});
+
 // Start: gemerkter Tab oder Übersicht
-selectTab(TABS.find((tab) => tab.id === localStorage.getItem('ut_tab')) || TABS[0], false);
+selectTab(document.getElementById(localStorage.getItem('ut_tab') || 'tab-uebersicht'), false);
 updateSmsCounter();
+loadSetup();
 </script>
 </body>
 </html>

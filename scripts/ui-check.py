@@ -39,7 +39,7 @@ except ImportError:
     print("Bitte zuerst installieren:  pip install websockets")
     sys.exit(2)
 
-TABS = ("uebersicht", "karte", "nachricht", "geraete", "betrieb", "konto")
+TABS = ("einrichtung", "uebersicht", "karte", "nachricht", "geraete", "betrieb", "konto")
 VIEWPORTS = {"desktop": (1280, 900, 1.0), "mobile": (390, 844, 2.0)}
 CHROME_CANDIDATES = (
     os.environ.get("CHROME", ""),

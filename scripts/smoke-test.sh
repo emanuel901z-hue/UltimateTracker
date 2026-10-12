@@ -279,5 +279,26 @@ curl -s -o /dev/null -w "" -H "X-Auth-Token: $PTOK" "$BASE/static/vendor/leaflet
 LEAFLET=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/static/vendor/leaflet/leaflet.js")
 [ "$LEAFLET" = "200" ] && pass "Leaflet wird ausgeliefert (selbst gehostet)" || fail "Leaflet: HTTP $LEAFLET"
 
+echo "21) Setup-Assistent (Status der Einrichtung)"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/parent/setup")
+[ "$CODE" = "401" ] && pass "Setup-Status ohne Anmeldung gesperrt (HTTP 401)" || fail "Setup-Schutz: $CODE"
+SETUP=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/setup")
+echo "$SETUP" | grep -q '"steps"' && pass "Einrichtungsschritte abrufbar" || fail "Setup-Status fehlgeschlagen"
+CHECK=$(printf '%s' "$SETUP" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+problems = []
+steps = data.get('steps', {})
+for key in ('willkommen', 'geraet', 'sim', 'traccar', 'benachrichtigungen', 'funktionstest'):
+    if key not in steps:
+        problems.append('Schritt ' + key + ' fehlt')
+if not isinstance(data.get('done'), bool):
+    problems.append('done fehlt')
+if data.get('sso', {}).get('available') is None:
+    problems.append('SSO-Status fehlt')
+print('; '.join(problems))
+")
+[ -z "$CHECK" ] && pass "Alle Assistenten-Schritte vorhanden" || fail "Setup: $CHECK"
+
 echo
 echo "Alle Smoke-Tests bestanden."
