@@ -247,6 +247,12 @@ Smoke-Test finden den Bridge-Container dynamisch.
 
 | Symptom | Ursache/Abhilfe |
 |---|---|
+| `ADMIN-ZUGANG.txt` verschwindet nach `sync-to-wsl.sh` | Die Datei gibt es **nur in der WSL** (Secrets). Der Sync muss sie ausnehmen – siehe Ausschlussliste im Skript (`server/ADMIN-ZUGANG.txt`, `server/.env`, `server/caddy-root.crt`). Fehlt der Eintrag, löscht `rsync --delete` die Datei. |
+| Traccar-Admin-Passwort unbekannt (z. B. weil die Zugangsdatei weg ist) | Nicht-destruktive Wiederherstellung: (1) Registrierung kurz aktivieren: `UPDATE tc_servers SET registration = true;`, (2) temporären Benutzer per API registrieren (`POST /api/users` mit Name/E-Mail/Passwort), (3) dessen Hash auf den Admin kopieren: `UPDATE tc_users AS admin SET hashedpassword = tmp.hashedpassword, salt = tmp.salt FROM tc_users AS tmp WHERE admin.email = '<admin-mail>' AND tmp.email = '<temp-mail>';`, (4) temporären Benutzer löschen, (5) `UPDATE tc_servers SET registration = false;`, (6) Login per `POST /api/session` prüfen (Formulardaten, nicht JSON!). |
+| `POST /api/session` liefert HTTP 415 | Traccar erwartet **Formulardaten** (`--data-urlencode email=… password=…`), kein JSON. |
+
+| Symptom | Ursache/Abhilfe |
+|---|---|
 | `permission denied` bei `docker` | Gruppe `docker` greift erst in neuer Session: `wsl --terminate UltimateTracker` |
 | Port belegt | `ss -tlnp` in der Distro; Ports in `docker-compose.yml` anpassen |
 | Traccar leer | OsmAnd-GET prüfen (Parameter `id`, `lat`, `lon`); Logs: `docker compose logs traccar` |

@@ -22,6 +22,8 @@ rsync -a --delete \
   --exclude '.pio/' \
   --exclude '__pycache__/' \
   --exclude 'server/.env' \
+  --exclude 'server/ADMIN-ZUGANG.txt' \
+  --exclude 'server/caddy-root.crt' \
   "$SRC/" "$DST/"
 
 echo "Synchronisiert: $SRC -> $DST"
