@@ -44,6 +44,10 @@ jobs:
         run: |
           cp server/.env.example server/.env
           sed -i 's/change-me-device-token/test-device-token/; s/change-me-parent-token/test-parent-token/' server/.env
+          # Administrator für die Login-/Benutzerverwaltungs-Tests: ohne ihn gäbe es
+          # nur den temporären Benutzer aus Gruppe 18, der zu Recht geschützt ist.
+          sed -i 's/^PARENT_PASSWORD=$/PARENT_PASSWORD=ci-test-passwort-2026/' server/.env
+          echo "Gesetzte Schlüssel:"; grep -oE '^(DEVICE_TOKEN|PARENT_TOKEN|PARENT_USER|PARENT_PASSWORD)=' server/.env
       - name: Stack starten
         working-directory: server
         run: docker compose up -d --build
