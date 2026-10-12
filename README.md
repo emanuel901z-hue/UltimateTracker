@@ -76,10 +76,13 @@ docker compose up -d
 
 Details (WSL-Setup, TLS, LAN-/Internet-Betrieb, Betrieb & Wartung):
 [`docs/deployment.md`](docs/deployment.md). Tests: `bash scripts/smoke-test.sh`
-(19 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik) und
-`python scripts/check-ui-a11y.py` (Bedienbarkeit/Barrierefreiheit der
-Eltern-UI: Labels, ARIA, Tab-Muster, Kontraste hell/dunkel, Bedienziele –
-Orientierung an WCAG 2.2 AA).
+(19 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
+`python scripts/check-ui-a11y.py` (Quelltext: Labels, ARIA, Tab-Muster,
+Kontraste hell/dunkel, Bedienziele) und `python scripts/ui-check.py`
+(**headless Chrome**: rendert alle Tabs in Desktop- und Mobilansicht, legt
+Screenshots ab und prüft den Accessibility-Baum – kein Eingabefeld ohne
+zugänglichen Namen). Orientierung: **WCAG 2.2 AA**; beide UI-Prüfungen laufen
+in der CI.
 
 ## Datenschutz & Sicherheit
 

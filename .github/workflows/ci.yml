@@ -74,6 +74,47 @@ jobs:
         if: failure()
         run: docker compose -f server/docker-compose.yml logs --tail 80
 
+  ui:
+    name: UI in headless Chrome (Screenshots + Accessibility-Baum)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: .env mit Test-Tokens
+        run: |
+          cp server/.env.example server/.env
+          sed -i 's/change-me-device-token/test-device-token/; s/change-me-parent-token/test-parent-token/' server/.env
+          sed -i 's/^PARENT_PASSWORD=$/PARENT_PASSWORD=ci-test-passwort-2026/' server/.env
+      - name: Stack starten
+        working-directory: server
+        run: docker compose up -d --build
+      - name: Auf Bereitschaft warten
+        run: |
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:8085/healthz >/dev/null; then
+              echo "Bridge bereit nach $((i * 5)) s"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Bridge nicht bereit – Logs:"; docker compose -f server/docker-compose.yml logs --tail 60
+          exit 1
+      - name: websockets installieren
+        run: pip install websockets
+      - name: Screenshots + Accessibility-Baum prüfen
+        run: python scripts/ui-check.py --out ui-shots
+      - name: Screenshots als Artefakt ablegen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: ui-shots/*.png
+          retention-days: 14
+      - name: Logs bei Fehlern
+        if: failure()
+        run: docker compose -f server/docker-compose.yml logs --tail 80
+
   firmware:
     name: Firmware-Build + native Tests
     runs-on: ubuntu-latest
