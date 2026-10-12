@@ -283,6 +283,33 @@ def token_ok(expected: str, provided: str | None) -> bool:
     return bool(expected) and provided is not None and secrets.compare_digest(expected, provided)
 
 
+# --- Single Sign-on (Cookie für Caddy forward_auth) -------------------------
+
+COOKIE_NAME = "ut_session"
+# Optional: Cookie-Domain für SSO über Subdomains (z. B. ".example.org").
+# Für *.localhost wird automatisch "localhost" gesetzt (deckt audio./traccar./…).
+COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN", "").strip()
+
+
+def request_is_https(request: Request) -> bool:
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    return proto.split(",")[0].strip() == "https"
+
+
+def cookie_domain(request: Request) -> str | None:
+    if COOKIE_DOMAIN:
+        return COOKIE_DOMAIN
+    host = (request.headers.get("host") or "").split(":")[0]
+    if host.endswith(".localhost"):
+        return "localhost"  # gemeinsame Eltern-Domain aller *.localhost-Sites
+    return None  # Standard: Host-Cookie (reicht bei gleichem Host, anderem Port)
+
+
+def session_token(request: Request, header_token: str | None = None) -> str:
+    """Sitzungstoken aus Header (UI/API) oder Cookie (SSO)."""
+    return (header_token or "").strip() or request.cookies.get(COOKIE_NAME, "")
+
+
 def require_device(x_auth_token: str | None = Header(default=None)) -> None:
     if not token_ok(DEVICE_TOKEN, x_auth_token):
         raise HTTPException(status_code=401, detail="Ungültiges Device-Token")
@@ -312,11 +339,10 @@ def session_user(token: str | None) -> dict | None:
     return {"id": row["id"], "username": row["username"], "role": row["role"]}
 
 
-def require_parent(x_auth_token: str | None = Header(default=None)) -> None:
-    """Zugang für Eltern: Sitzungstoken (Login) **oder** fester API-Token."""
-    if token_ok(PARENT_TOKEN, x_auth_token):
-        return
-    if session_user(x_auth_token) is not None:
+def require_parent(request: Request, x_auth_token: str | None = Header(default=None)) -> None:
+    """Zugang für Eltern: Sitzungstoken (Header **oder** Cookie) oder API-Token."""
+    token = session_token(request, x_auth_token)
+    if token_ok(PARENT_TOKEN, token) or session_user(token) is not None:
         return
     raise HTTPException(status_code=401, detail="Nicht angemeldet")
 
@@ -1072,8 +1098,8 @@ def maintenance_backup() -> FileResponse:
 
 
 @app.post("/api/v1/auth/login")
-async def auth_login(request: Request) -> dict:
-    """Anmeldung mit Benutzername und Passwort → Sitzungstoken."""
+async def auth_login(request: Request, response: Response) -> dict:
+    """Anmeldung mit Benutzername und Passwort → Sitzungstoken + Cookie (SSO)."""
     try:
         body = await request.json()
     except Exception:
@@ -1093,6 +1119,17 @@ async def auth_login(request: Request) -> dict:
             (token, row["id"], now_iso(), expires),
         )
         conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now_iso(),))
+    # Cookie für Single Sign-on über Caddy (forward_auth) – der Header-Weg bleibt.
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        max_age=24 * 30 * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=request_is_https(request),
+        domain=cookie_domain(request),
+        path="/",
+    )
     return {
         "token": token,
         "expires_at": expires,
@@ -1100,12 +1137,22 @@ async def auth_login(request: Request) -> dict:
     }
 
 
+@app.get("/api/v1/auth/verify")
+def auth_verify(request: Request, x_auth_token: str | None = Header(default=None)) -> Response:
+    """Für Caddy `forward_auth`: 200 = angemeldet, 401 = nicht (kein Body, schnell)."""
+    token = session_token(request, x_auth_token)
+    if token_ok(PARENT_TOKEN, token) or session_user(token) is not None:
+        return Response(status_code=200)
+    return Response(status_code=401)
+
+
 @app.post("/api/v1/auth/logout")
-async def auth_logout(request: Request) -> dict:
-    """Sitzung beenden (Token wird ungültig)."""
-    token = str(request.headers.get("x-auth-token") or "")
+async def auth_logout(request: Request, response: Response) -> dict:
+    """Sitzung beenden (Token und Cookie werden ungültig)."""
+    token = session_token(request, request.headers.get("x-auth-token"))
     with db() as conn:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    response.delete_cookie(COOKIE_NAME, domain=cookie_domain(request), path="/")
     return {"logged_out": True}
 
 

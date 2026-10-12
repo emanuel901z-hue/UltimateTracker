@@ -30,21 +30,37 @@
 	reverse_proxy audio-bridge:8085
 }
 
+# ---------------------------------------------------------------------------
+# Single Sign-on: Traccar und die Find-My-Oberflächen prüfen die Anmeldung der
+# Eltern-UI (Cookie "ut_session"). Wer dort angemeldet ist, kommt hier ohne
+# zweite Anmeldung rein – vorausgesetzt, die Cookies sind über die Hostnamen
+# hinweg gültig (siehe SESSION_COOKIE_DOMAIN / *.localhost in docs/deployment.md).
+# ---------------------------------------------------------------------------
+
 {$SITE_TRACCAR:traccar.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
+	forward_auth audio-bridge:8085 {
+		uri /api/v1/auth/verify
+	}
 	reverse_proxy traccar:8082
 }
 
 {$SITE_FINDMY:findmy.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
+	forward_auth audio-bridge:8085 {
+		uri /api/v1/auth/verify
+	}
 	reverse_proxy google-findmy-webui:4321
 }
 
 {$SITE_APPLE:apple.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
+	forward_auth audio-bridge:8085 {
+		uri /api/v1/auth/verify
+	}
 	reverse_proxy macless-haystack:6176
 }
 

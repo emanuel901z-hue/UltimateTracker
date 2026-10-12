@@ -127,6 +127,32 @@ das jeweilige Kind um. Der **Suchmodus ist pro Kind** (`device_id`) – bei fün
 Kindern piept also nur das gesuchte. Nachrichten und Positionen werden je Gerät
 geführt; Traccar zeigt ohnehin alle Geräte auf der Karte.
 
+## 6a. Ein Login für alle Dienste (Single Sign-on)
+
+Die Eltern-UI ist die **Anmeldung**: Caddy prüft bei Traccar, Google- und
+Apple-Oberfläche das Sitzungs-Cookie der Bridge (`forward_auth` auf
+`/api/v1/auth/verify`). Wer dort angemeldet ist, kommt ohne zweite Anmeldung
+durch.
+
+| Dienst | Zugangsschutz | Eigene Anmeldung zusätzlich |
+|---|---|---|
+| Eltern-UI/API | Benutzerkonto (PBKDF2 + Sitzungstoken) | – |
+| Traccar (Karte) | über die Bridge-Session (Caddy) | **ja** – Traccar-Konto, einmal pro Browser |
+| Google-Find-Hub-WebUI | über die Bridge-Session (Caddy) | **ja** – Basic-Auth, einmal pro Browser |
+| Apple (macless-haystack) | über die Bridge-Session (Caddy) | optional (`endpoint_user`) |
+
+**Cookies:** Beim Zugriff über `*.localhost` setzt die Bridge `Domain=localhost`
+– damit gilt die Anmeldung für `audio.`, `traccar.`, `findmy.` und
+`apple.localhost`. Für eigene Domains mit Subdomains in `server/.env`
+`SESSION_COOKIE_DOMAIN=.example.org` setzen. Beim Betrieb über **einen** Namen
+mit verschiedenen Ports (DynDNS, Abschnitt 9.2) greift das Cookie automatisch –
+Ports sind für Cookies irrelevant.
+
+**Was nicht geht:** die Anmeldung *innerhalb* von Traccar ersetzen (Traccar kennt
+kein Header-Login; dafür bräuchte es OpenID Connect). Die Caddy-Prüfung
+verhindert aber, dass überhaupt jemand ohne Eltern-Login hinkommt – und der
+Browser merkt sich die App-Anmeldungen danach.
+
 ## 6. TLS (Profil `tls`, vor dem Produktiveinsatz!)
 
 ```bash

@@ -105,6 +105,7 @@ Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes),
 | POST | `/api/v1/auth/login` | – | Anmeldung (Benutzer/Passwort) → Sitzungstoken |
 | POST | `/api/v1/auth/logout` | Sitzung | Sitzung beenden |
 | GET | `/api/v1/auth/me` | Sitzung/Token | aktueller Zugang |
+| GET | `/api/v1/auth/verify` | Sitzung | Prüfung für Caddy `forward_auth` (SSO) |
 | GET/POST | `/api/v1/auth/users` | Admin | Benutzer auflisten/anlegen |
 | DELETE | `/api/v1/auth/users/{id}` | Admin | Benutzer löschen |
 | POST | `/api/v1/auth/password` | Sitzung | eigenes Passwort ändern (andere Sitzungen enden) |
