@@ -243,7 +243,75 @@ Config-Bind-Mounts (nur lesend). Die Container-Namen sind **nicht** mehr fest
 verdrahtet (`ut-*`), sondern vom Compose-Projekt abgeleitet – Skripte wie der
 Smoke-Test finden den Bridge-Container dynamisch.
 
-## 9. Troubleshooting
+## 9. Operationszentrale & Internet-Betrieb
+
+### 10.1 Was gehört wohin (und warum nicht alles in Traccar)
+
+| Aufgabe | Wo | Warum dort |
+|---|---|---|
+| Karte, Verlauf, Geofences, Berichte, Fahrtenbuch | **Traccar** (8082) | ausgereifte Tracking-App |
+| Sprachnachrichten, Geräte-Registry, Benutzer, Suchmodus, OTA, SIM/SMS, Monitoring, Einstellungen, Backup | **Audio-Bridge** (8085) – die Operationszentrale | hier steckt unsere gesamte Geräte-/Familienlogik |
+| Karte zusätzlich **eingebettet** | in der Bridge-UI | ein Einstiegspunkt, kein Wechsel |
+| Apple/Google Find My | optional (Profil `findmy`) | experimentell, eigenständige Werkzeuge |
+
+**Traccar als Basis wäre ein Fork:** Traccar ist eine Java-Anwendung mit
+kompilierter Vue-Oberfläche; eigene Seiten/Logik darin zu integrieren heißt, die
+Web-App zu ersetzen – und damit bei **jedem** Update zu brechen. Der tragfähige
+Weg ist umgekehrt: **eine Oberfläche (Bridge) mit einem Login**, die Traccar
+einbettet und verlinkt. Deshalb sind Karte, Dienste-Status, Kinder-Übersicht,
+Benutzer, Einstellungen, Betriebswerte und Backup in der Bridge-UI gebündelt.
+
+### 10.2 Ein Einstiegspunkt von außen (DynDNS + ein Name)
+
+Ziel: vom Handy nur `https://<dein-dyndns-name>` aufrufen → Login → alles da.
+
+1. **Router**: nur **80** und **443** auf den Host weiterleiten (Let's Encrypt
+   braucht 80 für die Prüfung). Optional zusätzlich **8443** für die vollständige
+   Traccar-Oberfläche. Alle anderen Ports (8082, 8085, 4321 …) **nicht** öffnen.
+2. **`server/.env`** anpassen:
+   ```env
+   SITE_AUDIO=meinname.dyndns.org
+   SITE_TRACCAR=meinname.dyndns.org:8443
+   SITE_FINDMY=meinname.dyndns.org:8444
+   SITE_APPLE=meinname.dyndns.org:8445
+   TLS_ARG=du@example.org        # Let's Encrypt; Caddy holt die Zertifikate selbst
+   ```
+3. `docker compose --profile tls up -d caddy`
+4. Handy: `https://meinname.dyndns.org` → Login → **„Zum Home-Bildschirm"**
+   (PWA) → danach wie eine App, mit Push-Benachrichtigungen.
+
+Die eingebettete Karte funktioniert auch hier, weil die UI die Links automatisch
+auf die `SITE_*`-Hostnamen umstellt (HTTPS-Modus).
+
+### 10.3 Sicherheits-Checkliste für den Internet-Betrieb
+
+| Punkt | Status/Umsetzung |
+|---|---|
+| TLS überall | Caddy-Profil `tls`, Let's Encrypt (`TLS_ARG=<E-Mail>`) |
+| Anmeldung | Bridge: Benutzerkonten (PBKDF2, Sitzungstoken); Traccar: eigenes Konto; Find-My-WebUIs: Basic-Auth |
+| Passwörter | mindestens 10 Zeichen erzwungen; Admin-Reset dokumentiert (Abschnitt 10) |
+| Nur nötige Ports | 80/443 (+ ggf. 8443/8444/8445) – Datenbank, Postgres, Anisette bleiben intern |
+| Updates | Images sind gepinnt (Abschnitt 2/5) – bewusst aktualisieren, nicht automatisch |
+| Backups | UI-Knopf (Abschnitt 10.4) + `scripts/backup-volumes.sh` |
+| Angriffsfläche | Find-My-Dienste nur bei Bedarf starten (`--profile findmy`) |
+| Rate-Limits | Caddy-Plugin (`caddy-ratelimit`) oder fail2ban auf 401er – optional |
+| Alternative ohne Exposition | **Tailscale/WireGuard**: Geräte im privaten Netz, kein offener Port |
+
+### 10.4 Betrieb in der UI
+
+| Karte | Inhalt |
+|---|---|
+| **Dienste** | Live-Status aller Dienste + Links (Karte einbettbar) |
+| **Kinder** | pro Tracker: Akku, letzte Position, offene Nachrichten, Suchmodus |
+| **Betrieb** | Laufzeit, Last, Speicher, Plattenplatz, Datenbestand, letztes Aufräumen/Backup + Knöpfe „Aufräumen jetzt" und „Backup herunterladen" |
+| **Einstellungen** | Poll-Intervalle, Suchmodusdauer, Aufbewahrung, Akkuschwelle, Benachrichtigungen – **wirken sofort** (überschreiben die `.env`-Startwerte) |
+| **Benutzer** | Konten anlegen/löschen, Passwort zurücksetzen (nur Admin) |
+
+Damit ist die Bridge die Operationszentrale: ein Login, Monitoring,
+Konfiguration, Administration und Wartung an einer Stelle – Traccar liefert die
+Karte, die eingebettet daneben liegt.
+
+## 10. Troubleshooting
 
 | Symptom | Ursache/Abhilfe |
 |---|---|

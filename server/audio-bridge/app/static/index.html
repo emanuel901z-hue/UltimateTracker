@@ -60,6 +60,27 @@
   </details>
 </div>
 
+<div class="card">
+  <h2>Betrieb</h2>
+  <div id="system" class="muted">– wird geladen –</div>
+  <div class="row-tight mt">
+    <button id="system-refresh">Werte aktualisieren</button>
+    <button id="cleanup">Aufräumen jetzt</button>
+    <button id="backup">Backup herunterladen</button>
+  </div>
+  <div class="muted mt">Backup enthält Audio, Datenbank und Ereignislog als tar.gz.</div>
+</div>
+
+<div class="card">
+  <h2>Einstellungen</h2>
+  <div id="settings" class="muted">– wird geladen –</div>
+  <div class="row-tight mt">
+    <button id="settings-save">Speichern</button>
+    <span class="muted" id="settings-state"></span>
+  </div>
+  <div class="muted mt">Wirkt sofort (ohne Neustart); die <code>.env</code> bleibt der Startwert.</div>
+</div>
+
 <div class="card" id="user-bar" hidden>
   <span id="user-name" class="muted">–</span>
   <button id="logout" class="linkish">Abmelden</button>
@@ -575,6 +596,80 @@ async function loadChildren() {
   }).join('');
 }
 
+// --- Betrieb & Einstellungen ---
+async function loadSystem() {
+  if (!state.token) return;
+  try {
+    const res = await fetch('/api/v1/parent/system', { headers: headers() });
+    if (!res.ok) { $('system').textContent = 'HTTP ' + res.status; return; }
+    const s = await res.json();
+    const minutes = Math.floor((s.uptime_s % 3600) / 60);
+    const mem = s.memory_mb || {};
+    $('system').innerHTML = [
+      'Laufzeit: ' + Math.floor(s.uptime_s / 3600) + ' h ' + minutes + ' min · Last (1 min): ' + s.load_1m,
+      'Speicher frei: ' + (mem.MemAvailable ?? '?') + ' MB von ' + (mem.MemTotal ?? '?') + ' MB',
+      'Platte: ' + s.disk_mb.free + ' MB frei (' + s.disk_mb.used_percent + ' % belegt)',
+      'Nachrichten: ' + s.data.messages + ' · Positionen: ' + s.data.positions +
+        ' · Geräte: ' + s.data.devices + ' · Find-My: ' + s.data.findmy_locations,
+      'Audio: ' + s.data.audio_files + ' Dateien (' + s.data.audio_mb + ' MB)',
+      'letztes Aufräumen: ' + (s.data.last_cleanup ? fmt(s.data.last_cleanup) : 'noch nicht') +
+        ' · letztes Backup: ' + (s.data.last_backup || 'keins'),
+    ].map((line) => '<div>' + line + '</div>').join('');
+  } catch (err) {
+    $('system').textContent = 'Fehler: ' + err.message;
+  }
+}
+
+async function loadSettings() {
+  if (!state.token) return;
+  try {
+    const res = await fetch('/api/v1/parent/settings', { headers: headers() });
+    if (!res.ok) { $('settings').textContent = 'HTTP ' + res.status; return; }
+    const data = await res.json();
+    $('settings').innerHTML = Object.entries(data.definitions).map(([name, spec]) =>
+      '<label class="mt">' + spec.label +
+      ' <input type="number" data-setting="' + name + '" min="' + spec.min + '" max="' + spec.max +
+      '" value="' + data.values[name] + '"></label>').join('');
+  } catch (err) {
+    $('settings').textContent = 'Fehler: ' + err.message;
+  }
+}
+
+$('settings-save').addEventListener('click', async () => {
+  const payload = {};
+  document.querySelectorAll('[data-setting]').forEach((input) => { payload[input.dataset.setting] = input.value; });
+  const res = await fetch('/api/v1/parent/settings', {
+    method: 'PUT',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  $('settings-state').textContent = res.ok ? 'gespeichert' : (data.detail || ('HTTP ' + res.status));
+});
+
+$('system-refresh').addEventListener('click', loadSystem);
+
+$('cleanup').addEventListener('click', async () => {
+  const res = await fetch('/api/v1/parent/maintenance/cleanup', { method: 'POST', headers: headers() });
+  const data = await res.json().catch(() => ({}));
+  setStatus(res.ok ? 'Aufgeräumt: ' + (data.removed ?? '?') + ' Nachricht(en) entfernt' : 'Fehler');
+  loadSystem();
+});
+
+$('backup').addEventListener('click', async () => {
+  setStatus('Backup wird erstellt …');
+  const res = await fetch('/api/v1/parent/maintenance/backup', { headers: headers() });
+  if (!res.ok) { setStatus('Backup: HTTP ' + res.status); return; }
+  const blob = await res.blob();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'ultimatetracker-backup.tar.gz';
+  link.click();
+  URL.revokeObjectURL(link.href);
+  setStatus('Backup heruntergeladen');
+  loadSystem();
+});
+
 async function loadStatus() {
   const box = $('status-body');
   if (!state.token || !state.device) { box.textContent = '– Gerät/Token wählen –'; return; }
@@ -619,6 +714,8 @@ function showApp(user) {
   loadSmsStatus();
   refreshPushState();
   loadUsers();
+  loadSystem();
+  loadSettings();
 }
 
 // --- Benutzerverwaltung (nur Administratoren) ---

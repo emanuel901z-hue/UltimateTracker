@@ -14,6 +14,8 @@ import secrets
 import shutil
 import sqlite3
 import subprocess
+import sys
+import tarfile
 import time
 import urllib.parse
 import urllib.request
@@ -21,6 +23,8 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+
+START_TIME = time.time()
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -243,10 +247,10 @@ def search_mode_active(device_id: str | None = None) -> bool:
 def next_poll_seconds(battery: float | None = None, device_id: str | None = None) -> int:
     """Server-getriebenes Poll-Intervall (docs/optimizations.md A5/B4)."""
     if search_mode_active(device_id):
-        return SEARCH_POLL_INTERVAL_S
-    if battery is not None and battery < 15:
-        return POLL_INTERVAL_S * 2
-    return POLL_INTERVAL_S
+        return setting("search_poll_interval_s")
+    if battery is not None and battery < setting("low_battery_percent"):
+        return setting("poll_interval_s") * 2
+    return setting("poll_interval_s")
 
 
 def ensure_device(device_id: str) -> None:
@@ -526,6 +530,66 @@ def push_async(title: str, body: str) -> None:
     asyncio.create_task(asyncio.to_thread(send_push, title, body))
 
 
+# --- Laufzeit-Einstellungen (Operationszentrale) -----------------------------
+# Überschreiben die .env-Defaults zur Laufzeit (ohne Neustart). Gespeichert in
+# der state-Tabelle, damit sie Backups/Umzüge überleben.
+
+SETTING_DEFS = {
+    "poll_interval_s": {"default": POLL_INTERVAL_S, "min": 60, "max": 86400, "label": "Poll-Intervall (Normalbetrieb), Sekunden"},
+    "search_poll_interval_s": {"default": SEARCH_POLL_INTERVAL_S, "min": 15, "max": 600, "label": "Poll-Intervall im Suchmodus, Sekunden"},
+    "search_mode_minutes": {"default": SEARCH_MODE_MINUTES, "min": 1, "max": 720, "label": "Standarddauer Suchmodus, Minuten"},
+    "retention_days": {"default": RETENTION_DAYS, "min": 0, "max": 3650, "label": "Aufbewahrung Audionachrichten, Tage (0 = nie löschen)"},
+    "low_battery_percent": {"default": 15, "min": 0, "max": 100, "label": "Akkuschwelle für längeres Poll-Intervall, Prozent"},
+    "notify_new_message": {"default": 1, "min": 0, "max": 1, "label": "Bei neuer Nachricht benachrichtigen (1/0)"},
+}
+
+_settings_cache = {"value": None, "expires_at": 0.0}
+
+
+def settings_all() -> dict:
+    now = time.time()
+    if _settings_cache["value"] is not None and _settings_cache["expires_at"] > now:
+        return _settings_cache["value"]
+    values = {}
+    with db() as conn:
+        rows = conn.execute("SELECT key, value FROM state WHERE key LIKE 'setting:%'").fetchall()
+    stored = {row["key"][len("setting:"):]: row["value"] for row in rows}
+    for name, spec in SETTING_DEFS.items():
+        raw = stored.get(name)
+        try:
+            value = int(raw) if raw is not None else int(spec["default"])
+        except (TypeError, ValueError):
+            value = int(spec["default"])
+        values[name] = max(spec["min"], min(spec["max"], value))
+    _settings_cache["value"] = values
+    _settings_cache["expires_at"] = now + 5
+    return values
+
+
+def setting(name: str) -> int:
+    return settings_all().get(name, int(SETTING_DEFS[name]["default"]))
+
+
+def settings_update(values: dict) -> dict:
+    with db() as conn:
+        for name, raw in values.items():
+            spec = SETTING_DEFS.get(name)
+            if spec is None:
+                continue
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            value = max(spec["min"], min(spec["max"], value))
+            conn.execute(
+                "INSERT INTO state(key, value) VALUES(?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (f"setting:{name}", str(value)),
+            )
+    _settings_cache["value"] = None  # Cache verwerfen
+    return settings_all()
+
+
 # --- Dienste-Übersicht („eine App": Status + Links aller Dienste) -----------
 
 # key, Anzeigename, Beschreibung, interner Host:Port, Port nach außen, SITE_*-Variable
@@ -644,10 +708,12 @@ async def watch_sim_messages() -> None:
 
 
 def run_cleanup() -> dict:
-    """Löscht Nachrichten/Audiodateien älter als RETENTION_DAYS (0 = aus)."""
-    if RETENTION_DAYS <= 0:
+    """Löscht Nachrichten/Audiodateien älter als die Aufbewahrungszeit (0 = aus)."""
+    days = setting("retention_days")
+    state_set("last_cleanup", now_iso())
+    if days <= 0:
         return {"removed": 0, "retention_days": 0, "disabled": True}
-    cutoff = time.time() - RETENTION_DAYS * 86400
+    cutoff = time.time() - days * 86400
     removed = 0
     with db() as conn:
         rows = conn.execute("SELECT id, raw_file, play_file, created_at FROM messages").fetchall()
@@ -659,7 +725,11 @@ def run_cleanup() -> dict:
                 (AUDIO_DIR / name).unlink(missing_ok=True)
             conn.execute("DELETE FROM messages WHERE id = ?", (row["id"],))
             removed += 1
-    return {"removed": removed, "retention_days": RETENTION_DAYS}
+    # Alte Backup-Archive mit aufräumen (älter als 2 Tage)
+    for archive in DATA_DIR.glob("backup-*.tar.gz"):
+        if archive.stat().st_mtime < time.time() - 2 * 86400:
+            archive.unlink(missing_ok=True)
+    return {"removed": removed, "retention_days": days}
 
 
 async def retention_loop() -> None:
@@ -905,6 +975,97 @@ def services_overview() -> dict:
     _services_cache["value"] = payload
     _services_cache["expires_at"] = now + 10
     return payload
+
+
+@app.get("/api/v1/parent/settings", dependencies=[Depends(require_parent)])
+def settings_get() -> dict:
+    """Laufzeit-Einstellungen (überschreiben die .env-Defaults)."""
+    return {
+        "values": settings_all(),
+        "definitions": {
+            name: {"label": spec["label"], "min": spec["min"], "max": spec["max"]}
+            for name, spec in SETTING_DEFS.items()
+        },
+    }
+
+
+@app.put("/api/v1/parent/settings", dependencies=[Depends(require_parent)])
+async def settings_put(request: Request) -> dict:
+    """Einstellungen ändern – wirken sofort, ohne Neustart."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON-Objekt erwartet")
+    return {"values": settings_update(body)}
+
+
+@app.get("/api/v1/parent/system", dependencies=[Depends(require_parent)])
+def system_status() -> dict:
+    """Betriebswerte für das Monitoring: Last, Speicher, Platte, Datenbestand."""
+    try:
+        load = os.getloadavg()[0]
+    except (AttributeError, OSError):
+        load = 0.0
+
+    memory = {}
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as handle:
+            for line in handle:
+                key, _, value = line.partition(":")
+                if key in ("MemTotal", "MemAvailable"):
+                    memory[key] = int(value.split()[0]) // 1024  # MB
+    except OSError:
+        pass
+
+    usage = shutil.disk_usage(DATA_DIR if DATA_DIR.exists() else Path("."))
+    audio_files = [item for item in AUDIO_DIR.glob("*") if item.is_file()] if AUDIO_DIR.exists() else []
+    audio_bytes = sum(item.stat().st_size for item in audio_files)
+
+    with db() as conn:
+        counts = {
+            table: conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
+            for table in ("messages", "positions", "devices", "findmy_locations")
+        }
+        oldest = conn.execute("SELECT MIN(created_at) AS t FROM messages").fetchone()["t"]
+
+    backups = sorted(DATA_DIR.glob("backup-*.tar.gz")) if DATA_DIR.exists() else []
+    return {
+        "uptime_s": int(time.time() - START_TIME),
+        "load_1m": round(load, 2),
+        "memory_mb": memory,
+        "disk_mb": {
+            "total": usage.total // 1048576,
+            "free": usage.free // 1048576,
+            "used_percent": round(100 * (usage.total - usage.free) / max(usage.total, 1), 1),
+        },
+        "data": {
+            **counts,
+            "audio_files": len(audio_files),
+            "audio_mb": round(audio_bytes / 1048576, 2),
+            "oldest_message": oldest,
+            "last_cleanup": state_get("last_cleanup"),
+            "last_backup": backups[-1].name if backups else None,
+        },
+        "versions": {"bridge": app.version, "python": sys.version.split()[0]},
+        "checked_at": now_iso(),
+    }
+
+
+@app.get("/api/v1/parent/maintenance/backup", dependencies=[Depends(require_parent)])
+def maintenance_backup() -> FileResponse:
+    """Datenverzeichnis (Audio, Datenbank, Ereignislog) als tar.gz herunterladen."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    path = DATA_DIR / f"backup-{stamp}.tar.gz"
+    with tarfile.open(path, "w:gz") as archive:
+        if AUDIO_DIR.exists():
+            archive.add(AUDIO_DIR, arcname="audio")
+        if DB_PATH.exists():
+            archive.add(DB_PATH, arcname="bridge.sqlite3")
+        if EVENTS_LOG.exists():
+            archive.add(EVENTS_LOG, arcname="events.jsonl")
+    return FileResponse(path, media_type="application/gzip", filename=path.name)
 
 
 # --- Anmeldung (Eltern-UI) --------------------------------------------------
@@ -1292,8 +1453,9 @@ async def device_upload(
     ok = convert(raw, play, FMT_PARENT)
     insert_message(msg_id, "in", device_id, raw, play if ok else raw, duration_ms)
     ensure_device(device_id)
-    notify_async("Neue Sprachnachricht", f"Gerät {device_id} hat eine Nachricht gesendet.")
-    push_async("Neue Sprachnachricht", "Der Tracker hat eine Nachricht gesendet.")
+    if setting("notify_new_message"):
+        notify_async("Neue Sprachnachricht", f"Gerät {device_id} hat eine Nachricht gesendet.")
+        push_async("Neue Sprachnachricht", "Der Tracker hat eine Nachricht gesendet.")
     return {"id": msg_id, "converted": ok}
 
 
@@ -1391,7 +1553,7 @@ def parent_audio(message_id: str) -> FileResponse:
 def set_search_mode(active: bool = Form(True), minutes: int | None = Form(None),
                     device_id: str | None = Form(None)) -> dict:
     """Suchmodus setzen/beenden – pro Kind (device_id), sonst global."""
-    duration = minutes if minutes else SEARCH_MODE_MINUTES
+    duration = minutes if minutes else setting("search_mode_minutes")
     until = time.time() + duration * 60 if active else 0
     key = f"search_mode_until:{device_id}" if device_id else "search_mode_until"
     state_set(key, str(until))

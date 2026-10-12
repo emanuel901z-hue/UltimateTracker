@@ -233,5 +233,22 @@ curl -s -o /dev/null -w "%{http_code}" -H "X-Auth-Token: $TMP_SESSION" "$BASE/ap
 curl -s -X DELETE -H "X-Auth-Token: $PTOK" "$BASE/api/v1/auth/users/$TMPID" | grep -q '"deleted"' \
   && pass "Temporärer Benutzer entfernt" || fail "Aufräumen fehlgeschlagen"
 
+echo "19) Betrieb: Monitoring, Einstellungen, Backup"
+SYS=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/system")
+echo "$SYS" | grep -q '"uptime_s"' && pass "Systemwerte abrufbar" || fail "Systemwerte fehlgeschlagen"
+echo "$SYS" | grep -q '"messages"' && pass "Datenbestand enthalten" || fail "Datenbestand fehlt"
+SETTINGS=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/settings")
+echo "$SETTINGS" | grep -q '"poll_interval_s"' && pass "Einstellungen abrufbar" || fail "Einstellungen fehlgeschlagen"
+OLD=$(printf '%s' "$SETTINGS" | python3 -c "import json,sys; print(json.load(sys.stdin)['values']['search_mode_minutes'])")
+NEW=$((OLD + 1))
+APPLIED=$(curl -s -X PUT -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+  -d "{\"search_mode_minutes\": $NEW}" "$BASE/api/v1/parent/settings" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['values']['search_mode_minutes'])" 2>/dev/null)
+[ "$APPLIED" = "$NEW" ] && pass "Einstellung geändert (wirkt sofort)" || fail "Einstellung nicht übernommen ($APPLIED)"
+curl -s -X PUT -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+  -d "{\"search_mode_minutes\": $OLD}" "$BASE/api/v1/parent/settings" >/dev/null
+SIZE=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/maintenance/backup" | wc -c)
+[ "$SIZE" -gt 1000 ] && pass "Backup herunterladbar ($SIZE Bytes)" || fail "Backup zu klein: $SIZE"
+
 echo
 echo "Alle Smoke-Tests bestanden."
