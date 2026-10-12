@@ -158,6 +158,15 @@
 
   <main id="main">
     <section role="tabpanel" id="panel-uebersicht" aria-labelledby="tab-uebersicht" tabindex="0">
+      <div class="card" id="sso-hint" hidden>
+        <h2>Single Sign-on verfügbar</h2>
+        <p class="hint">
+          Sie nutzen den Direktzugang – unverschlüsselt und ohne gemeinsame Anmeldung.
+          Über <a id="sso-entry" href="#">die SSO-Adresse</a> gilt <strong>eine</strong>
+          Anmeldung für alle Dienste (und TLS). Dafür einmalig das Caddy-Zertifikat
+          importieren – Anleitung in <code>docs/deployment.md</code>, Abschnitt 6.
+        </p>
+      </div>
       <div class="card">
         <h2>Kinder</h2>
         <ul id="children"><li class="muted">– wird geladen –</li></ul>
@@ -675,9 +684,10 @@ $('sms-send').addEventListener('click', async () => {
 
 // --- Dienste-Übersicht + eingebettete Karte ---
 function serviceUrl(service) {
-  // Im HTTPS-Betrieb (Caddy) hat jeder Dienst seinen eigenen Hostnamen,
-  // sonst wird derselbe Host mit dem jeweiligen Port verwendet.
-  if (location.protocol === 'https:' && service.site_host) return 'https://' + service.site_host;
+  // Bevorzugt die Caddy-Adresse: nur dort greifen Single Sign-on und TLS.
+  if (service.site_host && (location.protocol === 'https:' || service.sso_available)) {
+    return 'https://' + service.site_host;
+  }
   return 'http://' + location.hostname + ':' + service.port;
 }
 
@@ -704,18 +714,24 @@ async function loadServices() {
       return;
     }
     const data = await res.json();
+    const sso = data.sso || {};
+    if (sso.available && location.protocol !== 'https:') {
+      $('sso-hint').hidden = false;
+      $('sso-entry').href = 'https://' + sso.entry;
+      $('sso-entry').textContent = 'https://' + sso.entry;
+    } else {
+      $('sso-hint').hidden = true;
+    }
     $('services').innerHTML = data.services.map((service) => {
       const cls = statusClass(service.status);
       const label = statusLabel(service.status);
       const link = service.port
         ? ' <a class="linkish" href="' + serviceUrl(service) + '" target="_blank" rel="noopener">öffnen</a>'
         : '';
-      const embed = service.embeddable
-        ? ' <button class="linkish" data-embed="' + service.key + '">einbetten</button>'
-        : '';
+      const own = service.own_login ? ' <span class="muted">(eigenes Konto)</span>' : '';
       return '<li><span class="dot ' + cls + '" title="' + label + '"></span>' +
         '<strong>' + service.name + '</strong> <span class="muted">' + service.description +
-        ' – ' + label + '</span>' + link + embed + '</li>';
+        ' – ' + label + '</span>' + own + link + '</li>';
     }).join('');
     const traccar = data.services.find((service) => service.key === 'traccar');
     if (traccar && traccar.port) $('map-link').href = serviceUrl(traccar);

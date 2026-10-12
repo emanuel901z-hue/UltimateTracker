@@ -165,10 +165,12 @@ services:
       - utnet
 
   macless-haystack:
-    # Apple-Find-My-Endpoint: Key-Generierung und optionale Web-UI (manuelle Sicht)
+    # Apple-Find-My-Endpoint: Key-Generierung und optionale Web-UI (manuelle Sicht).
+    # Braucht beim ersten Start eine Apple-ID (interaktiv, 2FA) – ohne sie beendet
+    # sich der Dienst; deshalb kein Endlos-Neustart.
     image: christld/macless-haystack:latest
     profiles: [findmy]
-    restart: unless-stopped
+    restart: on-failure:3
     logging: *default-logging
     ports:
       - "6176:6176"

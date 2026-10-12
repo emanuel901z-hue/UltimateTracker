@@ -972,6 +972,21 @@ app = FastAPI(title="UltimateTracker Audio-Bridge", version="0.3.0", lifespan=li
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+def caddy_available(timeout: float = 1.0) -> bool:
+    """Ist der TLS-Frontdoor (Caddy) im Docker-Netz erreichbar?
+
+    Dort lebt das Single Sign-on (forward_auth). Nur dann sind die
+    SITE_*-Adressen sinnvoll verlinkbar.
+    """
+    import socket
+
+    try:
+        with socket.create_connection(("caddy", 443), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 @app.get("/api/v1/parent/services", dependencies=[Depends(require_parent)])
 def services_overview() -> dict:
     """Status und Adressen aller Dienste – Grundlage für die Übersicht in der UI.
@@ -982,6 +997,7 @@ def services_overview() -> dict:
     if _services_cache["value"] is not None and _services_cache["expires_at"] > now:
         return _services_cache["value"]
 
+    sso = caddy_available()
     result = []
     for key, name, description, target, port, site_env in SERVICE_DEFS:
         status = "n/a"
@@ -990,18 +1006,24 @@ def services_overview() -> dict:
             internal_port = int(port_text)
             path = "/api/server" if key == "traccar" else "/"
             status = probe_http(host, internal_port, path)
+        site_host = os.environ.get(site_env, "") if site_env else ""
         result.append({
             "key": key,
             "name": name,
             "description": description,
             "status": status,
             "port": port,
-            "site_host": os.environ.get(site_env, "") if site_env else "",
-            # geprüft: Traccar liefert kein X-Frame-Options → einbettbar
-            "embeddable": key == "traccar",
+            "site_host": site_host,
+            # Nur über Caddy greift das Single Sign-on (und TLS).
+            "sso_available": bool(sso and site_host and port),
+            "own_login": key in ("traccar", "google-findmy", "apple-findmy"),
         })
 
-    payload = {"services": result, "checked_at": now_iso()}
+    payload = {
+        "services": result,
+        "sso": {"available": sso, "entry": os.environ.get("SITE_AUDIO", "") or "audio.localhost"},
+        "checked_at": now_iso(),
+    }
     _services_cache["value"] = payload
     _services_cache["expires_at"] = now + 10
     return payload

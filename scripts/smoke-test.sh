@@ -165,15 +165,15 @@ by_key = {service['key']: service for service in data['services']}
 problems = []
 if by_key.get('traccar', {}).get('status') != 'up':
     problems.append('Traccar nicht als erreichbar gemeldet')
-if not by_key.get('traccar', {}).get('embeddable'):
-    problems.append('Karte nicht als einbettbar markiert')
 if by_key.get('findmy-bridge', {}).get('status') != 'n/a':
     problems.append('findmy-bridge falsch bewertet')
 if 'apple-findmy' not in by_key:
     problems.append('Apple-Eintrag fehlt')
+if 'sso' not in data:
+    problems.append('SSO-Status fehlt')
 print('; '.join(problems))
 ")
-[ -z "$CHECK" ] && pass "Dienste vollständig (Traccar erreichbar, Karte einbettbar, Apple dabei)" \
+[ -z "$CHECK" ] && pass "Dienste vollständig (Traccar erreichbar, SSO-Status, Apple dabei)" \
   || fail "Übersicht: $CHECK"
 
 echo "17) Anmeldung & Mehrkind-Übersicht"
