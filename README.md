@@ -72,19 +72,23 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 
 ```bash
 cd server
-cp .env.example .env
-# Tokens + Login setzen:  openssl rand -hex 24   → DEVICE_TOKEN, PARENT_TOKEN
-#                         PARENT_USER/PARENT_PASSWORD für die Eltern-UI
 docker compose up -d
 ```
 
+Fertig – **kein Terminal-Wissen nötig**: Tokens, Traccar-Administrator und die
+Erstkonfiguration entstehen automatisch. Dann <http://localhost:8085> öffnen und
+dem **Setup-Assistenten** folgen (Tracker anlegen, SIM, Karte prüfen,
+Benachrichtigungen, Funktionstest).
+
 | Dienst | URL | Hinweis |
 |---|---|---|
-| Eltern-UI/API (**Einstiegspunkt**) | <http://localhost:8085> | Login (Benutzer/Passwort) |
-| Traccar (Karte) | <http://localhost:8082> | ersten Benutzer registrieren → wird Admin |
+| Eltern-UI/API (**Einstiegspunkt**) | <http://localhost:8085> | Login: `admin` + `PARENT_PASSWORD` aus der `.env` (ohne `.env` wird eines erzeugt und im Assistenten angezeigt) |
+| Traccar (Verlauf, Geofences) | <http://localhost:8082> | Auto-Login über die Eltern-UI |
 | Tracker-Uploads | `http://<host>:5055/?id=<IMEI>&lat=…&lon=…&batt=…` | OsmAnd-Protokoll |
 
-Details (WSL-Setup, TLS, LAN-/Internet-Betrieb, Betrieb & Wartung):
+Die `server/.env` ist **optional**: Für einen eigenen Einstieg reicht
+`cp .env.example .env` und `PARENT_PASSWORD` setzen; alles Weitere verwaltet die
+UI. Details (WSL-Setup, TLS, LAN-/Internet-Betrieb, Betrieb & Wartung):
 [`docs/deployment.md`](docs/deployment.md). Tests: `bash scripts/smoke-test.sh`
 (21 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
 `python scripts/check-ui-a11y.py` (Quelltext: Labels, ARIA, Tab-Muster,

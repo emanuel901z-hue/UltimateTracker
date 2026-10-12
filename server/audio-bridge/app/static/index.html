@@ -121,6 +121,25 @@
 
 <div class="card" id="login-card">
   <h2>Anmeldung</h2>
+  <div id="register-box" hidden>
+    <p class="hint">Erstanmeldung: Hier legst du das Eltern-Konto an (wird Administrator).
+      Danach führt dich der Assistent durch die Geräte-Einführung.</p>
+    <label for="reg-user">Benutzername
+      <input id="reg-user" type="text" autocomplete="username" minlength="3" aria-describedby="reg-user-error">
+    </label>
+    <p class="field-error" id="reg-user-error"></p>
+    <label for="reg-pass">Passwort (mindestens 10 Zeichen)
+      <input id="reg-pass" type="password" autocomplete="new-password" minlength="10" aria-describedby="reg-pass-error">
+    </label>
+    <p class="field-error" id="reg-pass-error"></p>
+    <label for="reg-repeat">Passwort (Wiederholung)
+      <input id="reg-repeat" type="password" autocomplete="new-password" minlength="10">
+    </label>
+    <div class="row-tight">
+      <button id="register" class="primary">Konto anlegen</button>
+      <span class="muted" id="reg-state" role="status" aria-live="polite"></span>
+    </div>
+  </div>
   <form id="login-form" novalidate>
     <label for="login-user">Benutzername
       <input id="login-user" name="username" type="text" autocomplete="username" required
@@ -173,7 +192,8 @@
           <h3>Willkommen</h3>
           <p>Dieser Assistent richtet den Tracker ein – in der Reihenfolge, in der es
             sinnvoll ist. Du kannst jederzeit mit „Zurück" korrigieren; optionale Schritte
-            lassen sich überspringen.</p>
+            lassen sich überspringen. <strong>Alles geht hier im Browser</strong> –
+            Tokens und Zugänge legt das System selbst an.</p>
           <ul>
             <li><strong>Tracker</strong> (fertig geflasht und mit Akku)</li>
             <li><strong>SIM-Karte</strong> eingelegt (für Ortung unterwegs)</li>
@@ -202,6 +222,17 @@
             <button id="s-save" class="primary">Tracker speichern</button>
             <span class="muted" id="s-state" role="status" aria-live="polite"></span>
           </div>
+          <div class="mt">
+            <label for="s-token">Tracker-Token (für die Firmware-Einrichtung)
+              <input id="s-token" type="text" readonly aria-describedby="s-token-hint">
+            </label>
+            <p class="hint" id="s-token-hint">Wird automatisch erzeugt – dieser Wert kommt
+              beim Einrichten des Trackers per USB in die Firmware. Einfach kopieren.</p>
+            <div class="row-tight">
+              <button id="s-token-copy">Token kopieren</button>
+              <span class="muted" id="s-token-state" role="status" aria-live="polite"></span>
+            </div>
+          </div>
         </div>
 
         <div id="setup-step-sim" hidden>
@@ -226,6 +257,7 @@
         <div id="setup-step-traccar" hidden>
           <h3>3 · Karte prüfen</h3>
           <p id="setup-traccar-state" role="status" aria-live="polite">– wird geprüft –</p>
+          <p class="hint" id="setup-traccar-creds"></p>
           <p class="hint">Dein Tracker meldet sich in Traccar automatisch an (gleiche IMEI).
             Für Verlauf, Geofences und Berichte öffnest du Traccar aus der Dienste-Liste –
             dort gilt Traccars eigenes Konto (einmalig pro Browser). Die Karte in dieser
@@ -1521,6 +1553,12 @@ async function loadSetup() {
   $('setup-check-state').textContent = setupState.steps.funktionstest
     ? 'Es sind bereits Daten angekommen ✓'
     : 'Noch keine Daten – Knopf am Tracker drücken, dann erneut prüfen.';
+  if (setupState.tokens) $('s-token').value = setupState.tokens.device || '';
+  const traccar = setupState.traccar || {};
+  $('setup-traccar-creds').textContent = traccar.email
+    ? 'Zugang: ' + traccar.email + ' · Passwort: ' + traccar.password +
+      (traccar.created ? ' (wurde gerade automatisch angelegt – bitte später in Traccar ändern)' : '')
+    : 'Das Traccar-Konto wird beim ersten Aufruf automatisch angelegt.';
   $('setup-summary').textContent = setupState.done
     ? 'Der Tracker ist eingerichtet und hat sich schon gemeldet. Alles Weitere findest du in den Tabs.'
     : 'Der Tracker ist angelegt. Sobald er sich das erste Mal meldet, erscheint er auf der Karte.';
@@ -1569,6 +1607,19 @@ $('setup-open').addEventListener('click', () => {
   showSetupStep(0);
 });
 $('s-push').addEventListener('click', () => $('push-enable').click());
+
+$('s-token-copy').addEventListener('click', async () => {
+  const token = $('s-token').value;
+  if (!token) return;
+  try {
+    await navigator.clipboard.writeText(token);
+    $('s-token-state').textContent = 'kopiert ✓';
+  } catch (err) {
+    $('s-token').select();
+    $('s-token-state').textContent = 'bitte mit Strg+C kopieren';
+  }
+  setTimeout(() => { $('s-token-state').textContent = ''; }, 4000);
+});
 
 $('s-save').addEventListener('click', async () => {
   const imei = $('s-imei').value.trim();
@@ -1628,10 +1679,75 @@ $('s-check').addEventListener('click', async () => {
     : 'Noch nichts angekommen – Knopf am Tracker drücken und erneut prüfen.';
 });
 
+// --- Erstanmeldung (kein Konto vorhanden) ---
+async function checkRegistration() {
+  try {
+    const res = await fetch('/api/v1/auth/state');
+    const data = await res.json();
+    const open = Boolean(data.registration_open);
+    $('register-box').hidden = !open;
+    $('login-form').hidden = open;
+    if (open) $('reg-user').focus();
+  } catch (err) {
+    /* still: dann bleibt das Login-Formular sichtbar */
+  }
+}
+
+$('register').addEventListener('click', async () => {
+  const username = $('reg-user').value.trim();
+  const password = $('reg-pass').value;
+  if (!$('reg-user').value.trim() || $('reg-user').value.trim().length < 3) {
+    $('reg-user-error').textContent = 'Der Benutzername braucht mindestens 3 Zeichen.';
+    return;
+  }
+  if (password.length < 10) {
+    $('reg-pass-error').textContent = 'Das Passwort braucht mindestens 10 Zeichen.';
+    return;
+  }
+  if (password !== $('reg-repeat').value) {
+    $('reg-pass-error').textContent = 'Die Wiederholung passt nicht zum Passwort.';
+    return;
+  }
+  $('reg-user-error').textContent = '';
+  $('reg-pass-error').textContent = '';
+  $('reg-state').textContent = 'wird angelegt …';
+  const res = await fetch('/api/v1/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    $('reg-state').textContent = data.detail || ('HTTP ' + res.status);
+    return;
+  }
+  $('reg-state').textContent = 'Konto angelegt – wird angemeldet …';
+  // direkt anmelden
+  const login = await fetch('/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const session = await login.json().catch(() => ({}));
+  if (login.ok) {
+    state.token = session.token;
+    localStorage.setItem('ut_token', state.token);
+    showApp(session.user);
+  } else {
+    $('reg-state').textContent = 'Konto angelegt – bitte jetzt anmelden.';
+    checkRegistration();
+  }
+});
+
+$('reg-repeat').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') $('register').click();
+});
+
 // Start: gemerkter Tab oder Übersicht
 selectTab(document.getElementById(localStorage.getItem('ut_tab') || 'tab-uebersicht'), false);
 updateSmsCounter();
 loadSetup();
+checkRegistration();
 </script>
 </body>
 </html>

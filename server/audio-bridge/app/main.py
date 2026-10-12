@@ -275,17 +275,17 @@ def ensure_device(device_id: str) -> None:
 
 
 def validate_config() -> None:
-    """Fail-fast: klare Meldung statt stiller 401-Fehler (docs/optimizations.md A6)."""
-    problems = []
-    for name, value in (("DEVICE_TOKEN", DEVICE_TOKEN), ("PARENT_TOKEN", PARENT_TOKEN)):
-        if not value or value.startswith("change-me"):
-            problems.append(name)
-    if problems:
-        raise RuntimeError(
-            "Konfiguration unvollständig: "
-            + ", ".join(problems)
-            + " sind leer oder noch Platzhalter – server/.env prüfen (Vorlage: .env.example)."
-        )
+    """Sanity-Check beim Start.
+
+    Tokens müssen **nicht** mehr vorbereitet werden: fehlen sie (oder stehen
+    noch Platzhalter in der .env), erzeugt die Bridge sie beim ersten Zugriff
+    selbst und legt sie in der Datenbank ab – Erststart ohne Terminal.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not DEVICE_TOKEN or DEVICE_TOKEN.startswith("change-me"):
+        print("[setup] DEVICE_TOKEN fehlt – wird automatisch erzeugt", flush=True)
+    if not PARENT_TOKEN or PARENT_TOKEN.startswith("change-me"):
+        print("[setup] PARENT_TOKEN fehlt – wird automatisch erzeugt", flush=True)
 
 
 # --- Auth -------------------------------------------------------------------
@@ -323,13 +323,85 @@ def session_token(request: Request, header_token: str | None = None) -> str:
 
 
 def require_device(x_auth_token: str | None = Header(default=None)) -> None:
-    if not token_ok(DEVICE_TOKEN, x_auth_token):
+    if not token_ok(device_token(), x_auth_token):
         raise HTTPException(status_code=401, detail="Ungültiges Device-Token")
 
 
 def users_count() -> int:
     with db() as conn:
         return int(conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"])
+
+
+# --- Automatische Ersteinrichtung (ohne Terminal) ---------------------------
+# Ziel: „docker compose up -d" + Browser öffnen – fertig. Fehlen Tokens in der
+# .env, erzeugt die Bridge sie selbst und legt sie in der Datenbank ab. Den
+# Traccar-Administrator legt sie ebenfalls selbst an, solange Traccar noch
+# keinen Benutzer hat (Traccar erlaubt die Registrierung genau dann).
+
+
+def stored_secret(key: str, env_value: str) -> str:
+    existing = state_get(f"secret:{key}")
+    if existing:
+        return existing
+    value = (env_value or "").strip()
+    if not value or value.startswith("change-me"):
+        value = secrets.token_hex(24)
+        print(f"[setup] {key}-Token automatisch erzeugt (keine Datei nötig)", flush=True)
+    state_set(f"secret:{key}", value)
+    return value
+
+
+def device_token() -> str:
+    return stored_secret("device", DEVICE_TOKEN)
+
+
+def parent_token() -> str:
+    return stored_secret("parent", PARENT_TOKEN)
+
+
+_traccar_admin = {"checked_at": 0.0, "value": None}
+
+
+def traccar_credentials() -> tuple[str, str]:
+    """Zugangsdaten des Traccar-Kontos (aus der Einrichtung oder der .env)."""
+    email = state_get("traccar:email") or TRACCAR_SSO_EMAIL
+    password = state_get("traccar:password") or TRACCAR_SSO_PASSWORD
+    return email, password
+
+
+def ensure_traccar_admin(force: bool = False) -> dict:
+    """Traccar-Administrator anlegen, wenn noch keiner existiert (max. 1×/Minute)."""
+    email, password = traccar_credentials()
+    if email and password:
+        return {"email": email, "password": password, "created": False, "configured": True}
+    now = time.time()
+    if not force and _traccar_admin["value"] is not None and now - _traccar_admin["checked_at"] < 60:
+        return _traccar_admin["value"]
+
+    candidate_email = "admin@ultimatetracker.local"
+    candidate_password = "UT-" + secrets.token_urlsafe(12)
+    payload = json.dumps({
+        "name": "Administrator", "email": candidate_email, "password": candidate_password,
+    }).encode()
+    request = urllib.request.Request(
+        "http://traccar:8082/api/users", data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    result = {"email": "", "password": "", "created": False, "configured": False}
+    try:
+        with urllib.request.urlopen(request, timeout=8):
+            state_set("traccar:email", candidate_email)
+            state_set("traccar:password", candidate_password)
+            print(f"[setup] Traccar-Administrator angelegt: {candidate_email}", flush=True)
+            result = {"email": candidate_email, "password": candidate_password,
+                      "created": True, "configured": True}
+    except urllib.error.HTTPError as exc:
+        # 400 = "Registration disabled" → es gibt schon ein Konto (kein Fehler)
+        print(f"[setup] Traccar-Registrierung nicht nötig/erlaubt (HTTP {exc.code})", flush=True)
+    except Exception as exc:
+        print(f"[setup] Traccar nicht erreichbar: {exc!r}", flush=True)
+    _traccar_admin.update({"checked_at": now, "value": result})
+    return result
 
 
 def session_user(token: str | None) -> dict | None:
@@ -354,14 +426,14 @@ def session_user(token: str | None) -> dict | None:
 def require_parent(request: Request, x_auth_token: str | None = Header(default=None)) -> None:
     """Zugang für Eltern: Sitzungstoken (Header **oder** Cookie) oder API-Token."""
     token = session_token(request, x_auth_token)
-    if token_ok(PARENT_TOKEN, token) or session_user(token) is not None:
+    if token_ok(parent_token(), token) or session_user(token) is not None:
         return
     raise HTTPException(status_code=401, detail="Nicht angemeldet")
 
 
 def require_admin(x_auth_token: str | None = Header(default=None)) -> dict:
     """Nur Administratoren (Benutzerverwaltung). Der API-Token gilt als Admin."""
-    if token_ok(PARENT_TOKEN, x_auth_token):
+    if token_ok(parent_token(), x_auth_token):
         return {"id": 0, "username": "token", "role": "admin"}
     user = session_user(x_auth_token)
     if user is None:
@@ -1174,6 +1246,42 @@ def maintenance_backup() -> FileResponse:
 # --- Anmeldung (Eltern-UI) --------------------------------------------------
 
 
+@app.get("/api/v1/auth/state")
+def auth_state() -> dict:
+    """Öffentlich: existiert schon ein Konto? (Steuert die Erstanmeldung in der UI)."""
+    count = users_count()
+    return {"users": count, "registration_open": count == 0}
+
+
+@app.post("/api/v1/auth/register")
+async def auth_register(request: Request) -> dict:
+    """Erstanmeldung ohne Terminal: legt den ersten Administrator an.
+
+    Nur solange noch kein Benutzer existiert – danach ausschließlich über die
+    Benutzerverwaltung (Admin) oder den Setup-Assistenten.
+    """
+    if users_count() > 0:
+        raise HTTPException(status_code=409, detail="Es existiert schon ein Konto – bitte anmelden")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    username = str(body.get("username") or "").strip()
+    password = str(body.get("password") or "")
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Benutzername braucht mindestens 3 Zeichen")
+    problem = password_problem(password)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO users(username, password_hash, role, created_at) VALUES(?, ?, 'admin', ?)",
+            (username, hash_password(password), now_iso()),
+        )
+    print(f"[setup] Erstes Konto angelegt: {username} (Administrator)", flush=True)
+    return {"created": username, "role": "admin"}
+
+
 @app.post("/api/v1/auth/login")
 async def auth_login(request: Request, response: Response) -> dict:
     """Anmeldung mit Benutzername und Passwort → Sitzungstoken + Cookie (SSO)."""
@@ -1218,7 +1326,7 @@ async def auth_login(request: Request, response: Response) -> dict:
 def auth_verify(request: Request, x_auth_token: str | None = Header(default=None)) -> Response:
     """Für Caddy `forward_auth`: 200 = angemeldet, 401 = nicht (kein Body, schnell)."""
     token = session_token(request, x_auth_token)
-    if token_ok(PARENT_TOKEN, token) or session_user(token) is not None:
+    if token_ok(parent_token(), token) or session_user(token) is not None:
         return Response(status_code=200)
     return Response(status_code=401)
 
@@ -1236,7 +1344,7 @@ async def auth_logout(request: Request, response: Response) -> dict:
 @app.get("/api/v1/auth/me")
 def auth_me(x_auth_token: str | None = Header(default=None)) -> dict:
     """Aktuell angemeldeter Zugang (Sitzung oder API-Token)."""
-    if token_ok(PARENT_TOKEN, x_auth_token):
+    if token_ok(parent_token(), x_auth_token):
         return {"username": "token", "role": "admin", "kind": "token"}
     user = session_user(x_auth_token)
     if user is None:
@@ -1393,16 +1501,23 @@ def sso_traccar(request: Request) -> Response:
     gilt die Anmeldung der Eltern-UI auch für Traccar – ohne zweite Eingabe.
     """
     token = session_token(request)
-    if not (token_ok(PARENT_TOKEN, token) or session_user(token) is not None):
+    if not (token_ok(parent_token(), token) or session_user(token) is not None):
         entry = os.environ.get("SITE_AUDIO", "") or "audio.localhost"
         return RedirectResponse(f"https://{entry}/", status_code=302)
 
     if not (TRACCAR_SSO_EMAIL and TRACCAR_SSO_PASSWORD):
-        return RedirectResponse("/", status_code=302)  # kein Auto-Login konfiguriert
-
-    payload = urllib.parse.urlencode(
-        {"email": TRACCAR_SSO_EMAIL, "password": TRACCAR_SSO_PASSWORD}
-    ).encode()
+        # Erststart: Zugangsdaten aus der automatischen Einrichtung nehmen
+        traccar_email, traccar_password = traccar_credentials()
+        if not (traccar_email and traccar_password):
+            ensure_traccar_admin()
+            traccar_email, traccar_password = traccar_credentials()
+        if not (traccar_email and traccar_password):
+            return RedirectResponse("/", status_code=302)  # kein Auto-Login möglich
+        payload = urllib.parse.urlencode({"email": traccar_email, "password": traccar_password}).encode()
+    else:
+        payload = urllib.parse.urlencode(
+            {"email": TRACCAR_SSO_EMAIL, "password": TRACCAR_SSO_PASSWORD}
+        ).encode()
     request_login = urllib.request.Request(
         "http://traccar:8082/api/session",
         data=payload,
@@ -1847,6 +1962,9 @@ def setup_status() -> dict:
         "last_position": dict(last_position) if last_position else None,
         "sso": {"available": caddy_available(),
                 "entry": os.environ.get("SITE_AUDIO", "") or "audio.localhost"},
+        # Erststart ohne Terminal: Tokens und Traccar-Zugang zeigt der Assistent an
+        "tokens": {"device": device_token(), "parent": parent_token()},
+        "traccar": ensure_traccar_admin(),
         "done": bool(devices) and bool(positions or messages),
         "checked_at": now_iso(),
     }
