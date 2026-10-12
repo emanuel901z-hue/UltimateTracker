@@ -24,6 +24,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from app.providers import get_provider
 
@@ -673,6 +674,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="UltimateTracker Audio-Bridge", version="0.3.0", lifespan=lifespan)
+
+# Statische Dateien (Icons für PWA/apple-touch-icon, Service Worker liegt am Root)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/healthz")

@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#101418">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="UltimateTracker">
 <link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/icon-180.png">
 <title>UltimateTracker – Eltern</title>
 <style>
   :root { color-scheme: light dark; }
@@ -23,6 +26,11 @@
   audio { display: block; margin-top: .3rem; width: 100%; }
   .muted { opacity: .7; font-size: .9rem; }
   .card { border: 1px solid #8884; border-radius: .5rem; padding: .7rem; margin: .5rem 0; }
+  /* Kartenüberschrift ohne Abstand nach oben (vorher Inline-Styles) */
+  .card > h2 { margin-top: 0; }
+  .mt { margin-top: .4rem; }
+  .row-tight { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
+  .grow { flex: 1 1 12rem; width: auto; }
 </style>
 </head>
 <body>
@@ -36,12 +44,12 @@
 </label>
 
 <div class="card" id="status-card">
-  <h2 style="margin-top:0">Status</h2>
+  <h2>Status</h2>
   <div id="status-body" class="muted">– keine Daten –</div>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0">Sprachnachricht senden</h2>
+  <h2>Sprachnachricht senden</h2>
   <div>
     <button id="rec">Aufnahme starten</button>
     <button id="send" disabled>Senden</button>
@@ -51,26 +59,26 @@
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0">Benachrichtigungen</h2>
+  <h2>Benachrichtigungen</h2>
   <div class="muted" id="push-state">Status: –</div>
   <div>
     <button id="push-enable">Auf diesem Gerät aktivieren</button>
     <button id="push-test">Test senden</button>
   </div>
-  <div class="muted" style="margin-top:.4rem">
+  <div class="muted mt">
     Hinweis: Push braucht eine sichere Verbindung (HTTPS oder localhost).
     In der WSL-Instanz liefert das Caddy-Profil HTTPS (<code>docker compose --profile tls up -d</code>).
   </div>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0">SMS (1NCE)</h2>
+  <h2>SMS (1NCE)</h2>
   <div class="muted" id="sms-state">Status: –</div>
-  <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem">
-    <input id="sms-text" placeholder="Text (max. 160 Zeichen)" style="flex:1;min-width:180px">
+  <div class="row-tight">
+    <input id="sms-text" class="grow" placeholder="Text (max. 160 Zeichen)">
     <button id="sms-send">SMS an Tracker</button>
   </div>
-  <div class="muted" style="margin-top:.4rem">
+  <div class="muted mt">
     Serververmittelt (1NCE A2P): Zustellung erfolgt beim nächsten Netz-Attach –
     kein Handy-↔-Gerät-SMS möglich. Details: <code>docs/sms.md</code>.
   </div>
