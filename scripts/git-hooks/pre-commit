@@ -1,0 +1,33 @@
+#!/bin/sh
+# Pre-Commit-Hook: verhindert, dass Zugangsdaten versehentlich ins Repo kommen.
+#
+# Installation (einmalig, pro Klon):
+#   cp scripts/git-hooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Der Hook prüft nur den *staged* Inhalt – er kostet keine Zeit und schützt
+# genau vor dem einen Fall, der weh tut: .env oder ein Token im Commit.
+
+set -u
+
+# 1) .env-Dateien niemals committen (.env.example ist die Vorlage und erlaubt)
+staged_env=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$' || true)
+if [ -n "$staged_env" ]; then
+  echo "ABBRUCH: Diese Datei enthält Zugangsdaten und gehört nicht ins Repo:" >&2
+  echo "  $staged_env" >&2
+  echo "  (Vorlage: .env.example – Werte bleiben lokal.)" >&2
+  exit 1
+fi
+
+# 2) Secret-Muster im Diff (der Hook selbst und die Vorlage sind ausgenommen)
+diff=$(git diff --cached -U0 -- . ':(exclude)scripts/git-hooks/*' ':(exclude)*.env.example' || true)
+patterns='github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY|UltTrackCas[0-9]|1NCE_API_CLIENTSECRET=[^ ]|UT-[A-Za-z0-9]{14,}'
+
+if printf '%s' "$diff" | grep -qE "$patterns"; then
+  echo "ABBRUCH: mögliches Zugangsdatum im Commit gefunden:" >&2
+  printf '%s' "$diff" | grep -nE "$patterns" | head -5 | cut -c1-120 >&2
+  echo "  Falls das ein Fehlalarm ist: 'git commit --no-verify' (bewusst!)." >&2
+  exit 1
+fi
+
+exit 0
