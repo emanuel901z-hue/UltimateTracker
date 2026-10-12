@@ -1503,7 +1503,11 @@ def sso_traccar(request: Request) -> Response:
     token = session_token(request)
     if not (token_ok(parent_token(), token) or session_user(token) is not None):
         entry = os.environ.get("SITE_AUDIO", "") or "audio.localhost"
-        return RedirectResponse(f"https://{entry}/", status_code=302)
+        host = request.headers.get("host") or entry
+        # Mit Rückkehr-Adresse: nach dem Login in der UI geht es hier automatisch
+        # weiter (kein „HTTP ERROR 401" in neuen Tabs).
+        back = urllib.parse.quote(f"https://{host}/_sso/traccar", safe="")
+        return RedirectResponse(f"https://{entry}/?next={back}", status_code=302)
 
     if not (TRACCAR_SSO_EMAIL and TRACCAR_SSO_PASSWORD):
         # Erststart: Zugangsdaten aus der automatischen Einrichtung nehmen

@@ -83,6 +83,12 @@
   button:hover:not(:disabled) { border-color: var(--accent); }
   button:disabled { opacity: .55; cursor: not-allowed; }
   .primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  /* Link, der wie ein Knopf aussieht (für echte Klicks bei Navigationen) */
+  .button-link {
+    display: inline-block; min-height: var(--tap); padding: .5rem 1rem; line-height: 1.6;
+    background: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius);
+    color: var(--accent-fg); font-weight: 600; text-decoration: none;
+  }
   /* Sichtbarer Fokus (WCAG 2.4.7 / 2.4.11) */
   :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   /* Fehler und Hinweise */
@@ -170,6 +176,11 @@
       <select id="device"><option value="">– bitte anmelden –</option></select>
     </label>
     <button id="refresh">Alles aktualisieren</button>
+  </div>
+
+  <div class="card" id="next-box" hidden>
+    <p class="hint">Anmeldung erfolgreich – weiter zum gewünschten Dienst:</p>
+    <p><a id="next-link" class="button-link" href="#">Weiter</a></p>
   </div>
 
   <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -1267,6 +1278,7 @@ function showApp(user) {
   loadSystem();
   loadSettings();
   loadSetup();
+  followNextParameter();
 }
 
 // --- Benutzerverwaltung (nur Administratoren) ---
@@ -1678,6 +1690,35 @@ $('s-check').addEventListener('click', async () => {
     ? 'Es ist etwas angekommen ✓'
     : 'Noch nichts angekommen – Knopf am Tracker drücken und erneut prüfen.';
 });
+
+// --- Rückkehr-Adresse (?next=…) nach der Anmeldung ---
+// Wird von /_sso/traccar gesetzt, damit ein neuer Tab automatisch weiterläuft.
+// Zugelassen sind nur https-Adressen aus derselben Eltern-Domain.
+function followNextParameter() {
+  const next = new URLSearchParams(location.search).get('next');
+  if (!next) return false;
+  try {
+    const target = new URL(next);
+    // Gemeinsame Eltern-Domain: alles nach dem ersten Label vergleichen
+    // (traccar.localhost ↔ audio.localhost → "localhost";
+    //  traccar.example.org ↔ audio.example.org → "example.org").
+    const domain = (host) => host.split('.').slice(1).join('.');
+    if (target.protocol !== 'https:') return false;
+    if (!domain(target.hostname) || domain(target.hostname) !== domain(location.hostname)) return false;
+    // Sichtbarer Weg (echter Klick, funktioniert immer) plus automatischer Versuch.
+    const box = $('next-box');
+    const link = $('next-link');
+    if (box && link) {
+      link.href = target.toString();
+      link.textContent = 'Weiter zu ' + target.hostname;
+      box.hidden = false;
+    }
+    setTimeout(() => { location.href = target.toString(); }, 500);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
 
 // --- Erstanmeldung (kein Konto vorhanden) ---
 async function checkRegistration() {

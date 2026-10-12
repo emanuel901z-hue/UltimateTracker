@@ -40,15 +40,16 @@
 {$SITE_TRACCAR:traccar.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
-	forward_auth audio-bridge:8085 {
-		uri /api/v1/auth/verify
-	}
-	# Automatische Anmeldung: /_sso/traccar läuft auf DIESEM Hostnamen, deshalb
-	# darf die Bridge das Traccar-Sitzungscookie setzen (kein zweites Login).
+	# Auto-Login zuerst und OHNE Gate: der Endpunkt prüft die Anmeldung selbst
+	# und schickt notfalls zur Eltern-UI zurück (mit Rückkehr-Adresse). Sonst
+	# zeigt ein neuer Tab „HTTP ERROR 401", weil dort noch kein Cookie ankommt.
 	handle /_sso/* {
 		reverse_proxy audio-bridge:8085
 	}
 	handle {
+		forward_auth audio-bridge:8085 {
+			uri /api/v1/auth/verify
+		}
 		reverse_proxy traccar:8082
 	}
 }
