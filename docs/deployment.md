@@ -255,7 +255,7 @@ Konfigurationsfehler im Stack. Drei Wege:
 | **Mirrored Networking** | `C:\Users\<du>\.wslconfig`: `[wsl2]` + `networkingMode=mirrored`, danach `wsl --shutdown` | WSL teilt sich die Host-IP → LAN-Zugriff ohne Weiterleitung (Windows 11 22H2+). Gilt für **alle** Distros |
 | **Tailscale** (empfohlen für „von außen") | in der WSL: `curl -fsSL https://tailscale.com/install.sh \| sh` + `sudo tailscale up` | eigenes Tailnet-Gerät, **kein** offener Port, Zugriff vom Handy überall – ohne DynDNS. Ideal, weil auf dem Windows-Host ohnehin Tailscale läuft |
 
-**HTTPS über die nackte IP:** In `server/.env` `SITE_LAN=10.1.9.15` setzen – Caddy
+**HTTPS über die nackte IP:** In `server/.env` `SITE_LAN=192.168.1.50` setzen – Caddy
 stellt dafür ein Zertifikat aus. Wichtig: Browser senden bei **IP-Adressen kein
 SNI**; deshalb steht im Caddyfile zusätzlich `default_sni {$SITE_LAN:localhost}`.
 Ohne das schlägt der TLS-Handshake fehl („internal error", HTTP 000).

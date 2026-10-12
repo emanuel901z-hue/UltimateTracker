@@ -31,6 +31,22 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   Hardware-Anbindung (Serial, NVS, Sleep, `Update`) nach `firmware/src`.
 - Zahlen (Datenraten, Ströme) immer aus `docs/hardware-review.md` bzw.
   `docs/architecture.md` übernehmen, nicht neu schätzen.
+- **Server-Schichten:** SIM-/SMS-Anbieter nur über `app/providers/` anbinden
+  (`SimProvider`-Schnittstelle; neue Anbieter möglichst als JSON-Konfiguration
+  nach `server/sim-providers/`, sonst als Klasse wie `nce.py`). Endpunkte bleiben
+  anbieterneutral – siehe `docs/sim-providers.md`.
+- **Auth:** Eltern-Zugänge laufen über Benutzerkonten (`app/auth.py`, PBKDF2 +
+  Sitzungstoken); `PARENT_TOKEN` bleibt als Rückfallweg für Skripte. Neue
+  Eltern-Endpunkte immer mit `Depends(require_parent)` (Admin: `require_admin`).
+- **Secrets:** `.env`, `ADMIN-ZUGANG.txt`, `caddy-root.crt` sind gitignoriert und
+  vom WSL-Sync ausgenommen; der Pre-Commit-Hook (`scripts/git-hooks/pre-commit`)
+  blockt `.env`-Dateien und Secret-Muster. Nach dem Klonen installieren:
+  `cp scripts/git-hooks/pre-commit .git/hooks/pre-commit`.
+- **Verifikation:** `bash scripts/smoke-test.sh` (19 Gruppen) und
+  `cd server/audio-bridge && python -m unittest discover -s tests` (Provider/Auth)
+  müssen grün bleiben; Firmware zusätzlich `pio run` + `pio test -e native`.
+- Container-Namen nicht fest verdrahten (parallele Compose-Projekte, Testinstanz);
+  in Skripten den Container dynamisch suchen (`docker ps --filter name=…`).
 
 ## Befehle
 
@@ -38,6 +54,8 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
 - Server-Logs: `cd server && docker compose logs -f audio-bridge`
 - Firmware bauen: `cd firmware && pio run` (PlatformIO)
 - Repo in die WSL-Distro spiegeln (aus WSL heraus): `bash scripts/sync-to-wsl.sh`
+- Tests: `bash scripts/smoke-test.sh` · `pio test -e native` · `python -m unittest discover -s tests`
+- Parallele Test-Instanz: `bash scripts/start-test-instance.sh` (Ports +1000, Projekt `uttest`)
 
 ## Struktur-Konventionen
 

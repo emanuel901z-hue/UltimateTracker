@@ -2,6 +2,55 @@
 
 Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung – Folgen.
 
+## D-016 – 2026-10-12 – Lizenz: MIT
+
+- **Entscheidung:** Das Projekt steht unter **MIT** (`LICENSE`).
+- **Begründung:** Kurz, permissiv, für ein Bastel-/Freizeitprojekt mit
+  Server-, Firmware- und Dokuanteil die einfachste Wahl. Die hardware-nahen
+  Teile (Pinbelegung, Schaltungs-/Gehäuseplanung) sind mit abgedeckt; eine
+  formale Hardware-Lizenz (CERN-OHL-S) wäre später ergänzbar.
+- **Folgen:** README nennt die Lizenz; Haftungsausschluss inklusive
+  („kein Medizin-/Sicherheitsprodukt", siehe `SECURITY.md`).
+
+## D-015 – 2026-10-12 – Operationszentrale ist die Bridge, nicht Traccar
+
+- **Entscheidung:** Die Eltern-Oberfläche der Audio-Bridge ist der **eine
+  Einstiegspunkt** (Login, Kinder-Übersicht, Nachrichten, Geräte, Benutzer,
+  SIM/SMS, OTA, Monitoring, Einstellungen, Backup). Traccar bleibt die
+  Karten-/Tracking-App und wird **eingebettet** (iframe) und verlinkt.
+- **Begründung:** Traccar ist eine Java-Anwendung mit kompilierter Vue-Oberfläche;
+  eigene Seiten/Logik darin zu integrieren hieße, die Web-App zu ersetzen – und
+  damit bei jedem Update zu brechen. Geprüft: Traccar liefert kein
+  `X-Frame-Options`, das Einbetten ist also erlaubt.
+- **Folgen:** Ein Login statt zwei; Kartenwechsel entfällt. Wenn Traccar hinter
+  denselben Login soll, wäre das über Caddy `forward_auth` nachrüstbar.
+
+## D-014 – 2026-10-12 – Eltern-Zugänge: Benutzerkonten statt nur Token
+
+- **Entscheidung:** Login mit Benutzername/Passwort (PBKDF2-HMAC-SHA256,
+  120 000 Runden, Sitzungstoken 30 Tage), Benutzerverwaltung mit Rollen,
+  Passwortwechsel und Admin-Reset. Der feste `PARENT_TOKEN` bleibt als
+  Rückfallweg (Skripte, Smoke-Test, Erstinstallation).
+- **Begründung:** Ein einzelnes Token im Browserfeld ist kein Login und nicht
+  geeignet, wenn mehrere Erwachsene und mehrere Kinder dazukommen. Der erste
+  Administrator entsteht aus `PARENT_USER`/`PARENT_PASSWORD` in `server/.env`.
+- **Folgen:** Suchmodus ist **pro Kind** (`search_mode_until:<device_id>`);
+  Kinder-Übersicht über `/api/v1/parent/overview`. Details: `docs/deployment.md` 5b.
+
+## D-013 – 2026-10-12 – SIM-/SMS-Anbieter hinter einer Provider-Schicht
+
+- **Entscheidung:** Die Bridge spricht SIM-/SMS-Anbieter nur über
+  `app/providers/` an (`SimProvider`). 1NCE und wherever SIM sind eigene
+  Klassen, weitere Anbieter werden über eine JSON-Konfiguration angebunden
+  (Vorlagen für EMnify, Onomondo, Twilio Super SIM).
+- **Begründung:** Anbieter unterscheiden sich in Auth (OAuth2, Header, Basic,
+  Zwei-Schritt), Adressierung (ICCID vs. interne ID) und API-Stil (REST vs.
+  GraphQL). Ein Fork/Anbieterwechsel soll eine Konfigurationsfrage sein, kein
+  Umbau – und ein API-Versionssprung (v2→v3) eine Umgebungsvariable.
+- **Folgen:** Endpunkte bleiben anbieterneutral; WhereverSIM bringt zusätzlich
+  Echtzeit-SMS per WebSocket-Subscription (`SMS_SUBSCRIBE=1`).
+  Details: `docs/sim-providers.md`.
+
 ## D-012 – 2026-10-11 – Apple-Pfad: automatische Traccar-Bridge statt manueller Auswertung
 
 - **Entscheidung:** `findmy-bridge` (jannisko/findmy-traccar-bridge, findmy.py) läuft
@@ -57,7 +106,7 @@ Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung �
 ## D-008 – 2026-10-11 – Repository wird öffentlich vorbereitet
 
 - **Entscheidung:** Git-Repository lokal anlegen, Struktur für Veröffentlichung
-  (README, Doku, .gitignore); Lizenz noch offen.
+  (README, Doku, .gitignore); Lizenz: **MIT** (siehe D-012).
 - **Begründung:** Projekt soll „früher oder später“ öffentlich verfügbar sein.
 - **Folgen:** Keine Secrets im Repo (`server/.env` gitignored); Lizenzentscheidung
   (MIT/GPL/CERN-OHL) vor dem Push.

@@ -1,14 +1,22 @@
 # TODO – offene Aufgaben
 
-Konsolidierte Liste aller offenen Punkte (Stand 2026-10-11), in empfohlener
+Konsolidierte Liste aller offenen Punkte (Stand 2026-10-12), in empfohlener
 Reihenfolge. Details jeweils in den verlinkten Dokumenten.
 
-Legende: `[ ]` offen · `(i)` interaktiv – braucht dein Konto/Passwort
+Legende: `[ ]` offen · `[x]` erledigt · `(i)` interaktiv – braucht dein Konto/Passwort
 
 ## A. Sofort möglich (ohne Hardware)
 
-- [ ] **(i) Traccar-Admin-Passwort ändern** – Benutzer `admin@ultimatetracker.local`,
-      aktuelles Passwort in `~/UltimateTracker/server/ADMIN-ZUGANG.txt` (WSL).
+- [x] **Lizenz entschieden: MIT** (`LICENSE`), README-Abschnitt ergänzt *(2026-10-12)*
+- [x] **Traccar-Admin wieder zugänglich** (Passwort neu gesetzt, `ADMIN-ZUGANG.txt`) *(2026-10-12)*
+- [ ] **(i) Traccar-Passwort in der UI ändern** (Einstellungen → Konto) – das in
+      `~/UltimateTracker/server/ADMIN-ZUGANG.txt` steht nur lokal.
+- [ ] **(i) Eltern-UI-Passwort ändern** (UI → „Passwort ändern"); Startwert aus `PARENT_PASSWORD`.
+- [ ] **(i) LAN-Zugriff einrichten** (Handy → Host): `scripts\windows-lan-forward.ps1`
+      als Administrator, danach `http://<host-ip>:8085` testen (`docs/deployment.md`, 8.3).
+- [ ] **(i) Repo veröffentlichen:** Remote `origin` ist gesetzt, Zugangsdaten liegen in
+      `.git/credentials` – `git push -u origin main` (vorher: Secret-Audit in
+      `docs/deployment.md`, Abschnitt 10).
 - [ ] Testdaten in Traccar löschen: Geräte `TEST123`/`TEST456`, Geofence „Testzone“
       (Web-UI <http://localhost:8082>).
 - [ ] **(i) Google-Find-Hub-WebUI einrichten:** <http://localhost:4321> → Config →
@@ -19,11 +27,11 @@ Legende: `[ ]` offen · `(i)` interaktiv – braucht dein Konto/Passwort
 - [ ] **(i) Apple-Bridge initialisieren** (Befehl in der Kurzreferenz unten).
 - [ ] **(i) Beacon-Keypair erzeugen** (macless-haystack `generate_keys.py`), privaten
       Key in `server/.env` als `APPLE_BEACON_KEYS=…` eintragen.
-- [ ] **(i) 1NCE-SIM aktivieren**, MSISDN aus dem Portal in der Geräte-Registry
-      (Eltern-UI → Geräte) eintragen.
-- [ ] **Lizenz entscheiden** (MIT / GPL-3.0 / CERN-OHL) und in `README.md` eintragen.
-- [ ] Optional: Versionen pinnen (Traccar-Image, Google-WebUI-Image, Bridge-`GIT_REF`).
+- [ ] **(i) 1NCE-SIM aktivieren**, ICCID + MSISDN aus dem Portal in der Geräte-Registry
+      (Eltern-UI → Geräte) eintragen – danach `sms/status` und MT-Versand testen.
 - [ ] Optional: `FINDMY_TOKEN` setzen und beim Google-Ziel als Header hinterlegen.
+- [ ] Optional: Traccar hinter den Bridge-Login legen (Caddy `forward_auth`) und die
+      Find-My-WebUIs einbetten.
 
 ## B. Bei Hardwareankunft – zuerst messen
 
@@ -77,13 +85,18 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 
 ## D. Server-Stack (vor Produktivbetrieb Pflicht)
 
-- [ ] **TLS/Reverse-Proxy** (Caddy-Skizze in `docs/deployment.md`) + Ports schließen
-- [ ] **Eltern-Benachrichtigung** bei neuer Nachricht (ntfy/Telegram/Apprise/Web-Push)
+- [x] **TLS/Reverse-Proxy** (Caddy-Profil `tls`, Site-Fallback, `default_sni`) *(2026-10-12)*
+- [x] **Eltern-Benachrichtigung** bei neuer Nachricht (Apprise + Web-Push/PWA) *(2026-10-11)*
 - [x] Audio-Retention/Cleanup implementieren (Standard 30 Tage, `RETENTION_DAYS`) *(2026-10-11)*
+- [x] **Login + Benutzerverwaltung** (PBKDF2, Sitzungen, Passwortwechsel/-Reset) *(2026-10-12)*
+- [x] **Mehrkind-Betrieb** (Kinder-Übersicht, Suchmodus pro Kind) *(2026-10-12)*
+- [x] **Operationszentrale**: Monitoring, Laufzeit-Einstellungen, Backup-Download *(2026-10-12)*
+- [x] **SIM-Provider-Schicht** (1NCE, WhereverSIM, Vorlagen für EMnify/Onomondo/Twilio) *(2026-10-12)*
 - [ ] Traccar: Geofence + Benachrichtigungen einrichten
 - [x] Backup-Skript für Volumes (`scripts/backup-volumes.sh`) *(2026-10-11)*
 - [ ] macless-haystack absichern (`endpoint_user`/`endpoint_pass`), falls exponiert
 - [ ] Umzug auf den Thin Client (`docs/deployment.md`, Abschnitt 7)
+- [ ] Optional: Rate-Limits (Caddy-Plugin/fail2ban), Traccar hinter den Bridge-Login
 
 ## E. Optional / experimentell
 
@@ -119,10 +132,14 @@ B6 NVS-Provisioning, B7 OTA über LTE, ~~A10 PostgreSQL statt H2~~ ✅ *(2026-10
 
 ## G. Vor der Veröffentlichung
 
-- [ ] `LICENSE` anlegen
-- [ ] Secrets-Check der Historie (`git log -p | grep -iE "token|password"`)
-- [ ] README finalisieren (Status, Screenshots)
+- [x] `LICENSE` anlegen (**MIT**, Copyright 2026 Manu) *(2026-10-12)*
+- [x] Secrets-Check der getrackten Dateien **und** der Historie (Audit in
+      `docs/deployment.md`, Abschnitt 10) – sauber *(2026-10-12)*
+- [x] README finalisiert (Status, Aufbau, Schnellstart, Datenschutz, Lizenz) *(2026-10-12)*
+- [x] `SECURITY.md` (Meldeweg + Betriebs-Checkliste) *(2026-10-12)*
+- [x] Pre-Commit-Hook gegen versehentliche Secrets (`scripts/git-hooks/pre-commit`) *(2026-10-12)*
 - [ ] Optional: englische Übersetzung
+- [ ] Optional: Screenshots/Statusbadges, sobald das Repo öffentlich ist
 
 ---
 
@@ -151,7 +168,7 @@ wsl -d UltimateTracker -- bash -lc 'grep -E "^(DEVICE|PARENT|WEBUI|GOOGLE|FINDMY
 
 | Dienst | URL | Zugang |
 |---|---|---|
-| Eltern-UI (Audio) | <http://localhost:8085> | `PARENT_TOKEN` aus `server/.env` |
+| Eltern-UI (Audio) | <http://localhost:8085> | Login (`PARENT_USER`/`PARENT_PASSWORD`) |
 | Traccar | <http://localhost:8082> | `~/UltimateTracker/server/ADMIN-ZUGANG.txt` |
 | Google-Find-Hub-WebUI | <http://localhost:4321> | `WEBUI_USER`/`WEBUI_PASSWORD` |
 | Apple-Endpunkt (macless-haystack) | <http://localhost:6176> | optional `endpoint_user`/`endpoint_pass` |

@@ -5,9 +5,13 @@ der Teilsysteme sowie die Software- und Serverarchitektur für den Prototypenauf
 zusammen. Details stehen in `docs/`; alle kritischen Annahmen wurden gegen die
 Herstellerdokumentation geprüft (siehe `docs/hardware-review.md`).
 
-> **Status (2026-10-11):** Hardware bestellt (LilyGO **T-SIM7080G-S3 V1.0**),
-> Lieferung steht aus. Docker-Stack (Traccar + Audio-Bridge) ist vorbereitet.
-> Firmware ist ein Skelett. Messplan für die Inbetriebnahme: `docs/measurement-plan.md`.
+> **Status (2026-10-12):** Board ist da und verifiziert (LilyGO **T-SIM7080G-S3 V1.0**,
+> N16R8 bestätigt, PMU/WLAN/BLE/Modem-AT getestet – `docs/bring-up.md`).
+> Der Docker-Stack läuft vollständig: Traccar, Audio-Bridge mit Eltern-UI
+> (Login, Mehrkind-Betrieb, Monitoring, Einstellungen, Backup), PostgreSQL, TLS,
+> SIM-Provider-Schicht. Firmware: Logik vollständig und host-getestet (53 Tests),
+> Hardware-Anbindung (Modem-HTTP, I2S, PMU) folgt in der Inbetriebnahme.
+> Messplan: `docs/measurement-plan.md`.
 
 ## 1. Hardware- & Materialstückliste
 
@@ -261,7 +265,7 @@ periodischer GNSS-Upload-Zyklus ≈ 1,2 mA Durchschnittsstrom.
 | 5 | Akku-Polung JST-Stecker | Vor dem ersten Einstecken messen |
 | 6 | PSM/TAU-Latenz der 1NCE-SIM | Messung M3/M7 |
 | 7 | Gehäusemaße (Board 111 × 32 × 20 mm) | CAD nach Nachmessung |
-| 8 | Lizenz für die Veröffentlichung | Entscheiden (MIT/GPL/CERN-OHL) |
+| 8 | Lizenz für die Veröffentlichung | **MIT** (entschieden 2026-10-12, `LICENSE`) |
 | 9 | Find My: Apple-Filter/Google-Experiment kann brechen | Auswertung im Stack vorbereitet; Fallback bleibt GNSS |
 | 10 | SMS-Pfad (Messung M4) | Kommandos spezifiziert in `docs/sms.md`; erst nach Test aktivieren |
 

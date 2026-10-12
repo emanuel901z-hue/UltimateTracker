@@ -49,9 +49,9 @@
 }
 
 # ---------------------------------------------------------------------------
-# LAN-/Schnellzugriff: nackter Hostname oder IP-Adresse (z. B. https://10.1.9.15/)
+# LAN-/Schnellzugriff: nackter Hostname oder IP-Adresse (z. B. https://192.168.1.50/)
 # landet direkt in der Eltern-UI – dem Einstiegspunkt.
-# In server/.env setzen:  SITE_LAN=10.1.9.15   (oder der Rechnername)
+# In server/.env setzen:  SITE_LAN=192.168.1.50   (oder der Rechnername)
 # Ohne Eintrag bedient der Block nur "localhost".
 # ---------------------------------------------------------------------------
 {$SITE_LAN:localhost} localhost {
