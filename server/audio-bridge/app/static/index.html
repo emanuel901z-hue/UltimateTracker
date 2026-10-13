@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#10141a">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="UltimateTracker">
 <meta name="description" content="Eltern-Oberfläche des UltimateTracker: Standort, Sprachnachrichten, Geräte und Betrieb.">
@@ -973,6 +974,25 @@ function statusLabel(status) {
   return { up: 'erreichbar', down: 'nicht erreichbar', error: 'Fehler', 'n/a': 'ohne Port' }[status] || status;
 }
 
+let lastServices = [];
+
+// Für Traccar einen frischen Einmal-Ticket-Link setzen (echter Klick = immer erlaubt).
+async function refreshSsoLink() {
+  const link = document.querySelector('[data-sso-link]');
+  const service = lastServices.find((item) => item.key === 'traccar');
+  if (!link || !service || !service.site_host) return;
+  try {
+    const res = await fetch('/api/v1/parent/sso/ticket', { method: 'POST', headers: headers() });
+    const data = await res.json();
+    if (data.ticket) {
+      link.href = 'https://' + service.site_host + '/_sso/traccar?ticket=' +
+        encodeURIComponent(data.ticket);
+    }
+  } catch (err) {
+    /* ohne Ticket greift der Rückkehr-Weg */
+  }
+}
+
 async function loadServices() {
   if (!state.token) {
     $('services').innerHTML = '<li class="muted">Token eintragen, dann Status laden</li>';
@@ -985,6 +1005,7 @@ async function loadServices() {
       return;
     }
     const data = await res.json();
+    lastServices = data.services || [];
     const sso = data.sso || {};
     if (sso.available && location.protocol !== 'https:') {
       $('sso-hint').hidden = false;
@@ -996,8 +1017,12 @@ async function loadServices() {
     $('services').innerHTML = data.services.map((service) => {
       const cls = statusClass(service.status);
       const label = statusLabel(service.status);
+      // Traccar: echter Link mit frischem Einmal-Ticket (wird gleich nachgesetzt)
       const link = service.port
-        ? ' <a class="linkish" href="' + serviceUrl(service) + '" target="_blank" rel="noopener">öffnen</a>'
+        ? (service.key === 'traccar'
+            ? ' <a class="linkish" data-sso-link="traccar" href="' + serviceUrl(service) +
+              '" target="_blank" rel="noopener">öffnen</a>'
+            : ' <a class="linkish" href="' + serviceUrl(service) + '" target="_blank" rel="noopener">öffnen</a>')
         : '';
       const own = service.own_login ? ' <span class="muted">(eigenes Konto)</span>' : '';
       return '<li><span class="dot ' + cls + '" title="' + label + '"></span>' +
@@ -1006,6 +1031,7 @@ async function loadServices() {
     }).join('');
     const traccar = data.services.find((service) => service.key === 'traccar');
     if (traccar && traccar.port) $('map-link').href = serviceUrl(traccar);
+    refreshSsoLink();
   } catch (err) {
     $('services').innerHTML = '<li class="muted">Fehler: ' + err.message + '</li>';
   }

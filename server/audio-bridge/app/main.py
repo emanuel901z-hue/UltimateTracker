@@ -1492,26 +1492,52 @@ def parent_overview() -> dict:
     return {"children": children, "count": len(children)}
 
 
+@app.post("/api/v1/parent/sso/ticket", dependencies=[Depends(require_parent)])
+def sso_ticket() -> dict:
+    """Einmal-Ticket für den Dienst-Auto-Login.
+
+    Warum nicht einfach das Sitzungscookie? Browser verwerfen `Domain=localhost`
+    (die Domain braucht laut RFC einen Punkt), deshalb kommt das Cookie von
+    `audio.localhost` nie bei `traccar.localhost` an. Das Ticket umgeht das:
+    kurz gültig, einmalig, nur mit gültiger Anmeldung erhältlich.
+    """
+    now = time.time()
+    with db() as conn:
+        conn.execute("DELETE FROM state WHERE key LIKE 'sso_ticket:%' AND CAST(value AS REAL) < ?",
+                     (now,))
+    ticket = secrets.token_urlsafe(24)
+    state_set(f"sso_ticket:{ticket}", str(now + 120))
+    return {"ticket": ticket, "expires_in": 120}
+
+
 @app.get("/_sso/traccar")
 def sso_traccar(request: Request) -> Response:
     """Automatische Anmeldung in Traccar – läuft über Caddy auf dem Traccar-Host.
 
-    Ablauf: Die Eltern-UI verlinkt auf https://<SITE_TRACCAR>/_sso/traccar.
-    Caddy leitet diesen Pfad an die Bridge (gleicher Hostname!), die Bridge
-    meldet sich serverseitig mit den hinterlegten Traccar-Zugangsdaten an und
-    gibt das dabei entstehende JSESSIONID-Cookie an den Browser weiter. Dadurch
-    gilt die Anmeldung der Eltern-UI auch für Traccar – ohne zweite Eingabe.
+    Zugang entweder über ein Einmal-Ticket (?ticket=…, von der Eltern-UI
+    angefordert) oder über das Sitzungscookie. Danach meldet sich die Bridge
+    serverseitig mit den hinterlegten Zugangsdaten an und gibt das
+    JSESSIONID-Cookie an den Browser weiter – kein zweites Login.
     """
-    token = session_token(request)
-    if not (token_ok(parent_token(), token) or session_user(token) is not None):
-        entry = os.environ.get("SITE_AUDIO", "") or "audio.localhost"
-        host = request.headers.get("host") or entry
+    entry = os.environ.get("SITE_AUDIO", "") or "audio.localhost"
+    host = request.headers.get("host") or entry
+    ticket = (request.query_params.get("ticket") or "").strip()
+    authorized = False
+    if ticket:
+        stored = state_get(f"sso_ticket:{ticket}")
+        if stored and float(stored) > time.time():
+            authorized = True
+        with db() as conn:
+            conn.execute("DELETE FROM state WHERE key = ?", (f"sso_ticket:{ticket}",))
+    if not authorized:
+        token = session_token(request)
+        authorized = token_ok(parent_token(), token) or session_user(token) is not None
+
+    if not authorized:
         if request.cookies.get(COOKIE_NAME):
-            # Cookie vorhanden, aber nicht gültig für diesen Host: typischerweise
-            # wurde die UI über den Direktport geöffnet (Cookie gilt dann nur für
-            # "localhost"). Klare Meldung statt Schleife.
+            # Cookie vorhanden, aber für diesen Host nicht gültig (typischerweise
+            # Direktzugang über localhost) – klare Meldung statt Schleife.
             return RedirectResponse(f"https://{entry}/?sso=failed", status_code=302)
-        # Kein Cookie: zur Anmeldung – mit Rückkehr-Adresse.
         back = urllib.parse.quote(f"https://{host}/_sso/traccar", safe="")
         return RedirectResponse(f"https://{entry}/?next={back}", status_code=302)
 
