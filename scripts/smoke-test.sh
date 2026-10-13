@@ -171,6 +171,12 @@ if 'apple-findmy' not in by_key:
     problems.append('Apple-Eintrag fehlt')
 if 'sso' not in data:
     problems.append('SSO-Status fehlt')
+if not by_key.get('anisette', {}).get('internal'):
+    problems.append('Anisette nicht als intern markiert')
+if by_key.get('anisette', {}).get('port') is not None:
+    problems.append('Anisette hat einen Port (Link waere tot)')
+if by_key.get('traccar', {}).get('own_login'):
+    problems.append('Traccar faelschlich als eigenes Konto markiert')
 print('; '.join(problems))
 ")
 [ -z "$CHECK" ] && pass "Dienste vollständig (Traccar erreichbar, SSO-Status, Apple dabei)" \

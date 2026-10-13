@@ -1084,17 +1084,22 @@ async function loadServices() {
     $('services').innerHTML = data.services.map((service) => {
       const cls = statusClass(service.status);
       const label = statusLabel(service.status);
-      // Traccar: echter Link mit frischem Einmal-Ticket (wird gleich nachgesetzt)
-      const link = service.port
-        ? (service.key === 'traccar'
-            ? ' <a class="linkish" data-sso-link="traccar" href="' + serviceUrl(service) +
-              '" target="_blank" rel="noopener">öffnen</a>'
-            : ' <a class="linkish" href="' + serviceUrl(service) + '" target="_blank" rel="noopener">öffnen</a>')
-        : '';
-      const own = service.own_login ? ' <span class="muted">(eigenes Konto)</span>' : '';
+      // Interne Dienste haben keinen Port – also keinen (toten) Link anbieten.
+      const link = service.internal
+        ? ' <span class="muted">(intern – kein Zugriff nötig)</span>'
+        : (service.port
+            ? (service.key === 'traccar'
+                ? ' <a class="linkish" data-sso-link="traccar" href="' + serviceUrl(service) +
+                  '" target="_blank" rel="noopener">öffnen</a>'
+                : ' <a class="linkish" href="' + serviceUrl(service) +
+                  '" target="_blank" rel="noopener">öffnen</a>')
+            : '');
+      const own = service.own_login ? ' <span class="muted">(eigene Anmeldung im Dienst)</span>' : '';
+      const hint = service.hint && service.status !== 'up'
+        ? ' <span class="muted">· ' + service.hint + '</span>' : '';
       return '<li><span class="dot ' + cls + '" title="' + label + '"></span>' +
         '<strong>' + service.name + '</strong> <span class="muted">' + service.description +
-        ' – ' + label + '</span>' + own + link + '</li>';
+        ' – ' + label + '</span>' + own + hint + link + '</li>';
     }).join('');
     const traccar = data.services.find((service) => service.key === 'traccar');
     if (traccar && traccar.port) $('map-link').href = serviceUrl(traccar);

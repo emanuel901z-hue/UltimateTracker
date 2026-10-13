@@ -738,6 +738,14 @@ SERVICE_DEFS = [
 
 _services_cache = {"value": None, "expires_at": 0.0}
 
+# Dienste ohne veröffentlichten Port: nur intern erreichbar, kein Link in der UI
+INTERNAL_SERVICES = {"anisette", "findmy-bridge"}
+# Kurze Hinweise, was bei einem Dienst noch zu tun ist
+SERVICE_HINTS = {
+    "apple-findmy": "Apple-ID hinterlegen (docs/findmy.md)",
+    "google-findmy": "Google-Anmeldung in der WebUI (einmalig)",
+}
+
 
 def probe_http(host: str, port: int, path: str = "/", timeout: float = 2.0) -> str:
     """Erreichbarkeit prüfen: 'up' (auch bei 401/404 – Hauptsache, es antwortet)."""
@@ -1263,16 +1271,21 @@ def services_overview() -> dict:
             path = "/api/server" if key == "traccar" else "/"
             status = probe_http(host, internal_port, path)
         site_host = os.environ.get(site_env, "") if site_env else ""
+        internal = key in INTERNAL_SERVICES
         result.append({
             "key": key,
             "name": name,
             "description": description,
             "status": status,
-            "port": port,
+            "port": None if internal else port,
             "site_host": site_host,
             # Nur über Caddy greift das Single Sign-on (und TLS).
-            "sso_available": bool(sso and site_host and port),
-            "own_login": key in ("traccar", "google-findmy", "apple-findmy"),
+            "sso_available": bool(sso and site_host and port and not internal),
+            # Interner Dienst: kein Link (nichts zu öffnen), nur Status.
+            "internal": internal,
+            # Traccar meldet sich über den Link automatisch an (Einmal-Ticket).
+            "own_login": key in ("google-findmy", "apple-findmy"),
+            "hint": SERVICE_HINTS.get(key, ""),
         })
 
     payload = {
