@@ -1006,6 +1006,76 @@ def sanitize_device_id(value: str) -> str:
     return cleaned or "unknown"
 
 
+_assigned = {"at": 0.0}
+
+
+def assign_devices_in_traccar() -> bool:
+    """Ordnet alle Geräte dem Traccar-Konto zu (idempotent, höchstens alle 10 min).
+
+    Traccar legt Geräte bei unbekannten Uploads an (database.registerUnknown),
+    ordnet sie aber keinem Benutzer zu – die Oberfläche zeigt dann
+    „Registriere dein erstes Gerät", obwohl die Geräte existieren. Über
+    `?all=true` sieht der Administrator auch noch nicht zugeordnete Geräte.
+    """
+    if time.time() - _assigned["at"] < 600:
+        return True
+    session = traccar_session()
+    if not session or not session[1]:
+        return False
+    jsession, user_id = session
+    try:
+        request = urllib.request.Request("http://traccar:8082/api/devices?all=true",
+                                         headers={"Cookie": jsession})
+        with urllib.request.urlopen(request, timeout=8) as response:
+            devices = json.loads(response.read() or b"[]")
+        assigned = 0
+        for device in devices:
+            payload = json.dumps({"userId": user_id, "deviceId": device["id"]}).encode()
+            req = urllib.request.Request(
+                "http://traccar:8082/api/permissions", data=payload,
+                headers={"Cookie": jsession, "Content-Type": "application/json"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=8):
+                    assigned += 1
+            except urllib.error.HTTPError as exc:
+                if exc.code != 400:  # 400 = war schon zugeordnet
+                    print(f"[traccar] Zuordnung Gerät {device['id']}: HTTP {exc.code}", flush=True)
+        _assigned["at"] = time.time()
+        if assigned:
+            print(f"[traccar] {assigned} Gerät(e) dem Konto zugeordnet "
+                  f"(von {len(devices)} bekannten)", flush=True)
+        return True
+    except Exception as exc:
+        print(f"[traccar] Zuordnung fehlgeschlagen: {exc!r}", flush=True)
+        return False
+
+
+def traccar_session() -> tuple[str, int] | None:
+    """Meldet sich bei Traccar an und liefert (Sitzungscookie, Benutzer-ID)."""
+    email, password = traccar_credentials()
+    if not (email and password):
+        ensure_traccar_admin()
+        email, password = traccar_credentials()
+    if not (email and password):
+        return None
+    payload = urllib.parse.urlencode({"email": email, "password": password}).encode()
+    request = urllib.request.Request(
+        "http://traccar:8082/api/session", data=payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            raw = response.headers.get("Set-Cookie", "")
+            jsession = next((part.split(";")[0] for part in raw.split(",")
+                             if "JSESSIONID=" in part), "")
+            body = json.loads(response.read() or b"{}")
+    except Exception as exc:
+        print(f"[traccar] Anmeldung für Zuordnung fehlgeschlagen: {exc!r}", flush=True)
+        return None
+    return (jsession, int(body.get("id") or 0)) if jsession else None
+
+
 def forward_to_traccar(loc: dict) -> bool:
     """Reicht Positionen als OsmAnd-Position an Traccar weiter."""
     if not TRACCAR_FORWARD_URL:
@@ -1024,6 +1094,8 @@ def forward_to_traccar(loc: dict) -> bool:
             if not (200 <= response.status < 300):
                 print(f"[forward] Traccar HTTP {response.status}: {url}", flush=True)
                 return False
+            # Gerät dem Konto zuordnen, sonst zeigt Traccar „Registriere dein erstes Gerät"
+            assign_devices_in_traccar()
             return True
     except Exception as exc:  # Diagnose: Fehler nicht still verschlucken
         print(f"[forward] Traccar-Forward fehlgeschlagen ({type(exc).__name__}: {exc}) {url}", flush=True)

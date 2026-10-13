@@ -159,6 +159,12 @@ endete in „HTTP ERROR 401". Deshalb schützt Traccar sich mit **seinem eigenen
 Konto**; die Eltern kommen über den „öffnen"-Link im Dienste-Bereich ohne
 zweite Eingabe hinein (Einmal-Ticket, 120 s gültig).
 
+**Geräte-Zuordnung:** Traccar legt Geräte bei unbekannten Uploads automatisch an
+(`database.registerUnknown`), ordnet sie aber **keinem Benutzer** zu – die
+Oberfläche zeigt dann „Registriere dein erstes Gerät", obwohl die Geräte
+existieren. Die Bridge ordnet deshalb nach jedem Weiterleiten alle bekannten
+Geräte dem Konto zu (über `?all=true`, höchstens alle 10 Minuten, idempotent).
+
 Die **Find-My-Oberflächen** haben kein eigenes Konto und bleiben daher hinter
 dem `forward_auth`-Gate (erreichbar mit dem Sitzungscookie, also beim Zugang
 über `https://audio.localhost`).
