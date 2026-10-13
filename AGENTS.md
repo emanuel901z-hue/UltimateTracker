@@ -45,8 +45,11 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
 - **Setup-Assistent:** Die Schritte sind serverseitig prüfbar (`GET /api/v1/parent/setup`)
   und werden in der UI als `SETUP_STEPS`/`SETUP_OPTIONAL` gespiegelt. Ein neuer
   Schritt braucht: Eintrag im Endpunkt, Markup (`#setup-step-<key>`), Eintrag in
-  `SETUP_STEPS`/`SETUP_TITLES` und – wenn optional – in `SETUP_OPTIONAL`.
-- **Verifikation:** `bash scripts/smoke-test.sh` (24 Gruppen) und
+  `SETUP_STEPS`/`SETUP_TITLES` und – wenn optional – in `SETUP_OPTIONAL`. Der
+  Status ist **pro Kind** (`?device_id=<IMEI>`; ohne Parameter das erste Gerät) –
+  „SIM", „Funktionstest" und „done" beziehen sich auf genau dieses Gerät
+  (`docs/parent-usability.md`).
+- **Verifikation:** `bash scripts/smoke-test.sh` (26 Gruppen) und
   `cd server/audio-bridge && python -m unittest discover -s tests`
   (Provider/Auth/**Fusion**, 59 Tests) müssen grün bleiben; Firmware zusätzlich
   `pio run` + `pio test -e native`.
@@ -72,7 +75,9 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   `role="tablist"`/`tab`/`tabpanel` mit Pfeiltasten). Neue Formularfelder
   brauchen Label + `aria-describedby` + Fehlerfeld (`<id>-error`) und eine
   Prüfung in `validate…()`. Nach Änderungen `python scripts/check-ui-a11y.py`
-  laufen lassen (ist in der CI).
+  laufen lassen (ist in der CI). Fehler erscheinen **in Klartext** (`errText()`),
+  ein 401 führt über den globalen `fetch`-Wrapper zurück zur Anmeldung – keine
+  rohen HTTP-Codes anzeigen.
 
 ## Befehle
 

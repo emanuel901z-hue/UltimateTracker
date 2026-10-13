@@ -68,6 +68,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/findmy.md` | Apple/Google Find My: Gegenstücke, Setup, Grenzen (experimentell) |
 | `docs/decisions.md` | Entscheidungsprotokoll (ADR-Kurzform) |
 | `docs/fusion.md` | Sensor-Fusion: Quellen, Regeln, Umsetzung, Optimierungsstufen |
+| `docs/parent-usability.md` | Eltern-Tauglichkeit: Analyse, Sprintplan, Umsetzung |
 | `firmware/` | ESP32-S3-Firmware: `lib/tracker_core` (host-getestete Logik) + `src/` (Hardware-Glue) |
 | `server/` | Docker-Stack: Traccar + Audio-Bridge (Eltern-UI/API), Caddy, Provider-Vorlagen |
 | `scripts/` | WSL-Sync, Smoke-Test, Simulator, Backups, Mess-Session, Git-Hook |
@@ -94,7 +95,7 @@ Die `server/.env` ist **optional**: Für einen eigenen Einstieg reicht
 `cp .env.example .env` und `PARENT_PASSWORD` setzen; alles Weitere verwaltet die
 UI. Details (WSL-Setup, TLS, LAN-/Internet-Betrieb, Betrieb & Wartung):
 [`docs/deployment.md`](docs/deployment.md). Tests: `bash scripts/smoke-test.sh`
-(24 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
+(26 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
 `python -m unittest discover -s tests` (59 Bridge-Tests: Auth, Provider, **Fusion**),
 `python scripts/check-ui-a11y.py` (Quelltext: Labels, ARIA, Tab-Muster,
 Kontraste hell/dunkel, Bedienziele) und `python scripts/ui-check.py`

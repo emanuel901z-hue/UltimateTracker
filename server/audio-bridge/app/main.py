@@ -664,12 +664,30 @@ def push_async(title: str, body: str) -> None:
 # der state-Tabelle, damit sie Backups/Umzüge überleben.
 
 SETTING_DEFS = {
-    "poll_interval_s": {"default": POLL_INTERVAL_S, "min": 60, "max": 86400, "label": "Poll-Intervall (Normalbetrieb), Sekunden"},
-    "search_poll_interval_s": {"default": SEARCH_POLL_INTERVAL_S, "min": 15, "max": 600, "label": "Poll-Intervall im Suchmodus, Sekunden"},
-    "search_mode_minutes": {"default": SEARCH_MODE_MINUTES, "min": 1, "max": 720, "label": "Standarddauer Suchmodus, Minuten"},
-    "retention_days": {"default": RETENTION_DAYS, "min": 0, "max": 3650, "label": "Aufbewahrung Audionachrichten, Tage (0 = nie löschen)"},
-    "low_battery_percent": {"default": 15, "min": 0, "max": 100, "label": "Akkuschwelle für längeres Poll-Intervall, Prozent"},
-    "notify_new_message": {"default": 1, "min": 0, "max": 1, "label": "Bei neuer Nachricht benachrichtigen (1/0)"},
+    "poll_interval_s": {
+        "default": POLL_INTERVAL_S, "min": 60, "max": 86400,
+        "label": "Wie oft der Tracker sich meldet (Sekunden)",
+        "help": "Kleiner = aktueller, aber mehr Akkuverbrauch. 900 s = alle 15 Minuten."},
+    "search_poll_interval_s": {
+        "default": SEARCH_POLL_INTERVAL_S, "min": 15, "max": 600,
+        "label": "Wie oft im Suchmodus (Sekunden)",
+        "help": "Nur während der Suche – der Tracker piept und meldet sich häufiger."},
+    "search_mode_minutes": {
+        "default": SEARCH_MODE_MINUTES, "min": 1, "max": 720,
+        "label": "Wie lange der Suchmodus dauert (Minuten)",
+        "help": "Danach hört der Piepton von selbst auf (schont den Akku)."},
+    "retention_days": {
+        "default": RETENTION_DAYS, "min": 0, "max": 3650,
+        "label": "Sprachnachrichten aufbewahren (Tage)",
+        "help": "0 = nie automatisch löschen."},
+    "low_battery_percent": {
+        "default": 15, "min": 0, "max": 100,
+        "label": "Ab welchem Akkustand seltener gemeldet wird (Prozent)",
+        "help": "Unter diesem Wert fragt der Tracker seltener nach, um Akku zu sparen."},
+    "notify_new_message": {
+        "default": 1, "min": 0, "max": 1,
+        "label": "Bei neuer Sprachnachricht benachrichtigen",
+        "help": "Schickt eine Push-Benachrichtigung, wenn das Kind etwas sendet."},
 }
 
 _settings_cache = {"value": None, "expires_at": 0.0}
@@ -1301,11 +1319,21 @@ def services_overview() -> dict:
 
 @app.get("/api/v1/parent/settings", dependencies=[Depends(require_parent)])
 def settings_get() -> dict:
-    """Laufzeit-Einstellungen (überschreiben die .env-Defaults)."""
+    """Laufzeit-Einstellungen (überschreiben die .env-Defaults).
+
+    Zu jeder Einstellung kommen Label, Kurzhilfe, Grenzen und der Standardwert –
+    damit die UI sie in Elternsprache darstellen und zurücksetzen kann.
+    """
     return {
         "values": settings_all(),
         "definitions": {
-            name: {"label": spec["label"], "min": spec["min"], "max": spec["max"]}
+            name: {
+                "label": spec["label"],
+                "help": spec.get("help", ""),
+                "min": spec["min"],
+                "max": spec["max"],
+                "default": int(spec["default"]),
+            }
             for name, spec in SETTING_DEFS.items()
         },
     }
@@ -2261,36 +2289,65 @@ def maintenance_cleanup() -> dict:
 
 
 @app.get("/api/v1/parent/setup", dependencies=[Depends(require_parent)])
-def setup_status() -> dict:
+def setup_status(device_id: str | None = None) -> dict:
     """Was fehlt noch, bis der Tracker läuft? Grundlage für den Setup-Assistenten.
 
     Jeder Schritt ist einzeln prüfbar, damit die UI „Weiter" erst freigeben kann,
     wenn der Schritt wirklich erledigt ist (DAU-sicher).
+
+    **Pro Kind:** Mit `?device_id=<IMEI>` beziehen sich „SIM", „Funktionstest"
+    und „done" auf genau dieses Gerät (Mehrkind-Betrieb, `docs/parent-usability.md`
+    A1). Ohne Angabe bleibt es beim ersten Gerät (Rückwärtskompatibilität).
     """
+    wanted = (device_id or "").strip()
     with db() as conn:
         devices = [dict(row) for row in conn.execute(
             "SELECT * FROM devices ORDER BY created_at").fetchall()]
+        device = next((d for d in devices if d["id"] == wanted), None) if wanted else (
+            devices[0] if devices else None)
         positions = conn.execute("SELECT COUNT(*) AS n FROM positions").fetchone()["n"]
         messages = conn.execute("SELECT COUNT(*) AS n FROM messages").fetchone()["n"]
         findmy = conn.execute("SELECT COUNT(*) AS n FROM findmy_locations").fetchone()["n"]
         last_position = conn.execute(
             "SELECT device_id, received_at FROM positions ORDER BY id DESC LIMIT 1").fetchone()
+        device_activity = 0
+        if device is not None:
+            device_positions = conn.execute(
+                "SELECT COUNT(*) AS n FROM positions WHERE device_id = ?",
+                (device["id"],)).fetchone()["n"]
+            device_messages = conn.execute(
+                "SELECT COUNT(*) AS n FROM messages WHERE device_id = ?",
+                (device["id"],)).fetchone()["n"]
+            # Find-My-Positionen zählen mit, wenn ein Beacon diesem Kind gehört.
+            beacons = [b for b, child in beacon_assignments().items() if child == device["id"]]
+            device_findmy = 0
+            if beacons:
+                placeholders = ",".join("?" for _ in beacons)
+                device_findmy = conn.execute(
+                    f"SELECT COUNT(*) AS n FROM findmy_locations "
+                    f"WHERE lower(beacon_id) IN ({placeholders})", beacons).fetchone()["n"]
+            device_activity = device_positions + device_messages + device_findmy
 
+    # „Funktionstest" ist pro Gerät erledigt, sobald von **diesem** Kind etwas ankam.
+    funktionstest = (bool(device_activity) if device is not None
+                     else bool(positions or messages or findmy))
     return {
         "steps": {
             "willkommen": True,
-            "geraet": bool(devices),
-            "sim": any(device.get("iccid") for device in devices),
+            "geraet": device is not None,
+            "sim": bool(device and device.get("iccid")),
             "traccar": probe_http("traccar", 8082, "/api/server") == "up",
             "benachrichtigungen": push_subscription_count() > 0,
             # Zertifikat: nur relevant, wenn Caddy läuft (dann gibt es /ca.crt)
             "zertifikat": caddy_available() and CA_FILE.exists(),
             # Apple Find My: Zugangsdaten für macless-haystack hinterlegt?
             "apple": apple_config_status()["configured"],
-            "funktionstest": bool(positions or messages or findmy),
+            "funktionstest": funktionstest,
         },
-        "device": devices[0] if devices else None,
+        "device": device,
         "device_count": len(devices),
+        # Für „weiteres Kind hinzufügen": die Auswahl kennt alle Kinder.
+        "devices": [{"id": d["id"], "name": d["name"] or d["id"]} for d in devices],
         "counts": {"positions": positions, "messages": messages, "findmy": findmy},
         "last_position": dict(last_position) if last_position else None,
         "sso": {"available": caddy_available(),
@@ -2298,7 +2355,7 @@ def setup_status() -> dict:
         # Erststart ohne Terminal: Tokens und Traccar-Zugang zeigt der Assistent an
         "tokens": {"device": device_token(), "parent": parent_token()},
         "traccar": ensure_traccar_admin(),
-        "done": bool(devices) and bool(positions or messages),
+        "done": device is not None and bool(device_activity),
         "checked_at": now_iso(),
     }
 
@@ -2363,9 +2420,28 @@ def parent_fused(device_id: str) -> dict:
 
 @app.get("/api/v1/parent/devices", dependencies=[Depends(require_parent)])
 def devices_list() -> dict:
+    """Geräte-Registry inkl. Aktivität.
+
+    `seen`/`last_seen` erlauben der UI, nie gesehene Geräte zu markieren – ein
+    IMEI-Vertipper erzeugt sonst ein Phantom neben dem echten Tracker
+    (docs/parent-usability.md A5).
+    """
     with db() as conn:
-        rows = conn.execute("SELECT * FROM devices ORDER BY created_at").fetchall()
-    return {"devices": [dict(r) for r in rows]}
+        rows = [dict(row) for row in conn.execute(
+            "SELECT * FROM devices ORDER BY created_at").fetchall()]
+        for device in rows:
+            position = conn.execute(
+                "SELECT received_at FROM positions WHERE device_id = ? ORDER BY id DESC LIMIT 1",
+                (device["id"],)).fetchone()
+            device["positions"] = conn.execute(
+                "SELECT COUNT(*) AS n FROM positions WHERE device_id = ?",
+                (device["id"],)).fetchone()["n"]
+            device["messages"] = conn.execute(
+                "SELECT COUNT(*) AS n FROM messages WHERE device_id = ?",
+                (device["id"],)).fetchone()["n"]
+            device["last_seen"] = position["received_at"] if position else None
+            device["seen"] = bool(position or device["messages"])
+    return {"devices": rows}
 
 
 @app.put("/api/v1/parent/devices/{device_id}", dependencies=[Depends(require_parent)])
@@ -2391,9 +2467,27 @@ async def device_upsert(device_id: str, request: Request) -> dict:
 
 @app.delete("/api/v1/parent/devices/{device_id}", dependencies=[Depends(require_parent)])
 def device_delete(device_id: str) -> dict:
+    """Gerät samt zugehörigen Daten entfernen (Nachrichten, Positionen, Beacons).
+
+    Ohne Kaskade blieben Audio-Dateien und Positionen als Waisen zurück
+    (docs/parent-usability.md A4). Das Traccar-Gerät bleibt bewusst bestehen –
+    ein noch aktiver Tracker meldet sich dort sonst sofort wieder an.
+    """
     with db() as conn:
+        if conn.execute("SELECT id FROM devices WHERE id = ?", (device_id,)).fetchone() is None:
+            raise HTTPException(status_code=404, detail="Unbekanntes Gerät")
+        files = {row["play_file"] for row in conn.execute(
+            "SELECT play_file FROM messages WHERE device_id = ?", (device_id,))}
+        files |= {row["raw_file"] for row in conn.execute(
+            "SELECT raw_file FROM messages WHERE device_id = ?", (device_id,))}
+        messages = conn.execute("DELETE FROM messages WHERE device_id = ?", (device_id,)).rowcount
+        positions = conn.execute("DELETE FROM positions WHERE device_id = ?", (device_id,)).rowcount
+        beacons = conn.execute("DELETE FROM beacons WHERE device_id = ?", (device_id,)).rowcount
         conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
-    return {"deleted": device_id}
+    for name in files:
+        if name:
+            (AUDIO_DIR / name).unlink(missing_ok=True)
+    return {"deleted": device_id, "messages": messages, "positions": positions, "beacons": beacons}
 
 
 @app.get("/api/v1/parent/sim/messages", dependencies=[Depends(require_parent)])

@@ -198,7 +198,14 @@
     <section role="tabpanel" id="panel-einrichtung" aria-labelledby="tab-einrichtung" tabindex="0" hidden>
       <div class="card">
         <h2>Einrichtung</h2>
-        <p class="hint" id="setup-progress" role="status" aria-live="polite">Schritt 1 von 7</p>
+        <p class="hint" id="setup-progress" role="status" aria-live="polite">Schritt –</p>
+        <div class="row-tight">
+          <button id="setup-add-child">Weiteres Kind / Tracker hinzufügen</button>
+          <span class="muted" id="setup-add-state" role="status" aria-live="polite"></span>
+        </div>
+        <p class="hint">Der Assistent richtet das <strong>oben ausgewählte</strong> Kind ein.
+          Für ein zusätzliches Kind diesen Knopf verwenden – dann beginnt der Ablauf mit
+          einer neuen IMEI.</p>
 
         <div id="setup-step-willkommen">
           <h3>Willkommen</h3>
@@ -249,8 +256,10 @@
 
         <div id="setup-step-sim" hidden>
           <h3>2 · SIM eintragen (optional)</h3>
-          <p class="hint">Nur für den SMS-Pfad nötig. Die <strong>ICCID</strong> steht auf der
-            SIM-Karte bzw. im Portal deines Anbieters (z. B. 1NCE). Die Rufnummer ist optional.</p>
+          <p class="hint">Die <strong>SIM-Karte muss eingelegt sein</strong>, sonst kann der
+            Tracker seinen Standort nicht senden. <em>Hier</em> trägst du die
+            <strong>ICCID</strong> ein – das ist nur für den SMS-Pfad nötig. Sie steht auf
+            der SIM-Karte bzw. im Portal des Anbieters (z. B. 1NCE). Die Rufnummer ist optional.</p>
           <label for="s-iccid">ICCID (19–22 Ziffern)
             <input id="s-iccid" type="text" inputmode="numeric" maxlength="22" aria-describedby="s-iccid-error">
           </label>
@@ -270,6 +279,10 @@
           <h3>3 · Karte prüfen</h3>
           <p id="setup-traccar-state" role="status" aria-live="polite">– wird geprüft –</p>
           <p class="hint" id="setup-traccar-creds"></p>
+          <div class="row-tight">
+            <button id="s-traccar-copy">Zugangsdaten kopieren</button>
+            <span class="muted" id="s-traccar-copy-state" role="status" aria-live="polite"></span>
+          </div>
           <p class="hint">Dein Tracker meldet sich in Traccar automatisch an (gleiche IMEI).
             Für Verlauf, Geofences und Berichte öffnest du Traccar aus der Dienste-Liste –
             dort gilt Traccars eigenes Konto (einmalig pro Browser). Die Karte in dieser
@@ -525,6 +538,7 @@
           </div>
           <div class="row-tight">
             <button id="d-save" class="primary">Gerät speichern</button>
+            <button id="d-cancel" hidden>Abbrechen</button>
             <span class="muted" id="d-state" role="status" aria-live="polite"></span>
           </div>
         </form>
@@ -569,9 +583,39 @@
         <div id="settings"></div>
         <div class="row-tight mt">
           <button id="settings-save" class="primary">Speichern</button>
+          <button id="settings-defaults">Standardwerte einsetzen</button>
           <span class="muted" id="settings-state" role="status" aria-live="polite"></span>
         </div>
-        <p class="hint">Wirkt sofort (ohne Neustart); die <code>.env</code> bleibt der Startwert.</p>
+        <p class="hint">Wirkt sofort (ohne Neustart). Die Voreinstellungen sind für den
+          Alltag gedacht – ändere sie nur, wenn du einen Grund hast.</p>
+      </div>
+      <div class="card">
+        <h2>Firmware (für den Installateur)</h2>
+        <p class="hint">Neue Tracker-Firmware bereitstellen. Der Tracker holt sie beim
+          nächsten Kontakt selbst ab (OTA). Version im Format <code>1.2.3</code>.</p>
+        <form id="firmware-form" novalidate>
+          <div class="row">
+            <div>
+              <label for="fw-version">Version (z. B. 1.2.3)
+                <input id="fw-version" type="text" placeholder="1.2.3" aria-describedby="fw-version-error">
+              </label>
+              <p class="field-error" id="fw-version-error"></p>
+            </div>
+            <div>
+              <label for="fw-file">Firmware-Datei (.bin)
+                <input id="fw-file" type="file" accept=".bin,application/octet-stream"
+                       aria-describedby="fw-file-hint">
+              </label>
+              <p class="hint" id="fw-file-hint">Aus dem PlatformIO-Build
+                (<code>.pio/build/…/firmware.bin</code>).</p>
+            </div>
+          </div>
+          <div class="row-tight">
+            <button id="fw-upload" class="primary">Hochladen</button>
+            <span class="muted" id="fw-state" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+        <ul id="fw-list" class="scroll" tabindex="0" role="region" aria-label="Bereitgestellte Firmware"></ul>
       </div>
     </section>
 
@@ -607,6 +651,18 @@
       <div class="card" id="users-card" hidden>
         <h2>Benutzer</h2>
         <ul id="users"><li class="muted">– wird geladen –</li></ul>
+        <form id="user-reset-form" hidden novalidate>
+          <p class="hint" id="user-reset-target"></p>
+          <label for="reset-pass">Neues Passwort (mindestens 10 Zeichen)
+            <input id="reset-pass" type="password" autocomplete="new-password" minlength="10"
+                   aria-describedby="reset-pass-error">
+          </label>
+          <p class="field-error" id="reset-pass-error"></p>
+          <div class="row-tight">
+            <button id="user-reset-save" class="primary" type="submit">Passwort setzen</button>
+            <button id="user-reset-cancel" type="button">Abbrechen</button>
+          </div>
+        </form>
         <form id="user-form" novalidate>
           <div class="row">
             <div>
@@ -650,11 +706,32 @@ const $ = (id) => document.getElementById(id);
 const state = {
   device: localStorage.getItem('ut_device') || '',
   token: localStorage.getItem('ut_token') || '',
+  devices: [],
+  editingDevice: null,
   user: null,
   recorder: null,
   chunks: [],
   blob: null,
 };
+
+// Das aktuell ausgewählte Kind (aus der Geräte-Registry) – Grundlage für
+// Status, SMS und den Setup-Assistenten im Mehrkind-Betrieb.
+function selectedDevice() {
+  return (state.devices || []).find((device) => device.id === state.device) || null;
+}
+
+// IMEI-Prüfziffer (Luhn): fängt Zahlendreher ab, bevor ein Phantom-Gerät
+// entsteht (docs/parent-usability.md A6).
+function imeiChecksumOk(value) {
+  if (!/^[0-9]{15}$/.test(value)) return false;
+  let sum = 0;
+  for (let i = 0; i < 15; i += 1) {
+    let digit = Number(value[14 - i]);
+    if (i % 2 === 1) { digit *= 2; if (digit > 9) digit -= 9; }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
 
 $('token').value = state.token;
 $('token').addEventListener('input', (e) => {
@@ -669,14 +746,51 @@ function setStatus(text) {
   if (live) live.textContent = text;
 }
 function headers() { return { 'X-Auth-Token': state.token }; }
+
+// Verständliche Fehlermeldung statt roher HTTP-Codes (docs/parent-usability.md C1).
+// Ein `detail` der API hat Vorrang – das ist schon eine Klartextmeldung.
+function errText(res, data) {
+  if (data && data.detail) return data.detail;
+  if (res.status === 401) return 'Nicht angemeldet – bitte erneut anmelden.';
+  if (res.status === 403) return 'Dafür fehlt die Berechtigung (nur für Administratoren).';
+  if (res.status === 404) return 'Das wurde nicht gefunden.';
+  if (res.status === 413) return 'Die Datei ist zu groß.';
+  if (res.status >= 500) return 'Der Server hatte ein Problem – bitte kurz später erneut versuchen.';
+  return 'Es ist ein Fehler aufgetreten (Code ' + res.status + ').';
+}
+
+// Läuft die Anmeldung ab (Sitzung beendet oder abgelaufen), zeigen die Aufrufe
+// überall 401. Statt „HTTP 401" in jeder Kachel führt das hier zurück zur
+// Anmeldung (docs/parent-usability.md C2).
+let unauthorizedHandled = false;
+function handleUnauthorized() {
+  if (unauthorizedHandled) return;
+  unauthorizedHandled = true;
+  state.token = '';
+  localStorage.removeItem('ut_token');
+  showLogin('Deine Anmeldung ist abgelaufen – bitte erneut anmelden.');
+  setTimeout(() => { unauthorizedHandled = false; }, 2000);
+}
+
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const response = await nativeFetch(input, init);
+  if (response.status === 401) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    // Anmelde-/Kontowechsel-Aufrufe ausnehmen: dort ist 401 eine gültige Antwort.
+    if (!url.includes('/api/v1/auth/')) handleUnauthorized();
+  }
+  return response;
+};
 function fmt(iso) { try { return new Date(iso).toLocaleString(); } catch { return iso; } }
 
 // --- Geräte ---
 async function loadDevices() {
   if (!state.token) return;
   const res = await fetch('/api/v1/parent/devices', { headers: headers() });
-  if (!res.ok) { setStatus('Geräte: HTTP ' + res.status); return; }
+  if (!res.ok) { setStatus('Geräte: ' + errText(res)); return; }
   const data = await res.json();
+  state.devices = data.devices;
   const sel = $('device');
   sel.innerHTML = '';
   for (const d of data.devices) {
@@ -693,15 +807,20 @@ async function loadDevices() {
   // Erstes Gerät automatisch übernehmen: sonst zeigen Status und Nachrichten
   // "Gerät wählen", obwohl im Auswahlfeld schon eines steht.
   if (previous !== state.device) load();
+  renderDevices(data.devices);
+}
 
+// Geräteliste mit Bearbeiten/Löschen. Nie gesehene Geräte (Phantome durch
+// IMEI-Vertipper) werden markiert – sie lassen sich hier aufräumen.
+function renderDevices(devices) {
   const box = $('devices');
   box.innerHTML = '';
-  if (!data.devices.length) {
+  if (!devices.length) {
     box.innerHTML = '<p class="muted">Noch kein Gerät angelegt – unten IMEI und Namen eintragen.</p>';
     return;
   }
   const list = document.createElement('ul');
-  for (const d of data.devices) {
+  for (const d of devices) {
     const li = document.createElement('li');
     li.className = 'entry';
     const name = document.createElement('span');
@@ -712,14 +831,64 @@ async function loadDevices() {
     info.textContent = [d.id, d.imei && d.imei !== d.id ? 'IMEI ' + d.imei : '',
       d.msisdn || '', d.notes || ''].filter(Boolean).join(' · ');
     li.append(name, info);
+    if (!d.seen) {
+      const warn = document.createElement('span');
+      warn.className = 'muted';
+      warn.textContent = '· noch keine Daten empfangen – IMEI prüfen?';
+      li.appendChild(warn);
+    }
+    const edit = document.createElement('button');
+    edit.className = 'linkish';
+    edit.textContent = 'bearbeiten';
+    edit.dataset.deviceEdit = d.id;
+    const remove = document.createElement('button');
+    remove.className = 'linkish';
+    remove.textContent = 'löschen';
+    remove.dataset.deviceDelete = d.id;
+    remove.dataset.name = d.name || d.id;
+    li.append(edit, remove);
     list.appendChild(li);
   }
   box.appendChild(list);
 }
+
+// Formular auf ein bestehendes Gerät umstellen (ID bleibt fest – ein anderes
+// Kind anlegen = „Weiteres Kind hinzufügen" im Assistenten).
+function editDevice(id) {
+  const device = (state.devices || []).find((item) => item.id === id);
+  if (!device) return;
+  $('d-id').value = device.id;
+  $('d-id').readOnly = true;
+  $('d-name').value = device.name || '';
+  $('d-msisdn').value = device.msisdn || '';
+  $('d-notes').value = device.notes || '';
+  state.editingDevice = id;
+  $('d-save').textContent = 'Änderungen speichern';
+  $('d-cancel').hidden = false;
+  fieldError($('d-id'), ''); fieldError($('d-name'), ''); fieldError($('d-msisdn'), '');
+  $('device-form').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  $('d-name').focus();
+}
+
+function resetDeviceForm() {
+  $('d-id').value = '';
+  $('d-id').readOnly = false;
+  $('d-name').value = '';
+  $('d-msisdn').value = '';
+  $('d-notes').value = '';
+  state.editingDevice = null;
+  $('d-save').textContent = 'Gerät speichern';
+  $('d-cancel').hidden = true;
+  fieldError($('d-id'), ''); fieldError($('d-name'), ''); fieldError($('d-msisdn'), '');
+}
+$('d-cancel').addEventListener('click', resetDeviceForm);
 $('device').addEventListener('change', (e) => {
   state.device = e.target.value;
   localStorage.setItem('ut_device', state.device);
+  // Kind gewechselt: Assistent wieder auf dieses Kind beziehen.
+  setupNewDevice = false;
   load();
+  loadSetup();
 });
 
 $('d-save').addEventListener('click', async () => {
@@ -729,8 +898,8 @@ $('d-save').addEventListener('click', async () => {
   const res = await fetch('/api/v1/parent/devices/' + encodeURIComponent(id), {
     method: 'PUT', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
-  setStatus(res.ok ? 'Gerät gespeichert.' : 'Speichern: HTTP ' + res.status);
-  if (res.ok) { $('d-id').value = $('d-name').value = $('d-msisdn').value = $('d-notes').value = ''; loadDevices(); }
+  setStatus(res.ok ? 'Gerät gespeichert.' : 'Speichern: ' + errText(res));
+  if (res.ok) { resetDeviceForm(); loadDevices(); }
 });
 
 // --- Aufnahme ---
@@ -766,7 +935,7 @@ $('send').addEventListener('click', async () => {
   if (res.ok) {
     setStatus('Gesendet – der Tracker holt die Nachricht beim nächsten Poll.');
     state.blob = null; $('send').disabled = true; load();
-  } else { setStatus('Fehler: HTTP ' + res.status); }
+  } else { setStatus('Fehler: ' + errText(res)); }
 });
 
 $('search').addEventListener('change', async (e) => {
@@ -775,7 +944,7 @@ $('search').addEventListener('change', async (e) => {
   fd.append('active', e.target.checked ? 'true' : 'false');
   if (state.device) fd.append('device_id', state.device);
   const res = await fetch('/api/v1/parent/search-mode', { method: 'POST', headers: headers(), body: fd });
-  setStatus(res.ok ? (e.target.checked ? 'Suchmodus aktiv.' : 'Suchmodus beendet.') : 'Fehler: HTTP ' + res.status);
+  setStatus(res.ok ? (e.target.checked ? 'Suchmodus aktiv.' : 'Suchmodus beendet.') : 'Fehler: ' + errText(res));
   loadChildren();
 });
 
@@ -803,7 +972,7 @@ async function loadMessages() {
   if (!state.token) return;
   const query = state.device ? '?device_id=' + encodeURIComponent(state.device) : '';
   const res = await fetch('/api/v1/parent/messages' + query, { headers: headers() });
-  if (!res.ok) { setStatus('Nachrichten: HTTP ' + res.status); return; }
+  if (!res.ok) { setStatus('Nachrichten: ' + errText(res)); return; }
   const data = await res.json();
   const list = $('list');
   list.innerHTML = '';
@@ -844,17 +1013,17 @@ async function loadMessages() {
 $('mark-all').addEventListener('click', async () => {
   const res = await fetch('/api/v1/parent/messages/listened', { method: 'POST', headers: headers() });
   const data = await res.json().catch(() => ({}));
-  setStatus(res.ok ? (data.marked || 0) + ' Nachricht(en) als gehört markiert' : 'Fehler: HTTP ' + res.status);
+  setStatus(res.ok ? (data.marked || 0) + ' Nachricht(en) als gehört markiert' : 'Fehler: ' + errText(res));
   loadMessages();
   loadChildren();
 });
 
 // --- SMS-Verlauf (vom Anbieter geladen, chat-artig) ---
 async function loadSmsHistory() {
-  const device = (setupState && setupState.device) || null;
+  const device = selectedDevice();
   const iccid = (device && device.iccid) || '';
   if (!iccid) {
-    $('sms-history-state').textContent = 'Keine ICCID hinterlegt – Tab „Einrichtung", Schritt SIM.';
+    $('sms-history-state').textContent = 'Keine ICCID hinterlegt – Tab „Einrichtung", Schritt 2.';
     $('sms-list').innerHTML = '';
     return;
   }
@@ -862,7 +1031,7 @@ async function loadSmsHistory() {
   const res = await fetch('/api/v1/parent/sms?iccid=' + encodeURIComponent(iccid), { headers: headers() });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    $('sms-history-state').textContent = data.detail || ('Fehler: HTTP ' + res.status);
+    $('sms-history-state').textContent = errText(res, data);
     return;
   }
   const data = await res.json();
@@ -896,7 +1065,7 @@ async function loadFindMy() {
   if (!state.token) return;
   const res = await fetch('/api/v1/parent/findmy/locations?limit=10', { headers: headers() });
   const box = $('findmy');
-  if (!res.ok) { box.innerHTML = '<div class="muted">Find My: HTTP ' + res.status + '</div>'; return; }
+  if (!res.ok) { box.innerHTML = '<div class="muted">Find My: ' + errText(res) + '</div>'; return; }
   const data = await res.json();
   box.innerHTML = '';
   if (!data.locations.length) {
@@ -968,7 +1137,7 @@ $('push-enable').addEventListener('click', async () => {
       headers: { ...headers(), 'Content-Type': 'application/json' },
       body: JSON.stringify(sub),
     });
-    pushStatus(res.ok ? 'aktiv' : 'Registrierung fehlgeschlagen: HTTP ' + res.status);
+    pushStatus(res.ok ? 'aktiv' : 'Registrierung fehlgeschlagen: ' + errText(res));
   } catch (err) {
     pushStatus('Fehler: ' + err.message);
   }
@@ -977,7 +1146,7 @@ $('push-enable').addEventListener('click', async () => {
 $('push-test').addEventListener('click', async () => {
   if (!state.token) { pushStatus('bitte zuerst Token eintragen'); return; }
   const res = await fetch('/api/v1/parent/push/test', { method: 'POST', headers: headers() });
-  if (!res.ok) { pushStatus('Test: HTTP ' + res.status); return; }
+  if (!res.ok) { pushStatus('Test: ' + errText(res)); return; }
   const data = await res.json();
   pushStatus('Test gesendet (aktiv: ' + data.sent + ', entfernt: ' + data.removed + ')');
 });
@@ -987,18 +1156,38 @@ let smsIccid = '';
 
 async function loadSmsStatus() {
   if (!state.token) { $('sms-state').textContent = 'Status: Token fehlt'; return; }
+  const device = selectedDevice();
+  const wantIccid = (device && device.iccid) || '';
   const res = await fetch('/api/v1/parent/sms/status', { headers: headers() });
-  if (!res.ok) { $('sms-state').textContent = 'Status: HTTP ' + res.status; return; }
+  if (!res.ok) { $('sms-state').textContent = 'Status: ' + errText(res); return; }
   const data = await res.json();
   if (!data.configured) {
-    $('sms-state').textContent = 'Status: nicht konfiguriert (1NCE-Zugangsdaten in server/.env)';
+    $('sms-state').textContent = 'Status: SMS-Versand ist noch nicht eingerichtet ' +
+      '(der Installateur trägt die Zugangsdaten ein).';
     return;
   }
-  if (!data.sims || !data.sims.length) {
+  const sims = data.sims || [];
+  if (!sims.length) {
     $('sms-state').textContent = 'Status: Konto erreichbar, aber keine SIM zugeordnet';
     return;
   }
-  const sim = data.sims[0];
+  // Im Mehrkind-Betrieb die SIM des ausgewählten Kindes bevorzugen – sonst
+  // landet die SMS beim falschen Tracker (docs/parent-usability.md A2).
+  let sim = wantIccid ? sims.find((item) => item.iccid === wantIccid) : null;
+  if (wantIccid && !sim) {
+    smsIccid = '';
+    $('sms-state').textContent = 'Die hinterlegte SIM (…' + String(wantIccid).slice(-4) +
+      ') ist im Anbieter-Konto nicht zu finden – bitte ICCID prüfen (Tab „Einrichtung", Schritt 2).';
+    return;
+  }
+  if (!sim && !wantIccid && sims.length === 1) sim = sims[0];
+  if (!sim) {
+    smsIccid = '';
+    const name = device ? (device.name || device.id) : 'dieses Kind';
+    $('sms-state').textContent = 'Für ' + name + ' ist keine SIM hinterlegt – ' +
+      'Tab „Einrichtung", Schritt 2 (SIM eintragen).';
+    return;
+  }
   smsIccid = sim.iccid || '';
   $('sms-state').textContent = 'SIM ' + sim.iccid +
     (sim.msisdn ? ' · ' + sim.msisdn : '') +
@@ -1008,7 +1197,10 @@ async function loadSmsStatus() {
 $('sms-send').addEventListener('click', async () => {
   if (!state.token) { $('sms-state').textContent = 'Status: Token fehlt'; return; }
   if (!smsIccid) await loadSmsStatus();
-  if (!smsIccid) { $('sms-state').textContent = 'keine SIM im 1NCE-Konto gefunden'; return; }
+  if (!smsIccid) {
+    $('sms-state').textContent = 'Keine SIM für dieses Kind hinterlegt – Tab „Einrichtung", Schritt 2.';
+    return;
+  }
   const text = $('sms-text').value.trim();
   if (!text) { $('sms-state').textContent = 'bitte einen Text eingeben'; return; }
   const res = await fetch('/api/v1/parent/sms', {
@@ -1019,7 +1211,7 @@ $('sms-send').addEventListener('click', async () => {
   const data = await res.json().catch(() => ({}));
   $('sms-state').textContent = res.ok
     ? 'gesendet (ID ' + (data.id ?? '?') + ') – Zustellung beim nächsten Netz-Attach'
-    : 'Fehler: HTTP ' + res.status + (data.detail ? ' – ' + data.detail : '');
+    : 'Fehler: ' + errText(res, data);
 });
 
 // --- Dienste-Übersicht + eingebettete Karte ---
@@ -1090,7 +1282,7 @@ async function loadServices() {
   try {
     const res = await fetch('/api/v1/parent/services', { headers: headers() });
     if (!res.ok) {
-      $('services').innerHTML = '<li class="muted">Status: HTTP ' + res.status + '</li>';
+      $('services').innerHTML = '<li class="muted">Status: ' + errText(res) + '</li>';
       return;
     }
     const data = await res.json();
@@ -1161,7 +1353,7 @@ function loadLeaflet() {
 async function loadBeacons() {
   if (!state.token) return;
   const res = await fetch('/api/v1/parent/beacons', { headers: headers() });
-  if (!res.ok) { $('beacons').innerHTML = '<li class="muted">HTTP ' + res.status + '</li>'; return; }
+  if (!res.ok) { $('beacons').innerHTML = '<li class="muted">' + errText(res) + '</li>'; return; }
   const data = await res.json();
   const devices = data.devices || [];
   if (!data.beacons.length) {
@@ -1204,7 +1396,7 @@ document.addEventListener('click', (event) => {
     const data = await res.json().catch(() => ({}));
     $('beacons-state').textContent = res.ok
       ? (payload.device_id ? 'zugeordnet zu ' + payload.device_id : 'Zuordnung entfernt')
-      : (data.detail || ('HTTP ' + res.status));
+      : (errText(res, data));
     loadMap();
   });
 });
@@ -1218,7 +1410,7 @@ async function loadMap() {
     return;
   }
   const res = await fetch('/api/v1/parent/map', { headers: headers() });
-  if (!res.ok) { $('map-legend').textContent = 'Karte: HTTP ' + res.status; return; }
+  if (!res.ok) { $('map-legend').textContent = 'Karte: ' + errText(res); return; }
   const data = await res.json();
 
   if (!leafletMap) {
@@ -1284,7 +1476,38 @@ document.addEventListener('click', (event) => {
     state.device = target.dataset.child;
     localStorage.setItem('ut_device', state.device);
     $('device').value = state.device;
+    setupNewDevice = false;
     load();
+    loadSetup();
+  }
+  if (target.dataset.deviceEdit) {
+    editDevice(target.dataset.deviceEdit);
+  }
+  if (target.dataset.deviceDelete) {
+    const id = target.dataset.deviceDelete;
+    const name = target.dataset.name || id;
+    if (!window.confirm('Gerät „' + name + '" mit allen Nachrichten und Positionen löschen?')) return;
+    fetch('/api/v1/parent/devices/' + encodeURIComponent(id), { method: 'DELETE', headers: headers() })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        setStatus(res.ok ? 'Gerät gelöscht: ' + name : (errText(res, data)));
+        if (res.ok) {
+          if (state.device === id) state.device = '';
+          if (state.editingDevice === id) resetDeviceForm();
+          loadDevices();
+          loadSetup();
+        }
+      });
+  }
+  if (target.dataset.fwDelete) {
+    const version = target.dataset.fwDelete;
+    if (!window.confirm('Firmware-Version „' + version + '" entfernen?')) return;
+    fetch('/api/v1/parent/firmware/' + encodeURIComponent(version), { method: 'DELETE', headers: headers() })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        $('fw-state').textContent = res.ok ? 'entfernt: ' + version : errText(res, data);
+        loadFirmware();
+      });
   }
   if (target.dataset.search) {
     const fd = new FormData();
@@ -1292,22 +1515,18 @@ document.addEventListener('click', (event) => {
     fd.append('device_id', target.dataset.search);
     fetch('/api/v1/parent/search-mode', { method: 'POST', headers: headers(), body: fd })
       .then((res) => {
-        setStatus(res.ok ? 'Suchmodus gestartet.' : 'Fehler: HTTP ' + res.status);
+        setStatus(res.ok ? 'Suchmodus gestartet.' : 'Fehler: ' + errText(res));
         loadChildren();
       });
   }
   if (target.dataset.reset) {
-    const name = target.dataset.name || 'Benutzer';
-    const next = window.prompt('Neues Passwort für ' + name + ' (mindestens 10 Zeichen):');
-    if (!next) return;
-    fetch('/api/v1/auth/users/' + target.dataset.reset + '/password', {
-      method: 'POST',
-      headers: { ...headers(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new: next }),
-    }).then(async (res) => {
-      const data = await res.json().catch(() => ({}));
-      $('user-state').textContent = res.ok ? 'Passwort zurückgesetzt: ' + name : (data.detail || ('HTTP ' + res.status));
-    });
+    resetUserId = target.dataset.reset;
+    $('user-reset-target').textContent =
+      'Neues Passwort für „' + (target.dataset.name || 'Benutzer') + '".';
+    $('reset-pass').value = '';
+    fieldError($('reset-pass'), '');
+    $('user-reset-form').hidden = false;
+    $('reset-pass').focus();
   }
   if (target.dataset.delete) {
     const name = target.dataset.name || 'Benutzer';
@@ -1315,30 +1534,54 @@ document.addEventListener('click', (event) => {
     fetch('/api/v1/auth/users/' + target.dataset.delete, { method: 'DELETE', headers: headers() })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
-        $('user-state').textContent = res.ok ? 'gelöscht: ' + name : (data.detail || ('HTTP ' + res.status));
+        $('user-state').textContent = res.ok ? 'gelöscht: ' + name : (errText(res, data));
         loadUsers();
       });
   }
 });
 
 // --- Kinder-Übersicht (mehrere Tracker) ---
+// Zeitabstände in Worten – Eltern sollen „offline seit 2 Tagen" lesen, nicht
+// einen ISO-Zeitstempel.
+function ageText(iso) {
+  if (!iso) return null;
+  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 120) return 'gerade eben';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return 'vor ' + minutes + ' min';
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return 'vor ' + hours + ' Std.';
+  return 'vor ' + Math.floor(hours / 24) + ' Tag(en)';
+}
+
+// Gesundheitsampel je Kind: aktuell (grün) / veraltet (gelb) / offline (rot).
+function childHealth(child) {
+  if (!child.last_position_at) return { cls: 'na', label: 'noch keine Position empfangen' };
+  const hours = (Date.now() - new Date(child.last_position_at).getTime()) / 3600000;
+  if (hours < 0.5) return { cls: 'up', label: 'aktuell' };
+  if (hours < 24) return { cls: 'error', label: 'zuletzt ' + ageText(child.last_position_at) };
+  return { cls: 'down', label: 'offline seit ' + ageText(child.last_position_at) };
+}
+
 async function loadChildren() {
   if (!state.token) return;
   const res = await fetch('/api/v1/parent/overview', { headers: headers() });
-  if (!res.ok) { $('children').innerHTML = '<li class="muted">HTTP ' + res.status + '</li>'; return; }
+  if (!res.ok) { $('children').innerHTML = '<li class="muted">' + errText(res) + '</li>'; return; }
   const data = await res.json();
   if (!data.children.length) {
     $('children').innerHTML = '<li class="muted">Noch keine Tracker registriert – unten unter „Geräte" anlegen.</li>';
     return;
   }
   $('children').innerHTML = data.children.map((child) => {
+    const status = childHealth(child);
     const battery = child.battery === null || child.battery === undefined
-      ? 'Akku –' : 'Akku ' + Math.round(child.battery) + ' %';
-    const seen = child.last_position_at ? 'zuletzt ' + fmt(child.last_position_at) : 'noch keine Position';
-    const pending = child.pending_messages ? ' · ' + child.pending_messages + ' Nachricht(en) offen' : '';
+      ? 'Akku unbekannt'
+      : 'Akku ' + Math.round(child.battery) + ' %' + (child.battery < 20 ? ' – bald laden' : '');
+    const pending = child.pending_messages
+      ? ' · ' + child.pending_messages + ' Nachricht(en) unterwegs' : '';
     const search = child.search_mode ? ' · Suchmodus aktiv' : '';
-    return '<li><strong>' + child.name + '</strong> <span class="muted">' + battery + ' · ' + seen +
-      pending + search + '</span>' +
+    return '<li><span class="dot ' + status.cls + '"></span><strong>' + escapeHtml(child.name) +
+      '</strong> <span class="muted">' + status.label + ' · ' + battery + pending + search + '</span>' +
       ' <button class="linkish" data-child="' + child.device_id + '">auswählen</button>' +
       ' <button class="linkish" data-search="' + child.device_id + '">Suchmodus</button></li>';
   }).join('');
@@ -1349,7 +1592,7 @@ async function loadSystem() {
   if (!state.token) return;
   try {
     const res = await fetch('/api/v1/parent/system', { headers: headers() });
-    if (!res.ok) { $('system').textContent = 'HTTP ' + res.status; return; }
+    if (!res.ok) { $('system').textContent = errText(res); return; }
     const s = await res.json();
     const minutes = Math.floor((s.uptime_s % 3600) / 60);
     const mem = s.memory_mb || {};
@@ -1368,31 +1611,92 @@ async function loadSystem() {
   }
 }
 
+let lastSettings = null;
 async function loadSettings() {
   if (!state.token) return;
   try {
     const res = await fetch('/api/v1/parent/settings', { headers: headers() });
-    if (!res.ok) { $('settings').textContent = 'HTTP ' + res.status; return; }
+    if (!res.ok) { $('settings').textContent = errText(res); return; }
     const data = await res.json();
-    $('settings').innerHTML = Object.entries(data.definitions).map(([name, spec]) =>
-      '<label class="mt">' + spec.label +
-      ' <input type="number" data-setting="' + name + '" min="' + spec.min + '" max="' + spec.max +
-      '" value="' + data.values[name] + '"></label>').join('');
+    lastSettings = data;
+    $('settings').innerHTML = Object.entries(data.definitions).map(([name, spec]) => {
+      const hint = spec.help ? '<p class="hint">' + escapeHtml(spec.help) + '</p>' : '';
+      // 0/1-Einstellungen als Schalter statt „(1/0)".
+      if (spec.min === 0 && spec.max === 1) {
+        return '<label class="mt"><input type="checkbox" data-setting="' + name + '"' +
+          (Number(data.values[name]) ? ' checked' : '') + '> ' + escapeHtml(spec.label) + '</label>' + hint;
+      }
+      return '<label class="mt">' + escapeHtml(spec.label) +
+        ' <input type="number" data-setting="' + name + '" min="' + spec.min + '" max="' + spec.max +
+        '" value="' + data.values[name] + '"></label>' + hint;
+    }).join('');
   } catch (err) {
     $('settings').textContent = 'Fehler: ' + err.message;
   }
 }
 
+$('settings-defaults').addEventListener('click', () => {
+  if (!lastSettings) return;
+  document.querySelectorAll('[data-setting]').forEach((input) => {
+    const spec = lastSettings.definitions[input.dataset.setting];
+    if (!spec) return;
+    if (input.type === 'checkbox') input.checked = Number(spec.default) === 1;
+    else input.value = spec.default;
+  });
+  $('settings-state').textContent = 'Standardwerte eingesetzt – noch speichern.';
+});
+
+// --- Firmware (OTA, docs/optimizations.md B7) ---
+async function loadFirmware() {
+  if (!state.token) return;
+  const res = await fetch('/api/v1/parent/firmware', { headers: headers() });
+  const list = $('fw-list');
+  if (!res.ok) { list.innerHTML = '<li class="muted">' + errText(res) + '</li>'; return; }
+  const data = await res.json();
+  if (!data.firmware.length) {
+    list.innerHTML = '<li class="muted">Noch keine Firmware bereitgestellt.</li>';
+    return;
+  }
+  list.innerHTML = data.firmware.map((fw) =>
+    '<li><strong>' + escapeHtml(fw.version) + '</strong> <span class="muted">' +
+    Math.round(fw.size / 1024) + ' kB · ' + fmt(fw.uploaded_at) +
+    (fw.notes ? ' · ' + escapeHtml(fw.notes) : '') + '</span>' +
+    ' <button class="linkish" data-fw-delete="' + escapeHtml(fw.version) + '">entfernen</button></li>').join('');
+}
+
+$('fw-upload').addEventListener('click', async () => {
+  const version = $('fw-version').value.trim();
+  const file = $('fw-file').files[0];
+  const okVersion = /^[0-9]+(\.[0-9]+){0,2}$/.test(version)
+    ? fieldError($('fw-version'), '')
+    : fieldError($('fw-version'), 'Bitte eine Version wie 1.2.3 angeben.');
+  if (!okVersion) return;
+  if (!file) { $('fw-state').textContent = 'Bitte eine Firmware-Datei (.bin) auswählen.'; return; }
+  $('fw-state').textContent = 'wird hochgeladen …';
+  const fd = new FormData();
+  fd.append('version', version);
+  fd.append('firmware', file, file.name);
+  const res = await fetch('/api/v1/parent/firmware', { method: 'POST', headers: headers(), body: fd });
+  const data = await res.json().catch(() => ({}));
+  $('fw-state').textContent = res.ok
+    ? 'hochgeladen ✓ (' + Math.round((data.size || 0) / 1024) + ' kB)'
+    : errText(res, data);
+  if (res.ok) { $('fw-version').value = ''; $('fw-file').value = ''; loadFirmware(); }
+});
+
 $('settings-save').addEventListener('click', async () => {
   const payload = {};
-  document.querySelectorAll('[data-setting]').forEach((input) => { payload[input.dataset.setting] = input.value; });
+  document.querySelectorAll('[data-setting]').forEach((input) => {
+    payload[input.dataset.setting] = input.type === 'checkbox'
+      ? (input.checked ? '1' : '0') : input.value;
+  });
   const res = await fetch('/api/v1/parent/settings', {
     method: 'PUT',
     headers: { ...headers(), 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   const data = await res.json().catch(() => ({}));
-  $('settings-state').textContent = res.ok ? 'gespeichert' : (data.detail || ('HTTP ' + res.status));
+  $('settings-state').textContent = res.ok ? 'gespeichert' : (errText(res, data));
 });
 
 $('system-refresh').addEventListener('click', loadSystem);
@@ -1407,7 +1711,7 @@ $('cleanup').addEventListener('click', async () => {
 $('backup').addEventListener('click', async () => {
   setStatus('Backup wird erstellt …');
   const res = await fetch('/api/v1/parent/maintenance/backup', { headers: headers() });
-  if (!res.ok) { setStatus('Backup: HTTP ' + res.status); return; }
+  if (!res.ok) { setStatus('Backup: ' + errText(res)); return; }
   const blob = await res.blob();
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
@@ -1423,28 +1727,32 @@ async function loadStatus() {
   if (!state.token || !state.device) { box.textContent = '– Gerät/Token wählen –'; return; }
   const res = await fetch('/api/v1/parent/status?device_id=' + encodeURIComponent(state.device),
                           { headers: headers() });
-  if (!res.ok) { box.textContent = 'Status: HTTP ' + res.status; return; }
+  if (!res.ok) { box.textContent = 'Status: ' + errText(res); return; }
   const s = await res.json();
   const pos = s.last_position;
   const parts = [];
-  parts.push('Akkustand: ' + (pos && pos.battery != null ? pos.battery.toFixed(0) + ' %' : 'unbekannt'));
-  parts.push('letzte Position: ' + (pos ? pos.latitude.toFixed(5) + ', ' + pos.longitude.toFixed(5) +
-             ' (' + fmt(pos.received_at) + ')' : 'noch keine'));
-  parts.push('nächster Poll: ' + s.next_poll_s + ' s' + (s.search_mode ? ' (Suchmodus aktiv)' : ''));
-  parts.push('Nachrichten in Warteschlange: ' + s.pending_messages);
+  if (pos) {
+    parts.push('Letzter Kontakt: ' + (ageText(pos.received_at) || 'unbekannt') +
+      ' (' + fmt(pos.received_at) + ')');
+  } else {
+    parts.push('Noch keine Position empfangen – der Tracker hat sich noch nicht gemeldet.');
+  }
+  parts.push('Akkustand: ' + (pos && pos.battery != null ? Math.round(pos.battery) + ' %' : 'unbekannt'));
+  parts.push('Nächster Abruf: in ' + s.next_poll_s + ' s' + (s.search_mode ? ' (Suchmodus aktiv)' : ''));
+  if (s.pending_messages) parts.push('Unterwegs zum Tracker: ' + s.pending_messages + ' Nachricht(en)');
   if (s.last_message) {
-    parts.push('letzte Nachricht: ' + (s.last_message.direction === 'in' ? 'vom Tracker' : 'an Tracker') +
+    parts.push('Letzte Nachricht: ' + (s.last_message.direction === 'in' ? 'vom Tracker' : 'an den Tracker') +
                ' (' + fmt(s.last_message.created_at) + ')');
   }
+  if (pos) parts.push('Position: ' + pos.latitude.toFixed(5) + ', ' + pos.longitude.toFixed(5));
   if (s.last_beacon) {
-    parts.push('letzter Beacon: ' + s.last_beacon.provider + ' / ' + s.last_beacon.beacon_id +
-               ' – ' + s.last_beacon.latitude.toFixed(5) + ', ' + s.last_beacon.longitude.toFixed(5) +
-               ' (' + fmt(s.last_beacon.received_at) + ')');
+    parts.push('Letzter Find-My-Beacon: ' + s.last_beacon.provider + ' / ' + s.last_beacon.beacon_id +
+               ' (' + (ageText(s.last_beacon.received_at) || fmt(s.last_beacon.received_at)) + ')');
   }
-  box.innerHTML = parts.map((p) => '<div>' + p + '</div>').join('');
+  box.innerHTML = parts.map((p) => '<div>' + escapeHtml(p) + '</div>').join('');
 }
 
-function load() { loadStatus(); loadMessages(); loadFindMy(); }
+function load() { loadStatus(); loadMessages(); loadFindMy(); loadSmsStatus(); }
 $('refresh').addEventListener('click', () => { loadDevices(); load(); loadChildren(); });
 
 // --- Anmeldung / Sitzung ---
@@ -1464,6 +1772,7 @@ function showApp(user) {
   loadUsers();
   loadSystem();
   loadSettings();
+  loadFirmware();
   loadSetup();
   followNextParameter();
 }
@@ -1498,7 +1807,7 @@ $('password-save').addEventListener('click', async () => {
   const data = await res.json().catch(() => ({}));
   $('pw-state').textContent = res.ok
     ? 'Passwort geändert (andere Geräte abgemeldet)'
-    : (data.detail || ('HTTP ' + res.status));
+    : (errText(res, data));
   if (res.ok) { $('pw-current').value = ''; $('pw-new').value = ''; $('pw-repeat').value = ''; }
 });
 
@@ -1513,8 +1822,29 @@ $('user-create').addEventListener('click', async () => {
     body: JSON.stringify({ username, password, role }),
   });
   const data = await res.json().catch(() => ({}));
-  $('user-state').textContent = res.ok ? 'angelegt: ' + username : (data.detail || ('HTTP ' + res.status));
+  $('user-state').textContent = res.ok ? 'angelegt: ' + username : (errText(res, data));
   if (res.ok) { $('new-user').value = ''; $('new-user-pass').value = ''; loadUsers(); }
+});
+
+// Passwort eines Benutzers zurücksetzen – als Formular statt window.prompt
+// (docs/parent-usability.md C3).
+let resetUserId = '';
+$('user-reset-cancel').addEventListener('click', () => {
+  $('user-reset-form').hidden = true;
+  resetUserId = '';
+});
+$('user-reset-save').addEventListener('click', async () => {
+  if (!resetUserId) return;
+  const next = $('reset-pass').value;
+  if (!requireText($('reset-pass'), 'Das neue Passwort', 10)) return;
+  const res = await fetch('/api/v1/auth/users/' + encodeURIComponent(resetUserId) + '/password', {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new: next }),
+  });
+  const data = await res.json().catch(() => ({}));
+  $('user-state').textContent = res.ok ? 'Passwort zurückgesetzt.' : errText(res, data);
+  if (res.ok) { $('user-reset-form').hidden = true; resetUserId = ''; }
 });
 
 function showLogin(message) {
@@ -1545,7 +1875,7 @@ $('login').addEventListener('click', async () => {
     body: JSON.stringify({ username, password }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) { $('login-state').textContent = data.detail || ('HTTP ' + res.status); return; }
+  if (!res.ok) { $('login-state').textContent = errText(res, data); return; }
   state.token = data.token;
   localStorage.setItem('ut_token', state.token);
   $('login-pass').value = '';
@@ -1599,7 +1929,7 @@ function selectTab(tab, moveFocus = true) {
   if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); loadSetup(); }
   if (tab.id === 'tab-karte' && leafletMap) leafletMap.invalidateSize();
   if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); }
-  if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); }
+  if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); loadFirmware(); }
   if (tab.id === 'tab-konto') loadUsers();
 }
 
@@ -1644,6 +1974,7 @@ function requireImei(input) {
   const value = input.value.trim();
   if (!value) return fieldError(input, 'Die IMEI fehlt – sie steht auf dem Aufkleber des Modems (AT+GSN).');
   if (!/^[0-9]{15}$/.test(value)) return fieldError(input, 'Die IMEI besteht aus genau 15 Ziffern, ohne Leerzeichen.');
+  if (!imeiChecksumOk(value)) return fieldError(input, 'Die IMEI passt nicht zur Prüfziffer – bitte genau ablesen (Zahlendreher?).');
   return fieldError(input, '');
 }
 
@@ -1681,6 +2012,7 @@ function validateUserForm() {
 function validateSettings() {
   let ok = true;
   document.querySelectorAll('[data-setting]').forEach((input) => {
+    if (input.type === 'checkbox') return;  // Schalter haben keine Wertegrenzen
     const min = Number(input.min);
     const max = Number(input.max);
     const value = Number(input.value);
@@ -1733,11 +2065,17 @@ const SETUP_OPTIONAL = new Set(['sim', 'traccar', 'benachrichtigungen', 'zertifi
   'apple', 'funktionstest']);
 let setupIndex = 0;
 let setupState = null;
+// true = der Assistent richtet gerade ein NEUES Kind ein (nicht das oben
+// ausgewählte). Wird über „Weiteres Kind hinzufügen" gesetzt.
+let setupNewDevice = false;
+let lastTraccarCreds = '';
 
 async function loadSetup() {
   if (!state.token) return;
+  const query = (!setupNewDevice && state.device)
+    ? '?device_id=' + encodeURIComponent(state.device) : '';
   try {
-    const res = await fetch('/api/v1/parent/setup', { headers: headers() });
+    const res = await fetch('/api/v1/parent/setup' + query, { headers: headers() });
     if (!res.ok) return;
     setupState = await res.json();
   } catch (err) {
@@ -1763,6 +2101,7 @@ async function loadSetup() {
     ? 'Zugang: ' + traccar.email + ' · Passwort: ' + traccar.password +
       (traccar.created ? ' (wurde gerade automatisch angelegt – bitte später in Traccar ändern)' : '')
     : 'Das Traccar-Konto wird beim ersten Aufruf automatisch angelegt.';
+  lastTraccarCreds = traccar.email ? (traccar.email + ' / ' + traccar.password) : '';
   $('setup-summary').textContent = setupState.done
     ? 'Der Tracker ist eingerichtet und hat sich schon gemeldet. Alles Weitere findest du in den Tabs.'
     : 'Der Tracker ist angelegt. Sobald er sich das erste Mal meldet, erscheint er auf der Karte.';
@@ -1780,7 +2119,10 @@ function updateSetupButtons() {
   $('setup-progress').textContent = 'Schritt ' + (setupIndex + 1) + ' von ' +
     SETUP_STEPS.length + ' · ' + SETUP_TITLES[step];
   $('setup-back').disabled = setupIndex === 0;
-  const done = Boolean(setupState && setupState.steps[step]);
+  // Beim „weiteren Kind" gilt der Schritt erst nach dem Speichern als erledigt,
+  // auch wenn schon ein anderes Gerät existiert.
+  const done = Boolean(setupState && setupState.steps[step]) &&
+    !(setupNewDevice && step === 'geraet');
   const optional = SETUP_OPTIONAL.has(step);
   $('setup-next').disabled = !(done || optional);
   $('setup-next').textContent = setupIndex === SETUP_STEPS.length - 1
@@ -1810,6 +2152,18 @@ $('setup-open').addEventListener('click', () => {
   selectTab(document.getElementById('tab-einrichtung'), false);
   showSetupStep(0);
 });
+$('setup-add-child').addEventListener('click', () => {
+  setupNewDevice = true;
+  $('s-imei').value = '';
+  $('s-name').value = '';
+  $('s-iccid').value = '';
+  $('s-msisdn').value = '';
+  fieldError($('s-imei'), '');
+  fieldError($('s-name'), '');
+  $('s-state').textContent = '';
+  $('setup-add-state').textContent = 'Neuer Tracker – bitte IMEI und Namen eintragen.';
+  showSetupStep(SETUP_STEPS.indexOf('geraet'));
+});
 $('s-push').addEventListener('click', () => $('push-enable').click());
 
 $('s-token-copy').addEventListener('click', async () => {
@@ -1825,12 +2179,24 @@ $('s-token-copy').addEventListener('click', async () => {
   setTimeout(() => { $('s-token-state').textContent = ''; }, 4000);
 });
 
+$('s-traccar-copy').addEventListener('click', async () => {
+  if (!lastTraccarCreds) {
+    $('s-traccar-copy-state').textContent = 'Noch keine Zugangsdaten vorhanden.';
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(lastTraccarCreds);
+    $('s-traccar-copy-state').textContent = 'kopiert ✓';
+  } catch (err) {
+    $('s-traccar-copy-state').textContent = 'Kopieren nicht möglich – bitte von Hand abtippen.';
+  }
+  setTimeout(() => { $('s-traccar-copy-state').textContent = ''; }, 4000);
+});
+
 $('s-save').addEventListener('click', async () => {
   const imei = $('s-imei').value.trim();
   const name = $('s-name').value.trim();
-  const okImei = /^[0-9]{15}$/.test(imei)
-    ? fieldError($('s-imei'), '')
-    : fieldError($('s-imei'), 'Die IMEI besteht aus genau 15 Ziffern, ohne Leerzeichen.');
+  const okImei = requireImei($('s-imei'));
   const okName = requireText($('s-name'), 'Der Name', 2);
   if (!okImei || !okName) return;
   $('s-state').textContent = 'wird gespeichert …';
@@ -1839,8 +2205,13 @@ $('s-save').addEventListener('click', async () => {
     headers: { ...headers(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, imei }),
   });
-  $('s-state').textContent = res.ok ? 'gespeichert ✓' : ('Fehler: HTTP ' + res.status);
+  $('s-state').textContent = res.ok ? 'gespeichert ✓' : ('Fehler: ' + errText(res));
   if (res.ok) {
+    // Das neue Kind wird zum aktiven Kind – der Assistent führt es weiter.
+    state.device = imei;
+    localStorage.setItem('ut_device', state.device);
+    setupNewDevice = false;
+    $('setup-add-state').textContent = '';
     await loadDevices();
     await loadSetup();
     showSetupStep(setupIndex + 1);
@@ -1868,7 +2239,7 @@ $('s-sim-save').addEventListener('click', async () => {
       msisdn: $('s-msisdn').value.trim(), iccid, notes: device.notes || '',
     }),
   });
-  $('s-sim-state').textContent = res.ok ? 'gespeichert ✓' : ('Fehler: HTTP ' + res.status);
+  $('s-sim-state').textContent = res.ok ? 'gespeichert ✓' : ('Fehler: ' + errText(res));
   if (res.ok) {
     await loadSetup();
     showSetupStep(setupIndex + 1);
@@ -1896,7 +2267,7 @@ $('s-apple-save').addEventListener('click', async () => {
   const data = await res.json().catch(() => ({}));
   $('s-apple-state').textContent = res.ok
     ? (data.hint || 'gespeichert ✓')
-    : (data.detail || ('HTTP ' + res.status));
+    : (errText(res, data));
   if (res.ok) {
     $('s-apple-pass').value = '';
     loadSetup();
@@ -1910,7 +2281,7 @@ $('s-ca-check').addEventListener('click', async () => {
     const res = await fetch('https://' + location.hostname + '/healthz', { cache: 'no-store' });
     $('setup-ca-state').textContent = res.ok
       ? 'Das Zertifikat ist auf diesem Gerät installiert ✓'
-      : 'Noch nicht installiert (HTTP ' + res.status + ') – Anleitung oben befolgen.';
+      : 'Der Aufruf kam durch (Zertifikat ist installiert), aber der Server meldete: ' + errText(res);
   } catch (err) {
     $('setup-ca-state').textContent = 'Noch nicht installiert – Anleitung oben befolgen ' +
       '(die Seite muss dafür über HTTPS geöffnet sein).';
@@ -2009,7 +2380,7 @@ $('register').addEventListener('click', async () => {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    $('reg-state').textContent = data.detail || ('HTTP ' + res.status);
+    $('reg-state').textContent = errText(res, data);
     return;
   }
   $('reg-state').textContent = 'Konto angelegt – wird angemeldet …';

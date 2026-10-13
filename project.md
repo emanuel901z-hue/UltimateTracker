@@ -292,3 +292,4 @@ periodischer GNSS-Upload-Zyklus ≈ 1,2 mA Durchschnittsstrom.
 - [`docs/findmy.md`](docs/findmy.md) – Apple/Google Find My (Gegenstücke, Setup)
 - [`docs/sms.md`](docs/sms.md) – Identitäten (IMEI/MSISDN) und SMS-Pfad
 - [`docs/decisions.md`](docs/decisions.md) – Entscheidungsprotokoll
+- [`docs/parent-usability.md`](docs/parent-usability.md) – Eltern-Tauglichkeit (Analyse & Umsetzung)

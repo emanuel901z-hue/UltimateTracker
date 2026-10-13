@@ -2,6 +2,30 @@
 
 Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung – Folgen.
 
+## D-017 – 2026-10-13 – Eltern-Tauglichkeit: Mehrkind, Geräteverwaltung, Fehlerbild
+
+- **Entscheidung:** Der Server/UI wird für **nicht-technische Eltern** gehärtet
+  (Analyse und Umsetzung in `docs/parent-usability.md`):
+  - Der Setup-Assistent arbeitet **pro Kind** (`/api/v1/parent/setup?device_id=`),
+    inklusive „Weiteres Kind / Tracker hinzufügen"; SMS/SIM folgen der
+    Kinder-Auswahl.
+  - Geräte lassen sich in der UI **bearbeiten und löschen**; das Löschen räumt
+    kaskadierend auf. Nie gesehene Geräte werden markiert; die IMEI wird per
+    **Luhn-Prüfziffer** geprüft.
+  - Ein globaler `fetch`-Wrapper führt bei **401 zurück zur Anmeldung**; rohe
+    HTTP-Codes werden durch Klartextmeldungen ersetzt.
+  - Einstellungen erscheinen in Elternsprache (mit Standardwerte-Knopf), die
+    Firmware-Verwaltung ist jetzt auch in der UI.
+- **Begründung:** Die Box wird fertig installiert übergeben; ein zweiter Tracker
+  und Störungen im Alltag müssen ohne Terminal und ohne `.env`-Wissen
+  beherrschbar sein. Zuvor war der Assistent fest auf das erste Gerät verdrahtet,
+  SMS ging bei mehreren Kindern an das falsche, und Fehler erschienen als
+  „HTTP 401".
+- **Folgen:** `main.py` (setup/ devices/ settings/ firmware), `index.html`,
+  zwei neue Smoke-Gruppen (25: Mehrkind-Setup/Aktivität, 26: Firmware) → 26
+  Gruppen. Offen bleiben Web-Push-Alternativen, Provider-Zugangsdaten in der UI
+  und Offline-Kartenkacheln (`docs/parent-usability.md` 5).
+
 ## D-016 – 2026-10-12 – Lizenz: MIT
 
 - **Entscheidung:** Das Projekt steht unter **MIT** (`LICENSE`).

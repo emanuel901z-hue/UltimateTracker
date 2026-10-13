@@ -365,5 +365,37 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK"   
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK"   -H 'Content-Type: application/json' -d '{"appleid":"test@example.com","password":""}'   "$BASE/api/v1/parent/apple")
 [ "$CODE" = "400" ] && pass "Fehlendes Passwort abgelehnt (HTTP 400)" || fail "Validierung: $CODE"
 
+echo "25) Mehrkind: Setup-Status pro Gerät + Geräte-Aktivität"
+SECOND=860000000000009
+curl -s -X PUT -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Zweittest\",\"imei\":\"$SECOND\",\"iccid\":\"89880000000000000009\"}" \
+  "$BASE/api/v1/parent/devices/$SECOND" >/dev/null
+PER=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/setup?device_id=$SECOND")
+echo "$PER" | grep -q '"sim":true' && pass "Setup je Gerät: SIM-Schritt erkannt" || fail "SIM-Schritt nicht erkannt"
+echo "$PER" | grep -q '"funktionstest":false' && pass "Funktionstest je Gerät (noch keine Daten)" || fail "Funktionstest nicht je Gerät"
+echo "$PER" | grep -q "\"id\":\"$SECOND\"" && pass "Geräteauswahl im Setup enthalten" || fail "Geräteauswahl fehlt"
+curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/devices" | grep -q '"seen":false' \
+  && pass "Nie gesehene Geräte markiert (seen=false)" || fail "seen-Flag fehlt"
+curl -s -X DELETE -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/devices/$SECOND" | grep -q '"deleted"' \
+  && pass "Gerät inkl. Kaskade gelöscht" || fail "Löschen fehlgeschlagen"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "X-Auth-Token: $PTOK" \
+  "$BASE/api/v1/parent/devices/gibtsnicht")
+[ "$CODE" = "404" ] && pass "Unbekanntes Gerät -> 404" || fail "404 erwartet, kam $CODE"
+
+echo "26) Firmware-Bereitstellung (OTA)"
+head -c 2048 /dev/urandom > "$TMP/fw.bin"
+FW=$(curl -s -H "X-Auth-Token: $PTOK" -F "version=9.9.9" -F "notes=Smoke" -F "firmware=@$TMP/fw.bin" \
+  "$BASE/api/v1/parent/firmware")
+echo "$FW" | grep -q '"version":"9.9.9"' && pass "Firmware hochgeladen (SHA256 berechnet)" || fail "Upload fehlgeschlagen: $FW"
+curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/firmware" | grep -q '"9.9.9"' \
+  && pass "Firmware in Liste" || fail "Firmware fehlt in Liste"
+curl -s -H "X-Auth-Token: $DTOK" "$BASE/api/v1/device/firmware/latest?fw=1.0.0" | grep -q '"update":true' \
+  && pass "Tracker bekommt OTA-Angebot" || fail "OTA-Angebot fehlt"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Auth-Token: $PTOK" -F "version=abc" \
+  -F "firmware=@$TMP/fw.bin" "$BASE/api/v1/parent/firmware")
+[ "$CODE" = "400" ] && pass "Ungültige Version abgelehnt (HTTP 400)" || fail "Validierung: $CODE"
+curl -s -X DELETE -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/firmware/9.9.9" | grep -q '"deleted"' \
+  && pass "Firmware entfernt" || fail "Entfernen fehlgeschlagen"
+
 echo
 echo "Alle Smoke-Tests bestanden."

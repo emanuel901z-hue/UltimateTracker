@@ -4,12 +4,16 @@ Konsolidierte Liste aller offenen Punkte (Stand **2026-10-13**), in empfohlener
 Reihenfolge. Details jeweils in den verlinkten Dokumenten.
 
 > **Seit dem letzten Stand erledigt:** Repo ist **öffentlich** und die CI ist grün
-> (24 Smoke-Gruppen, 59 Bridge-Tests, UI-Screenshots); Setup-Assistent mit 9
+> (26 Smoke-Gruppen, 59 Bridge-Tests, UI-Screenshots); Setup-Assistent mit 9
 > Schritten; **ein Login für alle Dienste** (SSO + Traccar-Auto-Login per Ticket);
 > eigene Karte ohne zweite Anmeldung; **Sensor-Fusion** (Beacon-Zuordnung,
 > Sprungfilter, Zustand); Zertifikat-Download über die UI; **Apple-Einrichtung im
 > Assistenten**; Nachrichten-Chat mit „gehört"-Status; SMS-Verlauf; Traccar zeigt
-> ein Gerät je Kind.
+> ein Gerät je Kind; **Eltern-Tauglichkeit** (`docs/parent-usability.md`):
+> Assistent **pro Kind** + „Weiteres Kind hinzufügen", Geräte **bearbeiten/
+> löschen** (Kaskade, Phantom-Erkennung, IMEI-Prüfziffer), Klartextfehler mit
+> **Auto-Login bei abgelaufener Sitzung**, **Gesundheitsampel** je Kind,
+> Einstellungen in Elternsprache, **Firmware-UI**.
 
 Legende: `[ ]` offen · `[x]` erledigt · `(i)` interaktiv – braucht dein Konto/Passwort
 
@@ -105,6 +109,10 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 - [ ] macless-haystack absichern (`endpoint_user`/`endpoint_pass`), falls exponiert
 - [ ] Umzug auf den Thin Client (`docs/deployment.md`, Abschnitt 7)
 - [ ] Optional: Rate-Limits (Caddy-Plugin/fail2ban), Traccar hinter den Bridge-Login
+- [ ] Benachrichtigungen jenseits von Web-Push **in der UI** einrichtbar machen
+      (Apprise-Feld statt nur `APPRISE_URLS`; `docs/parent-usability.md` F2)
+- [ ] Karte: Offline-/Kachel-Hinweis, wenn kein Internet erreichbar ist (H2)
+- [ ] Backup für Eltern rahmen (Wiederherstellen/„wohin damit"); Anleitung statt tar.gz (H3)
 
 ## E. Optional / experimentell
 
