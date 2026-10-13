@@ -194,6 +194,21 @@ klicken. Der Status steht als Diagnose auf derselben Seite (`username`,
 - Logs + Apprise-Benachrichtigungen (ntfy, Telegram, E-Mail …), Rate-Limiting,
   `/metrics` (Prometheus)
 
+**Wenn das eingebettete noVNC-Fenster „keine Verbindung" meldet** – zwei Ursachen
+sind bekannt und behoben bzw. umschiffbar:
+
+1. **Caddy/`forward_auth` schickt den WebSocket-Upgrade an die Prüf-URL.** Die
+   Bridge kennt dort keinen WebSocket und antwortet 403, Caddy gibt das weiter
+   (Log: `"WebSocket /api/v1/auth/verify" 403`, caddy#5430). Gelöst über
+   `header_up -Connection` in den `forward_auth`-Blöcken (Caddyfile) – das
+   betrifft nur die Kopie für die Prüfung.
+2. **Chrome bricht mit „Permission denied" ab** (`chrome_crashpad_handler` ohne
+   Ausführungsrecht; das Image entpackt „Chrome for Testing" ohne +x). Im Log:
+   `FATAL: posix_spawn .../chrome_crashpad_handler: Permission denied (13)` →
+   „Browser provisioning failed". Workaround:
+   `bash scripts/fix-findmy-browser.sh`, danach erneut „Sign in with Google"
+   klicken. (Nach einem Container-Neustart ggf. erneut nötig; Upstream-Fehler.)
+
 Sicherheit: In unserem Stack ist die WebUI **nicht** direkt veröffentlicht
 (kein Port) und läuft hinter dem SSO der Eltern-UI – `WEBUI_USER`/`WEBUI_PASSWORD`
 bleiben leer. `SECRETS_ENCRYPTION_KEY` verschlüsselt die Google-Tokens at rest.
