@@ -364,6 +364,24 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK"   
 [ "$CODE" = "400" ] && pass "Ungültige Apple-ID abgelehnt (HTTP 400)" || fail "Validierung: $CODE"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK"   -H 'Content-Type: application/json' -d '{"appleid":"test@example.com","password":""}'   "$BASE/api/v1/parent/apple")
 [ "$CODE" = "400" ] && pass "Fehlendes Passwort abgelehnt (HTTP 400)" || fail "Validierung: $CODE"
+# Regression: '%' im Passwort darf nicht als configparser-Interpolation scheitern.
+# Nur testen, wenn noch keine Apple-ID hinterlegt ist (nichts überschreiben) und
+# danach den Ausgangszustand wiederherstellen.
+CONFIGURED=$(printf '%s' "$APPLE" | python3 -c "import json,sys; print(json.load(sys.stdin)['configured'])")
+if [ "$CONFIGURED" != "False" ]; then
+  info "Apple ist konfiguriert – Prozent-Passwort-Test übersprungen"
+elif ! command -v docker >/dev/null 2>&1; then
+  info "docker fehlt – Prozent-Passwort-Test übersprungen"
+else
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK" \
+    -H 'Content-Type: application/json' \
+    -d '{"appleid":"smoke@example.com","password":"Test%Passwort"}' "$BASE/api/v1/parent/apple")
+  [ "$CODE" = "200" ] && pass "Passwort mit '%' akzeptiert (HTTP 200)" || fail "Prozent-Passwort: HTTP $CODE"
+  curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/apple" | grep -q '"smoke@example.com"' \
+    && pass "Apple-ID gespeichert" || fail "Apple-ID nicht gespeichert"
+  docker compose exec -T audio-bridge rm -f /macless-data/config.ini >/dev/null 2>&1 || true
+  info "Test-Apple-ID wieder entfernt (Ausgangszustand)"
+fi
 
 echo "25) Mehrkind: Setup-Status pro Gerät + Geräte-Aktivität"
 SECOND=860000000000009

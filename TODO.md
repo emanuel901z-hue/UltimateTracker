@@ -4,7 +4,7 @@ Konsolidierte Liste aller offenen Punkte (Stand **2026-10-13**), in empfohlener
 Reihenfolge. Details jeweils in den verlinkten Dokumenten.
 
 > **Seit dem letzten Stand erledigt:** Repo ist **öffentlich** und die CI ist grün
-> (29 Smoke-Gruppen, 59 Bridge-Tests, UI-Screenshots); Setup-Assistent mit 9
+> (29 Smoke-Gruppen, 66 Bridge-Tests, UI-Screenshots); Setup-Assistent mit 9
 > Schritten; **ein Login für alle Dienste** (SSO + Traccar-Auto-Login per Ticket);
 > eigene Karte ohne zweite Anmeldung; **Sensor-Fusion** (Beacon-Zuordnung,
 > Sprungfilter, Zustand); Zertifikat-Download über die UI; **Apple-Einrichtung im

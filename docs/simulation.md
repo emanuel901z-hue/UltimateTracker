@@ -46,7 +46,7 @@ sondern aus drei pragmatischen Bausteinen, die sofort funktionieren.
 | Tracker-Simulator | `scripts/simulate-tracker.py` | Server-Stack ohne Hardware testen |
 | Smoke-Test | `scripts/smoke-test.sh` | API-/Stack-Regression (**29 Gruppen**, inkl. OTA, Karte, Fusion, Apple) |
 | Echo-Server | `scripts/dev-echo-server.py` | Benachrichtigungen/Webhooks lokal prüfen |
-| **Bridge-Unit-Tests** | `server/audio-bridge/tests/` | **59 Tests**: Auth, Passwortregeln, Provider (1NCE/generisch), **Sensor-Fusion** |
+| **Bridge-Unit-Tests** | `server/audio-bridge/tests/` | **66 Tests**: Auth, Passwortregeln, Provider (1NCE/generisch), **Sensor-Fusion**, **Apple-Config** |
 | **Host-Tests der Firmware-Logik** | `firmware/lib/tracker_core` + `firmware/test/` | **53 Tests**: ADPCM, Protokoll, Wake-Policy, AGC, Ring-Log, GNSS, Provisioning, OTA, **Wake-Zyklus mit Modem-Mock** |
 | CI | `.github/workflows/ci.yml` | Compose-Config, Bridge-Compile, Smoke-Test, Firmware-Build (beide Envs) **und** native Tests |
 

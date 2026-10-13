@@ -7,7 +7,6 @@ Konfiguration über Umgebungsvariablen (siehe server/.env.example).
 from __future__ import annotations
 
 import asyncio
-import configparser
 import hashlib
 import json
 import os
@@ -31,6 +30,10 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from app.apple_config import (  # noqa: E402
+    read_apple_id,
+    write_apple_credentials,
+)
 from app.auth import (  # noqa: E402
     hash_password,
     new_session_token,
@@ -1887,14 +1890,7 @@ APPLE_CONFIG_DIR = Path(os.environ.get("APPLE_CONFIG_DIR", "/macless-data"))
 def apple_config_status() -> dict:
     """Ist für macless-haystack eine Apple-ID hinterlegt?"""
     path = APPLE_CONFIG_DIR / "config.ini"
-    if not path.exists():
-        return {"configured": False, "path": str(path), "appleid": ""}
-    parser = configparser.ConfigParser()
-    try:
-        parser.read(path)
-        appleid = parser.get("Settings", "appleid", fallback="") if parser.has_section("Settings") else ""
-    except Exception:
-        appleid = ""
+    appleid = read_apple_id(path)
     return {"configured": bool(appleid), "path": str(path), "appleid": appleid}
 
 
@@ -1928,24 +1924,11 @@ async def apple_configure(request: Request) -> dict:
 
     APPLE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     path = APPLE_CONFIG_DIR / "config.ini"
-    parser = configparser.ConfigParser()
-    if path.exists():
-        try:
-            parser.read(path)
-        except Exception:
-            parser = configparser.ConfigParser()
-    if not parser.has_section("Settings"):
-        parser.add_section("Settings")
-    parser.set("Settings", "appleid", appleid)
-    parser.set("Settings", "appleid_pass", password)
-    parser.set("Settings", "anisette_url", os.environ.get("ANISETTE_URL", "http://anisette:6969"))
-    parser.set("Settings", "port", "6176")
-    with path.open("w", encoding="utf-8") as handle:
-        parser.write(handle)
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    # Wörtlich schreiben (kein `%`-Interpolieren) – siehe app/apple_config.py.
+    write_apple_credentials(
+        path, appleid, password,
+        os.environ.get("ANISETTE_URL", "http://anisette:6969"),
+    )
     print(f"[apple] Zugangsdaten hinterlegt für {appleid}", flush=True)
     return {
         "configured": True,
