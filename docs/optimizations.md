@@ -1,10 +1,10 @@
 # Optimierungen – Backlog (Server & Firmware)
 
-Stand 2026-10-11. Priorisiert nach Nutzen/Aufwand. „Nutzen“ = Betriebssicherheit,
+Stand 2026-10-13. Priorisiert nach Nutzen/Aufwand. „Nutzen“ = Betriebssicherheit,
 Batterielaufzeit, Wartbarkeit oder Eltern-UX. Nichts hiervon ist ein Blocker –
 die aktuelle Basis läuft.
 
-## Umsetzungsstand (2026-10-11)
+## Umsetzungsstand (2026-10-13)
 
 | Punkt | Status |
 |---|---|
@@ -20,6 +20,12 @@ die aktuelle Basis läuft.
 | A7 Log-Rotation + Backup-Skript | ✅ umgesetzt (`scripts/backup-volumes.sh`) |
 | A8 CI (GitHub Actions) | ✅ angelegt (Compose, Bridge, Smoke, Firmware) |
 | A9 Status-Dashboard (API + UI-Karte) | ✅ umgesetzt |
+| **Setup-Assistent** (9 Schritte, serverseitig geprüft) | ✅ umgesetzt + im Browser getestet |
+| **Single Sign-on** (Caddy `forward_auth` + Einmal-Ticket für Traccar) | ✅ umgesetzt + im Browser verifiziert |
+| **Sensor-Fusion** (`app/fusion.py`, 16 Unit-Tests) | ✅ umgesetzt |
+| **Zertifikat über die UI** (`/ca.crt`, Anleitung je Gerät) | ✅ umgesetzt |
+| **Apple-Einrichtung im Assistenten** (statt interaktiver Abfrage) | ✅ umgesetzt |
+| **Nachrichten-Chat** (gehört-Status, Zeitstempel) + **SMS-Verlauf** | ✅ umgesetzt |
 | A3 TLS-Reverse-Proxy (Caddy, Profil `tls`) | ✅ umgesetzt + getestet (HTTPS, Redirect, CA-Export) |
 | A10 PostgreSQL statt H2 | ✅ umgesetzt + getestet (Tabellen verifiziert, Admin neu angelegt) |
 | Firmware-Logik: ADPCM, Protokoll, Wake-Policy, AGC, Ring-Log | ✅ umgesetzt, **53 Host-Tests grün** (`pio test -e native`) |

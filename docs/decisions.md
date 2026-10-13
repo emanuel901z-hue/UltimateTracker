@@ -91,6 +91,46 @@ Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung �
 - **Folgen:** Eltern-UI mit Geräteverwaltung; ein späteres SMS-Gateway kann an die
   Registry andocken. Details: `docs/sms.md`.
 
+## D-013 – 2026-10-13 – Dienst-Anmeldung per Einmal-Ticket statt Cookie
+
+- **Entscheidung:** Dienste werden über `https://<dienst>/?sso=<ticket>` geöffnet;
+  das Ticket erzeugt die Bridge (120 s, einmalig) und löst es serverseitig ein.
+- **Begründung:** Browser verwerfen Cookies mit `Domain=localhost` (RFC 6265
+  verlangt einen Punkt), deshalb kann das Sitzungscookie fremde Hosts nicht
+  erreichen. Zusätzlich lieferte Traccar seine SPA mit `max-age=3600` aus, was
+  für unbekannte Pfade zu schwarzen Seiten führte.
+- **Folgen:** Traccar bekommt kein `forward_auth` (eigenes Konto bleibt),
+  die Wurzel-URL ist der Einstieg; Find-My-Oberflächen bleiben hinter dem Gate.
+
+## D-012 – 2026-10-13 – Sensor-Fusion: auswählen statt mitteln
+
+- **Entscheidung:** Mehrere Quellen (GNSS, Apple/Google Find My, Funkzelle)
+  werden nach Vertrauensstufe → Frische → Genauigkeit **ausgewählt**, nie
+  gemittelt; Traccar erhält genau eine Position je Kind.
+- **Begründung:** Mitteln von GNSS (3–10 m) mit Crowd-Netz-Positionen
+  (50–100 m) würde die gute Quelle verschlechtern.
+- **Folgen:** `app/fusion.py` (host-getestet), Beacon-Zuordnung in der UI,
+  Sprungfilter und Zustandserkennung; Kalman-Filter bleibt offen (docs/fusion.md).
+
+## D-011 – 2026-10-13 – Erststart ohne Terminal
+
+- **Entscheidung:** `docker compose up -d` + Browser genügt: Tokens erzeugt die
+  Bridge selbst (in der Datenbank), den Traccar-Administrator legt sie an,
+  das Eltern-Konto entsteht über „Konto anlegen" beim ersten Aufruf.
+- **Begründung:** Der Einstieg muss ohne Konsole funktionieren (Rückmeldung:
+  „ein DAU hat nie eine Konsole geöffnet").
+- **Folgen:** `server/.env` ist optional; Apple-Zugangsdaten schreibt der
+  Assistent (D-010).
+
+## D-010 – 2026-10-13 – Apple-Einrichtung über den Setup-Assistenten
+
+- **Entscheidung:** Apple-ID und Passwort werden in der UI erfasst; die Bridge
+  schreibt sie nach `macless-data/config.ini` und der Dienst startet selbst neu.
+- **Begründung:** Das Image fragt beim ersten Start interaktiv ab (`input()`) –
+  im Container ohne Terminal endet das im `EOFError` (Neustart-Schleife).
+- **Folgen:** `PUT /api/v1/parent/apple`; vorhandene Werte bleiben erhalten,
+  Rechte 0600; `restart: on-failure` statt Limit 3.
+
 ## D-009 – 2026-10-11 – Find My optional im Stack (Apple + Google), experimentell
 
 - **Entscheidung:** Compose-Profil `findmy` mit `anisette` + `macless-haystack` (Apple)

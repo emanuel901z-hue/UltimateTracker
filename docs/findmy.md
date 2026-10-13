@@ -17,7 +17,7 @@ Initialisierung (Keys/Geräteregistrierung) und die Auswertung – plus die Gren
 | Offiziell für DIY? | nein (OpenHaystack) | nein (Community-Tools) |
 | Konto nötig | Apple-ID mit 2FA (**nur SMS-2FA**) | Google-Konto + Chrome (Desktop) |
 | Docker-Gegenstück | `findmy-bridge` (automatisch) + `anisette` + `macless-haystack` (Keys/UI) | `google-findmy-webui` (empfohlen) bzw. `google-findmy` (minimal) |
-| Erst-Setup | interaktiv (Apple-ID-Login im Container) | interaktiv (Chrome-Login auf Desktop) |
+| Erst-Setup | **Setup-Assistent** in der Eltern-UI (Apple-ID + Passwort) | interaktiv (Chrome-Login in der WebUI) |
 | Zuverlässigkeit | wackelig (Apple-Filter) | experimentell |
 | Abdeckung | sehr hoch (iPhone-Dichte) | hoch (Android-Dichte) |
 
@@ -122,9 +122,11 @@ Browser). Kernfunktionen:
 - Logs + Apprise-Benachrichtigungen (ntfy, Telegram, E-Mail …), Rate-Limiting,
   `/metrics` (Prometheus)
 
-Sicherheit (Empfehlungen des Projekts): Default ist HTTP ohne Auth → unbedingt
-`WEBUI_USER`/`WEBUI_PASSWORD` setzen; optional `HTTPS_ENABLED=1` bzw. eigenes
-Zertifikat; `SECRETS_ENCRYPTION_KEY` für Verschlüsselung der Tokens at rest.
+Sicherheit: In unserem Stack ist die WebUI **nicht** direkt veröffentlicht
+(kein Port) und läuft hinter dem SSO der Eltern-UI – `WEBUI_USER`/`WEBUI_PASSWORD`
+bleiben leer. `SECRETS_ENCRYPTION_KEY` verschlüsselt die Google-Tokens at rest.
+Nur wer die WebUI bewusst direkt exponiert, setzt dort wieder Zugangsdaten
+(optional `HTTPS_ENABLED=1`).
 Alle Daten liegen im Volume `google-findmy-data`.
 
 ### 3b. Minimal-Microservice (Profil `google-minimal`, Port 5500)

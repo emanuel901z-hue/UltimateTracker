@@ -70,7 +70,7 @@ Zusätzlich zu Push können Apprise-Ziele (`APPRISE_URLS`) benachrichtigt werden
 | Profil | Dienste | Zweck |
 |---|---|---|
 | (Standard) | `traccar`, `audio-bridge` | Ortung, Geofence, Sprachnachrichten, Eltern-UI |
-| `findmy` | `anisette`, `findmy-bridge`, `macless-haystack`, `google-findmy-webui` | Find My: Apple (automatisch → Traccar) + Google-WebUI (Port **4321**) – **experimentell**, siehe `../docs/findmy.md` |
+| `findmy` | `anisette`, `findmy-bridge`, `macless-haystack`, `google-findmy-webui` | Find My: Apple (automatisch → Traccar) + Google-WebUI – **keine Ports**, Zugriff nur über Caddy (`https://findmy.localhost`, `https://apple.localhost`) hinter dem Eltern-Login; Apple-ID über den Setup-Assistenten – **experimentell**, siehe `../docs/findmy.md` |
 | `google-minimal` | `google-findmy` | Nur Google-Microservice (Port **5500**), ohne WebUI – Minimal-Alternative |
 
 ```bash

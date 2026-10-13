@@ -1,7 +1,15 @@
 # TODO – offene Aufgaben
 
-Konsolidierte Liste aller offenen Punkte (Stand 2026-10-12), in empfohlener
+Konsolidierte Liste aller offenen Punkte (Stand **2026-10-13**), in empfohlener
 Reihenfolge. Details jeweils in den verlinkten Dokumenten.
+
+> **Seit dem letzten Stand erledigt:** Repo ist **öffentlich** und die CI ist grün
+> (24 Smoke-Gruppen, 59 Bridge-Tests, UI-Screenshots); Setup-Assistent mit 9
+> Schritten; **ein Login für alle Dienste** (SSO + Traccar-Auto-Login per Ticket);
+> eigene Karte ohne zweite Anmeldung; **Sensor-Fusion** (Beacon-Zuordnung,
+> Sprungfilter, Zustand); Zertifikat-Download über die UI; **Apple-Einrichtung im
+> Assistenten**; Nachrichten-Chat mit „gehört"-Status; SMS-Verlauf; Traccar zeigt
+> ein Gerät je Kind.
 
 Legende: `[ ]` offen · `[x]` erledigt · `(i)` interaktiv – braucht dein Konto/Passwort
 
@@ -14,24 +22,24 @@ Legende: `[ ]` offen · `[x]` erledigt · `(i)` interaktiv – braucht dein Kont
 - [ ] **(i) Eltern-UI-Passwort ändern** (UI → „Passwort ändern"); Startwert aus `PARENT_PASSWORD`.
 - [ ] **(i) LAN-Zugriff einrichten** (Handy → Host): `scripts\windows-lan-forward.ps1`
       als Administrator, danach `http://<host-ip>:8085` testen (`docs/deployment.md`, 8.3).
-- [ ] **(i) Repo veröffentlichen:** Remote `origin` ist gesetzt, Zugangsdaten liegen in
-      `.git/credentials` – `git push -u origin main` (vorher: Secret-Audit in
-      `docs/deployment.md`, Abschnitt 10).
-- [ ] Testdaten in Traccar löschen: Geräte `TEST123`/`TEST456`, Geofence „Testzone“
-      (Web-UI <http://localhost:8082>).
-- [ ] **(i) Google-Find-Hub-WebUI einrichten:** <http://localhost:4321> → Config →
-      „Sign in with Google“. Zugangsdaten: `WEBUI_USER`/`WEBUI_PASSWORD` in `server/.env`.
-      Danach ein Ziel anlegen (Traccar-OsmAnd-Preset **oder** Bridge-Ingest).
+- [x] **Repo veröffentlicht** (öffentlich, MIT, Beschreibung + Topics gesetzt, CI grün) *(2026-10-13)*
+- [x] Testdaten in Traccar aufgeräumt: Beacon-Relikte gelöscht, es bleibt **ein**
+      Gerät je Kind (`TEST123`) *(2026-10-13)*
+- [x] Google-Find-Hub-WebUI erreichbar (**ohne** zweite Anmeldung: `https://findmy.localhost`,
+      hinter dem SSO) *(2026-10-13)*; offen bleibt **(i) „Sign in with Google“** und ein Ziel
+      (Traccar-Preset **oder** Bridge-Ingest)
 - [ ] **(i) Apple-Account bereitlegen** (2FA **per SMS** nötig). Empfehlung:
-      Zweit-Account verwenden; Ban-Risiko beachten (1 Abfrage/30 min gilt als sicher).
-- [ ] **(i) Apple-Bridge initialisieren** (Befehl in der Kurzreferenz unten).
+      Zweit-Account verwenden (keine Testkonten verfügbar, siehe `docs/findmy.md` 4b);
+      Ban-Risiko beachten (1 Abfrage/30 min gilt als sicher).
+- [x] Apple-Einrichtung läuft über den **Setup-Assistenten** (Schritt „Apple Find My“)
+      statt interaktiv im Container *(2026-10-13)* – offen: echte Apple-ID eintragen
 - [ ] **(i) Beacon-Keypair erzeugen** (macless-haystack `generate_keys.py`), privaten
       Key in `server/.env` als `APPLE_BEACON_KEYS=…` eintragen.
 - [ ] **(i) 1NCE-SIM aktivieren**, ICCID + MSISDN aus dem Portal in der Geräte-Registry
       (Eltern-UI → Geräte) eintragen – danach `sms/status` und MT-Versand testen.
 - [ ] Optional: `FINDMY_TOKEN` setzen und beim Google-Ziel als Header hinterlegen.
-- [ ] Optional: Traccar hinter den Bridge-Login legen (Caddy `forward_auth`) und die
-      Find-My-WebUIs einbetten.
+- [x] Traccar per Einmal-Ticket automatisch angemeldet; Find-My-WebUIs hinter dem SSO
+      (Traccar bewusst **nicht** hinter `forward_auth`, siehe `docs/decisions.md` D-013) *(2026-10-13)*
 
 ## B. Bei Hardwareankunft – zuerst messen
 
@@ -170,6 +178,6 @@ wsl -d UltimateTracker -- bash -lc 'grep -E "^(DEVICE|PARENT|WEBUI|GOOGLE|FINDMY
 |---|---|---|
 | Eltern-UI (Audio) | <http://localhost:8085> | Login (`PARENT_USER`/`PARENT_PASSWORD`) |
 | Traccar | <http://localhost:8082> | `~/UltimateTracker/server/ADMIN-ZUGANG.txt` |
-| Google-Find-Hub-WebUI | <http://localhost:4321> | `WEBUI_USER`/`WEBUI_PASSWORD` |
+| Google-Find-Hub-WebUI | <https://findmy.localhost> | hinter dem SSO, keine eigene Anmeldung |
 | Apple-Endpunkt (macless-haystack) | <http://localhost:6176> | optional `endpoint_user`/`endpoint_pass` |
 | Google-Microservice (minimal) | <http://localhost:5500> | `GOOGLE_FINDMY_TOKEN` |

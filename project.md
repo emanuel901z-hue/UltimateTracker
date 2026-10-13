@@ -210,7 +210,8 @@ Herstellerdokumentation geprüft (siehe `docs/hardware-review.md`).
   HTML5-Oberfläche bereit, hält die Nachrichten-Queue für den Poll des Trackers und
   führt die **Geräte-Registry** (IMEI ↔ MSISDN ↔ Name, Auto-Registrierung).
 - **Optional (Profil `findmy`, experimentell):** `anisette` + `macless-haystack`
-  (Apple Find My) und die **Google-Find-Hub-WebUI** (Port 4321: Geräteverwaltung,
+  (Apple Find My) und die **Google-Find-Hub-WebUI** (nur über Caddy,
+  `https://findmy.localhost` – hinter dem Eltern-Login: Geräteverwaltung,
   Scheduling, Firmware-Build im Browser, Traccar-OsmAnd-Preset). Positionen können
   direkt an Traccar oder über `/api/v1/findmy/locations` in die Bridge laufen.
   Minimal-Alternative ohne WebUI: Profil `google-minimal` (Traccar-Fork).

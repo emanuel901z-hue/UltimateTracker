@@ -114,6 +114,11 @@ Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes),
 | GET | `/api/v1/parent/map` | Parent | Kartendaten (letzte Position je Tracker/Beacon + Kacheln) |
 | GET | `/api/v1/parent/fused` | Parent | fusionierte Position eines Kindes (Quelle, Vertrauen, Quellenliste) |
 | GET/PUT | `/api/v1/parent/beacons[/{id}]` | Parent | Find-My-Beacons einem Kind zuordnen |
+| GET | `/api/v1/parent/setup` | Parent | Setup-Assistent: Schritt-Status, Tokens, Traccar-Zugang |
+| POST | `/api/v1/parent/sso/ticket` | Parent | Einmal-Ticket für den Dienst-Auto-Login (120 s) |
+| GET | `/?sso=<ticket>` bzw. `/_sso/traccar` | Ticket/Sitzung | Auto-Login in Traccar (setzt `JSESSIONID`) |
+| GET/PUT | `/api/v1/parent/apple` | Parent | Apple-ID für macless-haystack hinterlegen |
+| GET | `/ca.crt` | – | Root-Zertifikat der Caddy-CA (bewusst ohne Anmeldung) |
 | GET | `/api/v1/parent/services` | Parent | Status aller Dienste (eine Oberfläche) |
 | POST | `/api/v1/parent/firmware` | Parent-Token | Firmware-Binary hochladen (Version, SHA256 serverseitig) |
 | GET | `/api/v1/parent/firmware` | Parent-Token | Firmware-Liste |

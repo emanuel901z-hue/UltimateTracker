@@ -422,7 +422,7 @@ auf die `SITE_*`-Hostnamen umstellt (HTTPS-Modus).
 | Punkt | Status/Umsetzung |
 |---|---|
 | TLS überall | Caddy-Profil `tls`, Let's Encrypt (`TLS_ARG=<E-Mail>`) |
-| Anmeldung | Bridge: Benutzerkonten (PBKDF2, Sitzungstoken); Traccar: eigenes Konto; Find-My-WebUIs: Basic-Auth |
+| Anmeldung | Bridge: Benutzerkonten (PBKDF2, Sitzungstoken); Traccar: eigenes Konto (Auto-Login per Einmal-Ticket); Find-My-WebUIs: hinter dem SSO, ohne eigene Anmeldung |
 | Passwörter | mindestens 10 Zeichen erzwungen; Admin-Reset dokumentiert (Abschnitt 10) |
 | Nur nötige Ports | 80/443 (+ ggf. 8443/8444/8445) – Datenbank, Postgres, Anisette bleiben intern |
 | Updates | Images sind gepinnt (Abschnitt 2/5) – bewusst aktualisieren, nicht automatisch |

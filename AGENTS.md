@@ -46,9 +46,24 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   und werden in der UI als `SETUP_STEPS`/`SETUP_OPTIONAL` gespiegelt. Ein neuer
   Schritt braucht: Eintrag im Endpunkt, Markup (`#setup-step-<key>`), Eintrag in
   `SETUP_STEPS`/`SETUP_TITLES` und – wenn optional – in `SETUP_OPTIONAL`.
-- **Verifikation:** `bash scripts/smoke-test.sh` (21 Gruppen) und
-  `cd server/audio-bridge && python -m unittest discover -s tests` (Provider/Auth)
-  müssen grün bleiben; Firmware zusätzlich `pio run` + `pio test -e native`.
+- **Verifikation:** `bash scripts/smoke-test.sh` (24 Gruppen) und
+  `cd server/audio-bridge && python -m unittest discover -s tests`
+  (Provider/Auth/**Fusion**, 59 Tests) müssen grün bleiben; Firmware zusätzlich
+  `pio run` + `pio test -e native`.
+- **Sensor-Fusion:** Auswahlregeln (Vertrauen → Frische → Genauigkeit,
+  Sprungfilter, Zustandserkennung) liegen in `app/fusion.py` – reine Funktionen,
+  host-getestet in `tests/test_fusion.py`. Neue Quellen dort eintragen
+  (`SOURCE_TRUST`/`SOURCE_VALID_S`), nicht in `main.py`.
+- **Single Sign-on:** Dienste werden über die **Wurzel-URL** geöffnet
+  (`https://<dienst>/?sso=<ticket>`); Tickets erzeugt
+  `POST /api/v1/parent/sso/ticket` (120 s, einmalig). Nie nackte `/_sso/…`-URLs
+  verlinken – Browser-Caches können dort alte Seiten zeigen.
+- **Apple-Zugangsdaten** schreibt der Setup-Assistent nach
+  `macless-data/config.ini` (`[Settings] appleid`, `appleid_pass`); vorhandene
+  Werte bleiben erhalten, Rechte 0600. Der Dienst startet danach selbst
+  (`restart: on-failure`).
+- **Shell-Skripte immer mit LF schreiben** (z. B. `Path.write_bytes` bzw.
+  `newline="\n"`); CRLF bricht bash in der WSL mit `$'\r': command not found`.
 - Container-Namen nicht fest verdrahten (parallele Compose-Projekte, Testinstanz);
   in Skripten den Container dynamisch suchen (`docker ps --filter name=…`).
 - **Eltern-UI** (`server/audio-bridge/app/static/index.html`): mobile-first,
