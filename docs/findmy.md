@@ -93,7 +93,11 @@ automatisch, dazu „Status jetzt prüfen") und der Punkt in der Dienste-Liste.
 > SMS-Code) – oder eine fertige `auth.json` übernehmen. Blockt Apple mit
 > **HTTP 503** (`gsa.apple.com`) bzw. `ec -80045` („This action cannot be
 > completed at this time"), hilft nur **Warten**: das ist eine Konto-/IP-Drosselung,
-> kein Fehler in der Einrichtung. Der Endpunkt startet deshalb **nicht** in einer
+> kein Fehler in der Einrichtung. Konto prüfen/bestätigen (und ggf. Zahlungs-/
+> Kontodaten ergänzen, Stichwort „account score"): <https://account.apple.com> –
+> die frühere Adresse `appleid.apple.com` leitet dorthin um (Apple ID heißt seit
+> iOS 18 „Apple Account"; `appleid.apple.com` bleibt nur die OIDC-Domain).
+> Der Endpunkt startet deshalb **nicht** in einer
 > Neustart-Schleife, sondern wartet ohne Apple-Zugriffe auf `auth.json`
 > (`server/apple-login/endpoint-start.sh`) – so kann sich die Sperre wieder lösen.
 > (Der Anisette-Dienst liefert gültige Daten; eine nachgestellte GSA-Anfrage
