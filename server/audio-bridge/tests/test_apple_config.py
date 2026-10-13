@@ -1,11 +1,13 @@
 """Unit-Tests der `config.ini`-Logik für macless-haystack (Apple-ID).
 
-Regression: Ein Passwort mit `%` ließ das Speichern mit
-„invalid interpolation syntax" als HTTP 500 abstürzen.
+Regression: Ein Passwort mit `%` ließ das Speichern in der Bridge als HTTP 500
+abstürzen – und danach auch das Lesen im Dienst (`configparser`-Interpolation).
+Die Datei maskiert `%` deshalb als `%%`; der Verbraucher liest den Wert wörtlich.
 
 Aufruf:  cd server/audio-bridge && python -m unittest discover -s tests -v
 """
 
+import configparser
 import os
 import sys
 import tempfile
@@ -25,29 +27,42 @@ class AppleConfigTest(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
+    def _as_consumer(self) -> configparser.ConfigParser:
+        """So liest macless-haystack die Datei (Standard-Interpolation)."""
+        parser = configparser.ConfigParser()
+        parser.read(self.path, encoding="utf-8")
+        return parser
+
     def test_read_missing_file(self) -> None:
         self.assertEqual(read_apple_id(self.path), "")
 
     def test_write_and_read_roundtrip(self) -> None:
         write_apple_credentials(self.path, "kind@example.com", "geheim-123", "http://anisette:6969")
         self.assertEqual(read_apple_id(self.path), "kind@example.com")
-        text = self.path.read_text(encoding="utf-8")
-        self.assertIn("[Settings]", text)
-        self.assertIn("geheim-123", text)
+        self.assertEqual(self._as_consumer().get("Settings", "appleid"), "kind@example.com")
+        self.assertEqual(self._as_consumer().get("Settings", "appleid_pass"), "geheim-123")
 
-    def test_password_with_percent(self) -> None:
-        """'%' im Passwort darf nicht als Interpolation gedeutet werden."""
+    def test_password_with_percent_is_readable_by_consumer(self) -> None:
+        """'%' wird maskiert; der Verbraucher liest das Passwort wörtlich."""
         password = "KontrollSucht651%"
         write_apple_credentials(self.path, "kind@example.com", password, "http://anisette:6969")
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("KontrollSucht651%%", text)
+        self.assertEqual(self._as_consumer().get("Settings", "appleid_pass"), password)
         self.assertEqual(read_apple_id(self.path), "kind@example.com")
-        self.assertIn(password, self.path.read_text(encoding="utf-8"))
 
-    def test_read_handles_percent_password(self) -> None:
-        """Auch das Lesen darf an einem vorhandenen '%' nicht scheitern."""
+    def test_read_handles_legacy_raw_percent(self) -> None:
+        """Handgeschriebene Datei mit rohem '%' darf das Lesen nicht sprengen."""
         self.path.write_text(
             "[Settings]\nappleid = x@example.com\nappleid_pass = 50%Rabatt\n", encoding="utf-8"
         )
         self.assertEqual(read_apple_id(self.path), "x@example.com")
+
+    def test_read_handles_raw_percent_in_appleid(self) -> None:
+        self.path.write_text(
+            "[Settings]\nappleid = a%b@example.com\n", encoding="utf-8"
+        )
+        self.assertEqual(read_apple_id(self.path), "a%b@example.com")
 
     def test_keeps_existing_settings(self) -> None:
         self.path.write_text(

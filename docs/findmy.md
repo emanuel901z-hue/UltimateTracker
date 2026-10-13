@@ -70,6 +70,12 @@ schreibt damit `data/config.ini` im Volume `macless-data` (die interaktive
 Abfrage des Images entfällt) und der Dienst startet automatisch neu
 (`restart: on-failure`).
 
+Enthält das Passwort ein `%`, wird es in der Datei als `%%` **maskiert**: der
+Dienst liest die Datei mit `configparser`-Interpolation und bräche sonst mit
+„'%' must be followed by '%' or '('" ab. Ob der Dienst schon läuft, zeigen die
+Statuszeile in **Geräte → „Apple Find My einrichten"** (aktualisiert sich
+automatisch, dazu „Status jetzt prüfen") und der Punkt in der Dienste-Liste.
+
 ```bash
 # Alternativ klassisch auf der Kommandozeile:
 docker compose --profile findmy up -d macless-haystack

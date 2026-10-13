@@ -595,8 +595,12 @@
           verwendet. Bei Zwei-Faktor-Anmeldung kann der erste Start eine Weile dauern.</p>
         <div class="row-tight">
           <button id="s-apple-save" class="primary">Zugangsdaten speichern</button>
+          <button id="apple-check">Status jetzt prüfen</button>
           <span class="muted" id="s-apple-state" role="status" aria-live="polite"></span>
         </div>
+        <p class="hint">Nach dem Speichern startet der Dienst neu – der Status oben
+          aktualisiert sich automatisch. Ist er „läuft ✓", öffnet „Apple Find My" in der
+          Dienste-Liste die Oberfläche.</p>
       </div>
     </section>
 
@@ -1179,26 +1183,43 @@ async function loadFindMy() {
 
 // Apple-Find-My-Zugangsdaten: Status im Tab „Geräte" (jederzeit erreichbar,
 // nicht nur im Setup-Assistenten).
+// Solange der Dienst nach dem Speichern noch anläuft, wird der Status im
+// Hintergrund nachgefragt – „läuft ✓" erscheint so von selbst.
+let appleTimer = null;
+function stopApplePoll() {
+  if (appleTimer) { clearInterval(appleTimer); appleTimer = null; }
+}
+function startApplePoll() {
+  if (!appleTimer) appleTimer = setInterval(() => { if (!document.hidden) loadApple(); }, 10000);
+}
+
 async function loadApple() {
   const box = $('apple-status');
   if (!box || !state.token) return;
   try {
     const res = await fetch('/api/v1/parent/apple', { headers: headers() });
-    if (!res.ok) { box.textContent = 'Status: ' + errText(res); return; }
+    if (!res.ok) { box.textContent = 'Status: ' + errText(res); stopApplePoll(); return; }
     const data = await res.json();
     if (!data.configured) {
       box.textContent = 'Noch keine Apple-ID hinterlegt – ohne sie bleibt die ' +
         'Apple-Zusatzortung aus.';
+      stopApplePoll();
       return;
     }
-    box.textContent = 'Hinterlegt: ' + data.appleid +
-      (data.service === 'up'
-        ? ' · Dienst läuft ✓'
-        : ' · Dienst noch nicht erreichbar (er startet nach dem Speichern neu).');
+    if (data.service === 'up') {
+      box.textContent = 'Hinterlegt: ' + data.appleid + ' · Dienst läuft ✓';
+      stopApplePoll();
+      return;
+    }
+    box.textContent = 'Hinterlegt: ' + data.appleid + ' · Dienst startet noch – das ' +
+      'kann bis zu einer Minute dauern. Der Status wird automatisch aktualisiert.';
+    startApplePoll();
   } catch (err) {
     box.textContent = 'Status: ' + err.message;
   }
 }
+
+$('apple-check').addEventListener('click', loadApple);
 
 // --- Benachrichtigungen (PWA + Web-Push) ---
 function pushStatus(text) { $('push-state').textContent = 'Status: ' + text; }
@@ -2068,6 +2089,7 @@ function selectTab(tab, moveFocus = true) {
   if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); loadSetup(); }
   if (tab.id === 'tab-karte' && leafletMap) leafletMap.invalidateSize();
   if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); loadApple(); }
+  else stopApplePoll();
   if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); loadFirmware(); }
   if (tab.id === 'tab-konto') loadUsers();
 }

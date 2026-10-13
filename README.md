@@ -97,7 +97,7 @@ Die `server/.env` ist **optional**: Für einen eigenen Einstieg reicht
 UI. Details (WSL-Setup, TLS, LAN-/Internet-Betrieb, Betrieb & Wartung):
 [`docs/deployment.md`](docs/deployment.md). Tests: `bash scripts/smoke-test.sh`
 (29 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
-`python -m unittest discover -s tests` (66 Bridge-Tests: Auth, Provider, **Fusion**, Apple-Config),
+`python -m unittest discover -s tests` (67 Bridge-Tests: Auth, Provider, **Fusion**, Apple-Config),
 `python scripts/check-ui-a11y.py` (Quelltext: Labels, ARIA, Tab-Muster,
 Kontraste hell/dunkel, Bedienziele) und `python scripts/ui-check.py`
 (**headless Chrome**: rendert alle Tabs in Desktop- und Mobilansicht, legt

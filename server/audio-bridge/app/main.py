@@ -779,9 +779,22 @@ _services_cache = {"value": None, "expires_at": 0.0}
 INTERNAL_SERVICES = {"anisette", "findmy-bridge"}
 # Kurze Hinweise, was bei einem Dienst noch zu tun ist
 SERVICE_HINTS = {
-    "apple-findmy": "Apple-ID hinterlegen (docs/findmy.md)",
+    "apple-findmy": "Apple-ID hinterlegen (Tab Geräte)",
     "google-findmy": "Google-Anmeldung in der WebUI (einmalig)",
 }
+
+
+def service_hint(key: str, status: str) -> str:
+    """Hinweis zu einem Dienst – abhängig davon, ob schon etwas hinterlegt ist.
+
+    Bei Apple ist „Apple-ID hinterlegen" nach dem Speichern irreführend; dann
+    läuft der Dienst nur noch neu an (`docs/findmy.md`).
+    """
+    if key == "apple-findmy":
+        if apple_config_status()["configured"]:
+            return "" if status == "up" else "Dienst startet noch (Apple-Anmeldung)"
+        return SERVICE_HINTS["apple-findmy"]
+    return SERVICE_HINTS.get(key, "")
 
 
 def probe_http(host: str, port: int, path: str = "/", timeout: float = 2.0) -> str:
@@ -1325,7 +1338,7 @@ def services_overview() -> dict:
             # Hinter dem Eltern-Gate (Caddy forward_auth): Link braucht ein
             # Einmal-Ticket für /_sso/session, sonst HTTP 401 (D-018).
             "gate": key in ("google-findmy", "apple-findmy"),
-            "hint": SERVICE_HINTS.get(key, ""),
+            "hint": service_hint(key, status),
         })
 
     payload = {
