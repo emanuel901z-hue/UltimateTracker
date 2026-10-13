@@ -184,6 +184,35 @@ curl -s -X POST -H 'Content-Type: application/json' \
   http://localhost:8085/api/v1/findmy/locations
 ```
 
+## 4b. Testen ohne echtes Konto (Account-„Dummies")
+
+**Kurz: es gibt keine.** Für beide Wege existiert **kein Sandbox-/Testkonto** ✗:
+
+| Frage | Antwort |
+|---|---|
+| Apple-Testkonto? | **Nein.** Der Weg authentifiziert gegen `gsa.apple.com` – dieselbe Schnittstelle wie echte Geräte. Apples „Sandbox-Apple-IDs" gelten nur für In-App-Käufe, nicht für Find My. |
+| Google-Testkonto? | **Nein.** Die E2EE-Schlüssel kommen aus dem echten Konto; die Community-Reimplementierung hat keinen Testmodus. |
+| Was geht stattdessen? | **Zweitkonten** – genau dafür gedacht: frisches Apple-Konto (SMS-2FA) bzw. zweites Google-Konto. |
+
+**Praktische Erfahrungen aus der Community** (macless-haystack FAQ/Issues):
+
+- Ein **frisches, „leeres" Apple-Konto** genügt in vielen Fällen ✓ – es muss
+  nicht das Hauptkonto sein ✓ (empfohlen wird ausdrücklich ein Zweitkonto ✓).
+- Stolperstein: **„account score is not high enough"** ✗ – ganz neue Konten
+  brauchen manchmal eine Zahlungsmethode (es wird nichts abgebucht) oder ein
+  echtes Apple-Gerät ✓.
+- Bei **zu vielen Geräten** im Konto schlägt der Login fehl ✗ – alte
+  Login-Geräte im Apple-Konto entfernen ✓.
+- **Abkürzung:** Wer bereits ein `auth.json` hat (z. B. aus FindMy.py oder
+  Biemster), kann es **direkt ins Volume legen** ✓
+  (`macless-data:/app/endpoint/data/auth.json`) – dann entfällt die Anmeldung
+  komplett ✓ (das Image überspringt die Registrierung ✓).
+
+**Ohne jedes Konto testbar** (nutzen wir in der CI ✓): der Ingest-Pfad
+(`POST /api/v1/findmy/locations` mit synthetischen Beacons ✓), die komplette
+Sensor-Fusion (Unit-Tests ✓), die Beacon-Zuordnung und die Karte ✓ sowie der
+Tracker-Simulator (`scripts/simulate-tracker.py` ✓) für den Gerätepfad ✓.
+
 ## 5. Noch nicht implementiert
 
 - Automatischer Abruf der Apple-Berichte aus macless-haystack (API nicht
