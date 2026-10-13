@@ -148,9 +148,20 @@ durch.
 |---|---|---|
 | Eltern-UI/API | Benutzerkonto (PBKDF2 + Sitzungstoken) | – |
 | Karte in der UI | läuft über die Bridge (`/api/v1/parent/map`) | **keine** ✓ |
-| Traccar (Verlauf, Geofences, Berichte) | über die Bridge-Session (Caddy) | **automatisch** ✓ (siehe unten) |
-| Google-Find-Hub-WebUI | über die Bridge-Session (Caddy) | automatisch, wenn `WEBUI_BASIC_AUTH` gesetzt ist |
-| Apple (macless-haystack) | über die Bridge-Session (Caddy) | automatisch, wenn `APPLE_BASIC_AUTH` gesetzt ist |
+| Traccar (Verlauf, Geofences, Berichte) | **Traccars eigenes Konto** – der bequeme Weg ist „öffnen" (Einmal-Ticket, automatische Anmeldung) | automatisch per Ticket ✓ |
+| Google-Find-Hub-WebUI | über die Bridge-Session (Caddy `forward_auth`) | **keine** ✓ |
+| Apple (macless-haystack) | über die Bridge-Session (Caddy `forward_auth`) | **keine** ✓ |
+
+**Warum Traccar kein `forward_auth` mehr hat:** Browser verwerfen Cookies mit
+`Domain=localhost` (RFC 6265 verlangt einen Punkt in der Domain). Ein Gate auf
+`traccar.localhost` könnte also nie erfüllt werden – jede direkte Traccar-URL
+endete in „HTTP ERROR 401". Deshalb schützt Traccar sich mit **seinem eigenen
+Konto**; die Eltern kommen über den „öffnen"-Link im Dienste-Bereich ohne
+zweite Eingabe hinein (Einmal-Ticket, 120 s gültig).
+
+Die **Find-My-Oberflächen** haben kein eigenes Konto und bleiben daher hinter
+dem `forward_auth`-Gate (erreichbar mit dem Sitzungscookie, also beim Zugang
+über `https://audio.localhost`).
 
 **Automatische Traccar-Anmeldung (Cookie):** Die Eltern-UI verlinkt Traccar auf
 `https://<SITE_TRACCAR>/_sso/traccar`. Caddy leitet diesen Pfad an die Bridge –

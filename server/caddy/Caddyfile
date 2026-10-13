@@ -40,16 +40,16 @@
 {$SITE_TRACCAR:traccar.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
-	# Auto-Login zuerst und OHNE Gate: der Endpunkt prüft die Anmeldung selbst
-	# und schickt notfalls zur Eltern-UI zurück (mit Rückkehr-Adresse). Sonst
-	# zeigt ein neuer Tab „HTTP ERROR 401", weil dort noch kein Cookie ankommt.
+	# Auto-Login zuerst: die Bridge meldet sich mit dem Einmal-Ticket (oder dem
+	# Sitzungscookie) serverseitig an und setzt das Traccar-Sitzungscookie.
 	handle /_sso/* {
 		reverse_proxy audio-bridge:8085
 	}
 	handle {
-		forward_auth audio-bridge:8085 {
-			uri /api/v1/auth/verify
-		}
+		# Bewusst OHNE forward_auth: Browser verwerfen Cookies mit Domain=localhost
+		# (RFC 6265 verlangt einen Punkt), deshalb könnte das Gate hier nie erfüllt
+		# werden – jede direkte Traccar-URL ergäbe „HTTP ERROR 401". Traccar hat
+		# sein eigenes Login; der bequeme Weg führt über „öffnen" (Einmal-Ticket).
 		reverse_proxy traccar:8082
 	}
 }
