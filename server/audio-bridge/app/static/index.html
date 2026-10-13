@@ -975,21 +975,35 @@ function statusLabel(status) {
 }
 
 let lastServices = [];
+let nextTarget = '';
+let ticketTimer = null;
 
-// Für Traccar einen frischen Einmal-Ticket-Link setzen (echter Klick = immer erlaubt).
-async function refreshSsoLink() {
-  const link = document.querySelector('[data-sso-link]');
-  const service = lastServices.find((item) => item.key === 'traccar');
-  if (!link || !service || !service.site_host) return;
-  try {
-    const res = await fetch('/api/v1/parent/sso/ticket', { method: 'POST', headers: headers() });
-    const data = await res.json();
-    if (data.ticket) {
-      link.href = 'https://' + service.site_host + '/_sso/traccar?ticket=' +
-        encodeURIComponent(data.ticket);
+// Beide SSO-Links (Dienste-Karte und Rückkehr-Karte) bekommen automatisch ein
+// frisches Einmal-Ticket – ohne Ticket leitet /_sso/traccar nur zur Anmeldung
+// zurück (Cookies über Hosts hinweg verwerfen die Browser).
+async function refreshTickets() {
+  const targets = [];
+  const nextLink = $('next-link');
+  if (nextLink && nextTarget && !$('next-box').hidden) targets.push([nextLink, nextTarget]);
+  const serviceLink = document.querySelector('[data-sso-link]');
+  const traccar = lastServices.find((item) => item.key === 'traccar');
+  if (serviceLink && traccar && traccar.site_host) {
+    targets.push([serviceLink, 'https://' + traccar.site_host + '/_sso/traccar']);
+  }
+  for (const [link, base] of targets) {
+    try {
+      const res = await fetch('/api/v1/parent/sso/ticket', { method: 'POST', headers: headers() });
+      const data = await res.json();
+      if (data.ticket) link.href = base + '?ticket=' + encodeURIComponent(data.ticket);
+    } catch (err) {
+      /* ohne Ticket greift der Rückkehr-Weg */
     }
-  } catch (err) {
-    /* ohne Ticket greift der Rückkehr-Weg */
+  }
+  if (targets.length && !ticketTimer) {
+    ticketTimer = setInterval(refreshTickets, 30000);  // Tickets sind 120 s gültig
+  } else if (!targets.length && ticketTimer) {
+    clearInterval(ticketTimer);
+    ticketTimer = null;
   }
 }
 
@@ -1031,7 +1045,7 @@ async function loadServices() {
     }).join('');
     const traccar = data.services.find((service) => service.key === 'traccar');
     if (traccar && traccar.port) $('map-link').href = serviceUrl(traccar);
-    refreshSsoLink();
+    refreshTickets();
   } catch (err) {
     $('services').innerHTML = '<li class="muted">Fehler: ' + err.message + '</li>';
   }
@@ -1750,9 +1764,11 @@ function followNextParameter() {
     const box = $('next-box');
     const link = $('next-link');
     if (box && link) {
-      link.href = target.toString();
+      nextTarget = target.toString();
+      link.href = nextTarget;
       link.textContent = 'Weiter zu ' + target.hostname;
       box.hidden = false;
+      refreshTickets();   // frisches Einmal-Ticket in den Link setzen
     }
     return true;
   } catch (err) {
