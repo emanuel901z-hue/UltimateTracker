@@ -2204,12 +2204,32 @@ def message_listened(message_id: str) -> dict:
 
 
 @app.get("/api/v1/parent/messages", dependencies=[Depends(require_parent)])
-def parent_list(device_id: str | None = None, limit: int = 50) -> dict:
-    sql = "SELECT * FROM messages"
+def parent_list(device_id: str | None = None, limit: int = 50,
+                direction: str | None = None, heard: str | None = None) -> dict:
+    """Nachrichtenliste mit Filtern.
+
+    - `direction`: `in` (vom Kind) oder `out` (von den Eltern)
+    - `heard`: `unheard` (nur Ungehörtes) oder `heard` (nur Gehörtes)
+    - `limit`: Anzahl (1–200)
+
+    Der Zähler `unheard` zählt **immer** alle ungehörten Nachrichten des
+    gewählten Kindes – unabhängig von den Filtern, damit „X neu" stimmt.
+    """
+    where: list[str] = []
     args: list = []
     if device_id:
-        sql += " WHERE device_id = ?"
+        where.append("device_id = ?")
         args.append(device_id)
+    if direction in ("in", "out"):
+        where.append("direction = ?")
+        args.append(direction)
+    if heard == "unheard":
+        where.append("direction = 'in' AND listened_at IS NULL")
+    elif heard == "heard":
+        where.append("listened_at IS NOT NULL")
+    sql = "SELECT * FROM messages"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY created_at DESC LIMIT ?"
     args.append(max(1, min(limit, 200)))
     with db() as conn:
@@ -2221,6 +2241,7 @@ def parent_list(device_id: str | None = None, limit: int = 50) -> dict:
         ).fetchone()["n"]
     return {
         "unheard": unheard,
+        "count": len(rows),
         "messages": [
             {
                 "id": r["id"],

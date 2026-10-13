@@ -27,7 +27,8 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
   Firmware-Updates, Monitoring, Einstellungen und Backup an einer Stelle
 - **Nachrichten wie im Chat**: Richtung, Zeitpunkt, Status (neu / gehört mit
   Zeitstempel / unterwegs / abgeholt) – beim Abspielen wird automatisch als
-  gehört markiert, dazu ein Neu-Zähler und „alle als gehört markieren"
+  gehört markiert, dazu ein Neu-Zähler, **Filter** (Status gehört/ungehört,
+  Richtung, Anzahl) und „alle als gehört markieren"
 - **SMS-Verlauf** (vom Anbieter geladen) im gleichen Chat-Stil, inkl. Zustand
   (PENDING/DELIVERED/FAILED)
 - **Sensor-Fusion**: mehrere Quellen (GNSS, Apple/Google Find My, Funkzelle) werden
@@ -95,7 +96,7 @@ Die `server/.env` ist **optional**: Für einen eigenen Einstieg reicht
 `cp .env.example .env` und `PARENT_PASSWORD` setzen; alles Weitere verwaltet die
 UI. Details (WSL-Setup, TLS, LAN-/Internet-Betrieb, Betrieb & Wartung):
 [`docs/deployment.md`](docs/deployment.md). Tests: `bash scripts/smoke-test.sh`
-(27 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
+(28 Gruppen), `pio test -e native` (53 Host-Tests der Firmware-Logik),
 `python -m unittest discover -s tests` (59 Bridge-Tests: Auth, Provider, **Fusion**),
 `python scripts/check-ui-a11y.py` (Quelltext: Labels, ARIA, Tab-Muster,
 Kontraste hell/dunkel, Bedienziele) und `python scripts/ui-check.py`

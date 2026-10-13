@@ -419,13 +419,40 @@
       </div>
       <div class="card">
         <h2>Nachrichten</h2>
+        <div class="row">
+          <label for="msg-heard">Status
+            <select id="msg-heard">
+              <option value="unheard">Nur ungehörte</option>
+              <option value="heard">Nur gehörte</option>
+              <option value="all">Alle</option>
+            </select>
+          </label>
+          <label for="msg-direction">Richtung
+            <select id="msg-direction">
+              <option value="all">Beide Richtungen</option>
+              <option value="in">Vom Kind</option>
+              <option value="out">Von den Eltern</option>
+            </select>
+          </label>
+          <label for="msg-limit">Anzahl
+            <select id="msg-limit">
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+          </label>
+        </div>
         <div class="row-tight">
           <span class="muted" id="unheard" role="status" aria-live="polite">–</span>
           <button id="mark-all" hidden>Alle als gehört markieren</button>
+          <button id="msg-filter-reset">Filter zurücksetzen</button>
         </div>
         <ul id="list" class="scroll" tabindex="0" role="region" aria-label="Nachrichtenliste"></ul>
         <p class="hint">„neu" heißt: noch nicht angehört. Beim Abspielen wird die Nachricht
-          automatisch als gehört markiert (mit Zeitstempel).</p>
+          automatisch als gehört markiert (mit Zeitstempel). Standardmäßig werden
+          <strong>nur ungehörte</strong> Nachrichten gezeigt – über „Status: Alle" siehst
+          du auch die gehörten.</p>
       </div>
     </section>
 
@@ -968,10 +995,53 @@ async function markListened(messageId, row, badge) {
   loadChildren();
 }
 
+// --- Nachrichten-Filter (Standard: nur ungehörte) ---
+const MSG_FILTER_DEFAULT = { heard: 'unheard', direction: 'all', limit: '50' };
+function loadMsgFilter() {
+  try {
+    return { ...MSG_FILTER_DEFAULT, ...JSON.parse(localStorage.getItem('ut_msg_filter') || '{}') };
+  } catch (err) {
+    return { ...MSG_FILTER_DEFAULT };
+  }
+}
+let msgFilter = loadMsgFilter();
+
+function applyMsgFilterToControls() {
+  $('msg-heard').value = msgFilter.heard;
+  $('msg-direction').value = msgFilter.direction;
+  $('msg-limit').value = msgFilter.limit;
+}
+
+function saveMsgFilter() {
+  localStorage.setItem('ut_msg_filter', JSON.stringify(msgFilter));
+  applyMsgFilterToControls();
+}
+
+['msg-heard', 'msg-direction', 'msg-limit'].forEach((id) => {
+  $(id).addEventListener('change', () => {
+    msgFilter = {
+      heard: $('msg-heard').value,
+      direction: $('msg-direction').value,
+      limit: $('msg-limit').value,
+    };
+    saveMsgFilter();
+    loadMessages();
+  });
+});
+$('msg-filter-reset').addEventListener('click', () => {
+  msgFilter = { ...MSG_FILTER_DEFAULT };
+  saveMsgFilter();
+  loadMessages();
+});
+
 async function loadMessages() {
   if (!state.token) return;
-  const query = state.device ? '?device_id=' + encodeURIComponent(state.device) : '';
-  const res = await fetch('/api/v1/parent/messages' + query, { headers: headers() });
+  const params = new URLSearchParams();
+  if (state.device) params.set('device_id', state.device);
+  params.set('limit', msgFilter.limit);
+  if (msgFilter.direction !== 'all') params.set('direction', msgFilter.direction);
+  if (msgFilter.heard !== 'all') params.set('heard', msgFilter.heard);
+  const res = await fetch('/api/v1/parent/messages?' + params.toString(), { headers: headers() });
   if (!res.ok) { setStatus('Nachrichten: ' + errText(res)); return; }
   const data = await res.json();
   const list = $('list');
@@ -983,7 +1053,8 @@ async function loadMessages() {
     const head = document.createElement('div');
     head.className = 'chat-head';
     const when = document.createElement('span');
-    when.textContent = (message.direction === 'in' ? 'vom Tracker' : 'an Tracker') + ' · ' + fmt(message.created_at);
+    when.textContent = (message.direction === 'in' ? 'vom Kind' : 'von den Eltern') +
+      ' · ' + fmt(message.created_at);
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.textContent = statusBadge(message);
@@ -1003,7 +1074,11 @@ async function loadMessages() {
     row.appendChild(audio);
     list.appendChild(row);
   }
-  if (!data.messages.length) list.innerHTML = '<li class="muted">Noch keine Nachrichten.</li>';
+  if (!data.messages.length) {
+    list.innerHTML = '<li class="muted">' + (msgFilter.heard === 'unheard'
+      ? 'Keine ungehörten Nachrichten – über „Status: Alle" erscheinen auch die gehörten.'
+      : 'Keine Nachrichten für diesen Filter.') + '</li>';
+  }
   $('unheard').textContent = data.unheard
     ? data.unheard + ' neue Nachricht(en)'
     : 'alles gehört';
@@ -2407,6 +2482,7 @@ $('reg-repeat').addEventListener('keydown', (event) => {
 
 // Start: gemerkter Tab oder Übersicht
 selectTab(document.getElementById(localStorage.getItem('ut_tab') || 'tab-uebersicht'), false);
+applyMsgFilterToControls();
 updateSmsCounter();
 loadSetup();
 checkRegistration();

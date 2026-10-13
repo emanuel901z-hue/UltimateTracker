@@ -409,5 +409,40 @@ FDS=$(curl -s "$BASE/healthz" | python3 -c "import json,sys; print(json.load(sys
 [ "$FDS" -lt 80 ] && pass "Dateideskriptoren stabil nach 120 Anfragen ($FDS offen)" \
   || fail "FD-Zahl zu hoch: $FDS (Verbindungs-Leck?)"
 
+echo "28) Nachrichten-Filter (Status, Richtung, Anzahl)"
+# Frische, ungehörte Nachricht erzeugen (Gruppe 22 markiert alles als gehört).
+curl -s -X POST -H "X-Auth-Token: $DTOK" -F device_id=TEST123 -F audio=@"$TMP/test.wav" \
+  "$BASE/api/v1/device/messages" >/dev/null
+PROB=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages?device_id=TEST123&heard=unheard&limit=50" | python3 -c "
+import json, sys
+msgs = json.load(sys.stdin)['messages']
+problems = []
+if not msgs:
+    problems.append('keine ungehoerten Nachrichten gefunden')
+for m in msgs:
+    if m['direction'] != 'in' or m['listened_at']:
+        problems.append('falsche Nachricht im Filter: ' + m['id'])
+print('; '.join(problems))
+")
+[ -z "$PROB" ] && pass "Filter 'ungehoert' liefert nur eingehende, ungehoerte" || fail "Filter 'ungehoert': $PROB"
+PROB=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages?device_id=TEST123&heard=heard&limit=50" | python3 -c "
+import json, sys
+problems = ['ungehoerte im gehoert-Filter: ' + m['id']
+            for m in json.load(sys.stdin)['messages'] if not m['listened_at']]
+print('; '.join(problems))
+")
+[ -z "$PROB" ] && pass "Filter 'gehoert' liefert nur gehoerte" || fail "Filter 'gehoert': $PROB"
+PROB=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages?device_id=TEST123&direction=out&limit=50" | python3 -c "
+import json, sys
+msgs = json.load(sys.stdin)['messages']
+problems = [] if msgs else ['keine ausgehenden Nachrichten gefunden']
+problems += ['falsche Richtung: ' + m['id'] for m in msgs if m['direction'] != 'out']
+print('; '.join(problems))
+")
+[ -z "$PROB" ] && pass "Filter 'Richtung: ausgehend' liefert nur ausgehende" || fail "Richtungsfilter: $PROB"
+N=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages?device_id=TEST123&limit=1" \
+  | python3 -c "import json,sys; print(len(json.load(sys.stdin)['messages']))")
+[ "$N" = "1" ] && pass "Anzahl-Filter (limit=1) wirkt" || fail "limit ignoriert ($N Nachrichten)"
+
 echo
 echo "Alle Smoke-Tests bestanden."
