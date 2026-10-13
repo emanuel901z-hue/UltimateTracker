@@ -37,6 +37,13 @@ from app.auth import (  # noqa: E402
     session_expiry,
     verify_password,
 )
+from app.fusion import (  # noqa: E402
+    SOURCE_TRUST,
+    choose_best,
+    movement_state,
+    source_trust,
+    source_valid_seconds,
+)
 from app.providers import get_provider
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
@@ -1086,25 +1093,8 @@ def traccar_session() -> tuple[str, int] | None:
 
 
 # --- Sensor-Fusion: mehrere Quellen → eine Position je Kind -----------------
-# Quellen und ihre typische Güte (docs/fusion.md):
-#   tracker  GNSS im Gerät        ~3–10 m,   sofort
-#   apple    Apple Find My        ~50–100 m, 5–15 min
-#   google   Google Find My       ~50–100 m, 5–15 min
-#   network  Funkzelle (Anbieter) ~300–3000 m, sofort
-# Gemittelt wird NICHT (das würde GNSS verschlechtern) – es wird die beste
-# Quelle gewählt: erst nach Vertrauensstufe, dann nach Frische und Genauigkeit.
-
-SOURCE_TRUST = {"tracker": 100, "apple": 60, "google": 60, "network": 30}
-SOURCE_VALID_S = {"tracker": 1800, "apple": 5400, "google": 5400, "network": 900}
-
-
-def source_trust(provider: str) -> int:
-    return SOURCE_TRUST.get((provider or "").lower(), 20)
-
-
-def source_valid_seconds(provider: str) -> int:
-    return SOURCE_VALID_S.get((provider or "").lower(), 900)
-
+# Die Logik liegt in app/fusion.py (reine Funktionen, host-getestet). Hier nur
+# die Datenbeschaffung aus der Bridge-Datenbank.
 
 def beacon_assignments() -> dict[str, str]:
     """Beacon-ID (klein) → Geräte-ID des Kindes."""
@@ -1153,25 +1143,24 @@ def candidate_positions(device_id: str, limit: int = 40) -> list[dict]:
 
 
 def best_position(device_id: str) -> dict | None:
-    """Beste verfügbare Position eines Kindes (Quelle, Alter, Genauigkeit, Grund)."""
+    """Beste verfügbare Position eines Kindes (Fusion, docs/fusion.md)."""
     candidates = candidate_positions(device_id)
     if not candidates:
         return None
-    usable = [item for item in candidates if item["valid"]]
-    if usable:
-        # 1) Vertrauensstufe, 2) Frische, 3) Genauigkeit
-        chosen = sorted(usable, key=lambda item: (
-            -item["trust"], item["age_s"] if item["age_s"] is not None else 10**9,
-            item["accuracy"] if item["accuracy"] is not None else 10**6,
-        ))[0]
-        chosen = {**chosen, "reason": "beste gültige Quelle", "stale": False}
-    else:
-        chosen = {**sorted(candidates, key=lambda item: item["trust"], reverse=True)[0],
-                  "reason": "keine frische Quelle – letzter bekannter Stand", "stale": True}
-    return {**chosen, "sources": [
-        {key: item[key] for key in ("source", "age_s", "accuracy", "valid", "trust")}
-        for item in sorted(candidates, key=lambda entry: -entry["trust"])
-    ]}
+    with db() as conn:
+        previous_row = conn.execute(
+            "SELECT latitude, longitude, received_at FROM positions "
+            "WHERE device_id = ? ORDER BY id DESC LIMIT 1 OFFSET 1", (device_id,),
+        ).fetchone()
+        recent = conn.execute(
+            "SELECT latitude, longitude, received_at FROM positions "
+            "WHERE device_id = ? ORDER BY id DESC LIMIT 12", (device_id,),
+        ).fetchall()
+    chosen = choose_best(candidates, previous=dict(previous_row) if previous_row else None)
+    if chosen is None:
+        return None
+    chosen["state"] = movement_state([dict(row) for row in recent])
+    return chosen
 
 
 def forward_fused_to_traccar(device_id: str) -> bool:
@@ -1347,6 +1336,7 @@ def parent_map() -> dict:
                 "age_s": best["age_s"],
                 "stale": best["stale"],
                 "reason": best["reason"],
+                "state": best.get("state", "unknown"),
                 "sources": best["sources"],
             })
         beacons = [

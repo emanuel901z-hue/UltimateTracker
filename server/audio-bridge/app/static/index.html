@@ -1207,11 +1207,21 @@ async function loadMap() {
     const accuracy = tracker.accuracy ? ' ±' + Math.round(tracker.accuracy) + ' m' : '';
     const age = tracker.age_s != null ? ' · ' + Math.round(tracker.age_s / 60) + ' min alt' : '';
     const stale = tracker.stale ? '<br><em>keine frische Quelle – letzter bekannter Stand</em>' : '';
+    const state = { moving: 'bewegt sich', standing: 'steht', unknown: 'Zustand unbekannt' }[tracker.state] || '';
+    const suspect = tracker.suspect ? '<br><em>ungewöhnlicher Sprung – bitte prüfen</em>' : '';
+    // Unsicherheitskreis: Find-My-Positionen sind grob – das ehrlich darstellen
+    if (tracker.accuracy) {
+      L.circle([tracker.latitude, tracker.longitude], {
+        radius: Number(tracker.accuracy), weight: 1, color: '#8ab6ff',
+        fillColor: '#8ab6ff', fillOpacity: 0.12,
+      }).addTo(markerLayer);
+    }
     L.marker([tracker.latitude, tracker.longitude]).addTo(markerLayer).bindPopup(
       '<strong>' + escapeHtml(tracker.name) + '</strong><br>' +
       'Quelle: ' + escapeHtml(tracker.source) + accuracy + age + '<br>' +
+      (state ? state + ' · ' : '') +
       (tracker.battery != null ? Math.round(tracker.battery) + ' % · ' : '') + fmt(tracker.received_at) +
-      stale);
+      stale + suspect);
     bounds.push([tracker.latitude, tracker.longitude]);
   });
   data.beacons.forEach((beacon) => {

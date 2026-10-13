@@ -343,6 +343,8 @@ print('; '.join(problems))
 [ -z "$CHECK" ] && pass "Fusion liefert Quelle, Vertrauen und Quellenliste" || fail "Fusion: $CHECK"
 MAP=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/map")
 echo "$MAP" | grep -q '"reason"' && pass "Karte nutzt fusionierte Positionen" || fail "Karte ohne Fusion"
+echo "$MAP" | grep -q '"state"' && pass "Zustandserkennung enthalten (steht/bewegt)" || fail "Zustand fehlt"
+echo "$FUSED" | grep -q '"suspect"' && pass "Sprungfilter-Status enthalten" || fail "Sprungfilter-Status fehlt"
 
 echo
 echo "Alle Smoke-Tests bestanden."

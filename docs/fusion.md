@@ -35,8 +35,14 @@ Apple.
   Kind (Geräte-Registry, ID = IMEI). Pflege in der UI: *Geräte → Find-My-Beacons
   zuordnen*. Ohne Zuordnung erscheint ein Beacon **nur** in der Bridge – nicht in
   Traccar (sonst stünden dort Fremdgeräte).
-- **Fusion** (`best_position()` in der Bridge): liefert Position, Quelle,
-  Genauigkeit, Alter, Begründung und **alle** Quellen zur Kontrolle.
+- **Fusion** (`app/fusion.py` – reine Funktionen, **host-getestet** über
+  `tests/test_fusion.py`): wählt die beste Position und liefert Quelle,
+  Genauigkeit, Alter, Begründung, Zustand und **alle** Quellen zur Kontrolle.
+  Zusätzlich:
+  - **Sprungfilter:** unplausible Bewegung (schneller als 120 km/h) wird
+    **markiert**, nicht verworfen – echte Positionsänderungen gehen nie verloren.
+  - **Zustandserkennung:** `stehend` / `bewegt` aus der jüngsten Spur
+    (Wegstrecke der letzten Stunde ≥ 80 m ⇒ bewegt).
 - **Traccar bekommt genau eine Position je Kind** – nicht jede Quelle als eigenes
   Gerät. Damit zeigt Traccar **ein** Gerät pro Kind (der Wunsch „das gehört
   zusammen").
@@ -53,14 +59,15 @@ Apple.
 
 ## 5. Nächste Optimierungsstufen
 
-| Stufe | Nutzen | Aufwand |
+| Stufe | Status | Nutzen |
 |---|---|---|
-| **Glättung/Dwell-Time** (Position erst übernehmen, wenn sie sich bestätigt) | weniger Springen in der Anzeige | klein |
-| **Genauigkeitsgewichtete Anzeige** (Unsicherheitsradius statt Punkt) | ehrliche Darstellung der Find-My-Unschärfe | klein |
-| **Kalman-Filter** über GNSS-Punkte | ruhigere Spur, bessere Geschwindigkeit | mittel |
-| **Funkzellen-/WLAN-Quelle** über die Anbieter-API | Position ohne Fix (Indoor, Keller) | mittel |
-| **Zustandserkennung** (steht / bewegt / zuletzt gesehen) | bessere Benachrichtigungen | klein |
-| **Mehrere Beacons je Kind** (Schulranzen + Jacke) | Redundanz | klein (bereits möglich) |
+| **Sprungfilter** (unplausible Bewegung markieren) | ✅ umgesetzt | keine Geisterpositionen aus fehlerhaften Fixes |
+| **Unsicherheitsradius** (Kreis statt Punkt) | ✅ umgesetzt | ehrliche Darstellung der Find-My-Unschärfe |
+| **Zustandserkennung** (steht / bewegt) | ✅ umgesetzt | bessere Benachrichtigungen, Popup zeigt den Zustand |
+| **Mehrere Beacons je Kind** | ✅ möglich | Redundanz (Schulranzen + Jacke) |
+| **Funkzellen-/WLAN-Quelle** | 🟡 Ingest vorhanden | Position ohne Fix (Indoor) – Quelle `network` wird schon bewertet, Einspeisung über `POST /api/v1/findmy/locations` |
+| **Kalman-Filter** über die GNSS-Spur | ⛔ offen | ruhigere Spur, bessere Geschwindigkeit (lohnt erst mit dichteren Messungen) |
+| **Glättung/Dwell-Time** (Dwell vor Übernahme) | ⛔ offen | weniger Springen bei sehr kurzen Poll-Intervallen |
 
 ## 6. Grenzen (ehrlich)
 
