@@ -134,6 +134,19 @@ und Abhilfen, in dieser Reihenfolge:
 5. Alternativ eine passende `auth.json` von einem anderen Rechner/Tool übernehmen –
    liegt sie im Volume, überspringt der Endpunkt die Registrierung.
 
+**Diagnose bei uns (2026-10-13)** – schließt Konto und Anisette als Ursache aus:
+
+- Browser-Login auf `account.apple.com` **klappt** (mit 2FA); Zahlungsmethode und
+  Lieferadresse sind hinterlegt, im Konto steht **ein** Gerät.
+- Frisch provisionierte Anisette (eigene Machine-ID) → **derselbe** Fehler.
+- HTTP/1.1 und HTTP/2 → **derselbe** Fehler.
+- **Erfundenes** Konto mit **gültigem SRP-Wert** → **derselbe** `ec -80045`.
+
+Apple lehnt also den **SRP-Init-Flow selbst** ab (community-weit berichtet als
+„any account, any IP, fake credentials too"), bevor das Konto überhaupt bewertet
+wird. Von unserer Seite ist nichts einzustellen – es bleibt **warten** oder eine
+fertige `auth.json` übernehmen.
+
 ### 2d. Verworfene Alternativen (geprüft)
 
 | Projekt | Warum nicht |
