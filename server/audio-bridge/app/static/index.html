@@ -1022,10 +1022,15 @@ async function refreshTickets() {
   const targets = [];
   const nextLink = $('next-link');
   if (nextLink && nextTarget && !$('next-box').hidden) targets.push([nextLink, nextTarget]);
-  const serviceLink = document.querySelector('[data-sso-link]');
   const traccar = lastServices.find((item) => item.key === 'traccar');
-  if (serviceLink && traccar && traccar.site_host) {
-    targets.push([serviceLink, 'https://' + traccar.site_host + '/_sso/traccar']);
+  if (traccar && traccar.site_host) {
+    const base = 'https://' + traccar.site_host + '/_sso/traccar';
+    const serviceLink = document.querySelector('[data-sso-link]');
+    if (serviceLink) targets.push([serviceLink, base]);
+    // Auch der Link im Karte-Tab muss ein Ticket tragen – die nackte URL kann
+    // nur den Rückweg nehmen (Cookies erreichen den Host nicht).
+    const mapLink = $('map-link');
+    if (mapLink) targets.push([mapLink, base]);
   }
   for (const [link, base] of targets) {
     try {
