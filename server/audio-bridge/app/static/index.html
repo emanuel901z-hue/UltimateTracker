@@ -1024,11 +1024,11 @@ async function refreshTickets() {
   if (nextLink && nextTarget && !$('next-box').hidden) targets.push([nextLink, nextTarget]);
   const traccar = lastServices.find((item) => item.key === 'traccar');
   if (traccar && traccar.site_host) {
-    const base = 'https://' + traccar.site_host + '/_sso/traccar';
+    // Wurzel-URL mit sso-Parameter: das ist Traccars echte SPA-Route (kein
+    // „No routes matched" und kein Cache-Problem mit unbekannten Pfaden).
+    const base = 'https://' + traccar.site_host + '/';
     const serviceLink = document.querySelector('[data-sso-link]');
     if (serviceLink) targets.push([serviceLink, base]);
-    // Auch der Link im Karte-Tab muss ein Ticket tragen – die nackte URL kann
-    // nur den Rückweg nehmen (Cookies erreichen den Host nicht).
     const mapLink = $('map-link');
     if (mapLink) targets.push([mapLink, base]);
   }
@@ -1036,7 +1036,7 @@ async function refreshTickets() {
     try {
       const res = await fetch('/api/v1/parent/sso/ticket', { method: 'POST', headers: headers() });
       const data = await res.json();
-      if (data.ticket) link.href = base + '?ticket=' + encodeURIComponent(data.ticket);
+      if (data.ticket) link.href = base + '?sso=' + encodeURIComponent(data.ticket);
     } catch (err) {
       /* ohne Ticket greift der Rückkehr-Weg */
     }
@@ -1820,7 +1820,7 @@ function followNextParameter() {
     const box = $('next-box');
     const link = $('next-link');
     if (box && link) {
-      nextTarget = target.toString();
+      nextTarget = target.toString().replace('/_sso/traccar', '/');
       link.href = nextTarget;
       link.textContent = 'Weiter zu ' + target.hostname;
       box.hidden = false;

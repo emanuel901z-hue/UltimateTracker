@@ -1582,18 +1582,15 @@ def sso_ticket() -> dict:
     return {"ticket": ticket, "expires_in": 120}
 
 
-@app.get("/_sso/traccar")
-def sso_traccar(request: Request) -> Response:
-    """Automatische Anmeldung in Traccar – läuft über Caddy auf dem Traccar-Host.
+def sso_login_response(request: Request, ticket: str) -> Response:
+    """Meldet sich serverseitig in Traccar an und gibt das Sitzungscookie weiter.
 
-    Zugang entweder über ein Einmal-Ticket (?ticket=…, von der Eltern-UI
-    angefordert) oder über das Sitzungscookie. Danach meldet sich die Bridge
-    serverseitig mit den hinterlegten Zugangsdaten an und gibt das
-    JSESSIONID-Cookie an den Browser weiter – kein zweites Login.
+    Wird von `/_sso/traccar` und von `/?sso=…` genutzt (der Wurzel-Pfad ist die
+    echte SPA-Route – damit kann der Browser keine alte Seite für einen
+    unbekannten Pfad aus dem Cache zeigen).
     """
     entry = os.environ.get("SITE_AUDIO", "") or "audio.localhost"
     host = request.headers.get("host") or entry
-    ticket = (request.query_params.get("ticket") or "").strip()
     authorized = False
     if ticket:
         stored = state_get(f"sso_ticket:{ticket}")
@@ -1607,28 +1604,23 @@ def sso_traccar(request: Request) -> Response:
 
     if not authorized:
         if request.cookies.get(COOKIE_NAME):
-            # Cookie vorhanden, aber für diesen Host nicht gültig (typischerweise
-            # Direktzugang über localhost) – klare Meldung statt Schleife.
+            # Cookie vorhanden, aber für diesen Host nicht gültig (Direktzugang)
             return RedirectResponse(f"https://{entry}/?sso=failed", status_code=302)
         back = urllib.parse.quote(f"https://{host}/_sso/traccar", safe="")
         return RedirectResponse(f"https://{entry}/?next={back}", status_code=302)
 
-    if not (TRACCAR_SSO_EMAIL and TRACCAR_SSO_PASSWORD):
-        # Erststart: Zugangsdaten aus der automatischen Einrichtung nehmen
-        traccar_email, traccar_password = traccar_credentials()
-        if not (traccar_email and traccar_password):
+    email, password = TRACCAR_SSO_EMAIL, TRACCAR_SSO_PASSWORD
+    if not (email and password):
+        email, password = traccar_credentials()
+        if not (email and password):
             ensure_traccar_admin()
-            traccar_email, traccar_password = traccar_credentials()
-        if not (traccar_email and traccar_password):
-            return RedirectResponse("/", status_code=302)  # kein Auto-Login möglich
-        payload = urllib.parse.urlencode({"email": traccar_email, "password": traccar_password}).encode()
-    else:
-        payload = urllib.parse.urlencode(
-            {"email": TRACCAR_SSO_EMAIL, "password": TRACCAR_SSO_PASSWORD}
-        ).encode()
+            email, password = traccar_credentials()
+    if not (email and password):
+        return RedirectResponse("/", status_code=302)
+
+    payload = urllib.parse.urlencode({"email": email, "password": password}).encode()
     request_login = urllib.request.Request(
-        "http://traccar:8082/api/session",
-        data=payload,
+        "http://traccar:8082/api/session", data=payload,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     cookie = ""
@@ -1647,6 +1639,12 @@ def sso_traccar(request: Request) -> Response:
             suffix += "; Secure"
         redirect.headers["Set-Cookie"] = cookie + suffix
     return redirect
+
+
+@app.get("/_sso/traccar")
+def sso_traccar(request: Request) -> Response:
+    """Auto-Login über den klassischen Pfad (Rückwärtskompatibilität)."""
+    return sso_login_response(request, (request.query_params.get("ticket") or "").strip())
 
 
 CA_FILE = Path(os.environ.get("CADDY_CA_FILE", "/caddy-data/caddy/pki/authorities/local/root.crt"))
@@ -1687,7 +1685,16 @@ def healthz() -> dict:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> HTMLResponse:
+def index(request: Request) -> Response:
+    """Eltern-UI – oder Auto-Login, wenn `?sso=<ticket>` mitkommt.
+
+    Der SSO-Einstieg läuft bewusst über die Wurzel-URL: Das ist die echte
+    SPA-Route von Traccar, damit kann der Browser keine alte Seite für einen
+    unbekannten Pfad aus dem Cache zeigen (genau das führte zu schwarzen Seiten).
+    """
+    ticket = (request.query_params.get("sso") or "").strip()
+    if ticket:
+        return sso_login_response(request, ticket)
     return HTMLResponse((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
 
 

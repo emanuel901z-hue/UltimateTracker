@@ -42,11 +42,18 @@
 	encode zstd gzip
 	# Auto-Login zuerst: die Bridge meldet sich mit dem Einmal-Ticket (oder dem
 	# Sitzungscookie) serverseitig an und setzt das Traccar-Sitzungscookie.
+	# SSO über die Wurzel-URL: https://<traccar-host>/?sso=<ticket> → Bridge.
+	# Die Wurzel ist Traccars echte SPA-Route – so kann der Browser keine alte
+	# Seite für einen unbekannten Pfad aus dem Cache zeigen.
+	@sso query sso=*
+	handle @sso {
+		reverse_proxy audio-bridge:8085 {
+			header_down Cache-Control "no-store"
+		}
+	}
 	handle /_sso/* {
 		reverse_proxy audio-bridge:8085 {
 			# Nie cachen: die Antwort ist eine Weiterleitung mit Sitzungscookie.
-			# Sonst zeigt der Browser hier später eine alte (Traccar-)Seite aus dem
-			# Cache – Traccars SPA liefert max-age=3600 für jede Pfadangabe.
 			header_down Cache-Control "no-store"
 		}
 	}
