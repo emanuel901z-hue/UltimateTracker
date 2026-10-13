@@ -174,9 +174,15 @@ cd server
 docker compose --profile findmy up -d google-findmy-webui
 ```
 
-Dann <https://findmy.localhost> → Config → „Sign in with Google“ (Chrome/Xvfb/noVNC
-werden beim ersten Login im Container nachinstalliert; der Login läuft direkt im
-Browser). Kernfunktionen:
+Dann <https://findmy.localhost> → Menüpunkt **„Config"** (diese Seite ist
+`/auth`) → Abschnitt **„Google account"** → Knopf **„Sign in with Google"**.
+**Es gibt kein Formular zum Eintippen:** Der Knopf startet im Container ein
+temporäres Chrome + virtuellen Bildschirm (Xvfb/noVNC, wird beim ersten Mal
+nachinstalliert), in dem du dich bei Google anmeldest; direkt danach folgt eine
+**zweite** Google-Bestätigung (für die E2EE-Standortberichte). Der erste Start
+dauert ~30–90 s, jeder Schritt hat 5 Minuten Zeit – bei Timeout einfach erneut
+klicken. Der Status steht als Diagnose auf derselben Seite (`username`,
+`aas_token`, `fcm_credentials`, `shared_key`, `owner_key`). Kernfunktionen:
 
 - Geräteliste mit „Locate“/„Play sound“, **Poll-Schedule pro Gerät**
 - Ziele mit Presets: **Traccar (OsmAnd)**, Nextcloud PhoneTrack, GpsLogger,
