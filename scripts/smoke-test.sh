@@ -360,6 +360,7 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/parent/apple")
 [ "$CODE" = "401" ] && pass "Apple-Status ohne Anmeldung gesperrt (HTTP 401)" || fail "Schutz: $CODE"
 APPLE=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/apple")
 echo "$APPLE" | grep -q '"configured"' && pass "Apple-Status abrufbar" || fail "Apple-Status fehlgeschlagen"
+echo "$APPLE" | grep -q '"auth_cached"' && pass "Anmelde-Status (auth_cached) enthalten" || fail "auth_cached fehlt"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK"   -H 'Content-Type: application/json' -d '{"appleid":"keine-mail","password":"x"}'   "$BASE/api/v1/parent/apple")
 [ "$CODE" = "400" ] && pass "Ungültige Apple-ID abgelehnt (HTTP 400)" || fail "Validierung: $CODE"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK"   -H 'Content-Type: application/json' -d '{"appleid":"test@example.com","password":""}'   "$BASE/api/v1/parent/apple")

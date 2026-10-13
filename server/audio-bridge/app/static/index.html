@@ -582,6 +582,7 @@
           <strong>Empfehlung:</strong> einen Zweit-Account verwenden (Apple mag häufige
           Abfragen nicht). Die Zugangsdaten liegen nur lokal in dieser Installation.</p>
         <p class="muted" id="apple-status" role="status" aria-live="polite">– wird geladen –</p>
+        <p class="hint" id="apple-checked"></p>
         <label for="s-apple-id">Apple-ID (E-Mail)
           <input id="s-apple-id" type="text" inputmode="email" autocomplete="off"
                  placeholder="name@example.com" aria-describedby="s-apple-id-error">
@@ -1198,8 +1199,15 @@ async function loadApple() {
   if (!box || !state.token) return;
   try {
     const res = await fetch('/api/v1/parent/apple', { headers: headers() });
-    if (!res.ok) { box.textContent = 'Status: ' + errText(res); stopApplePoll(); return; }
+    if (!res.ok) {
+      box.textContent = 'Status: ' + errText(res);
+      $('apple-checked').textContent = '';
+      stopApplePoll();
+      return;
+    }
     const data = await res.json();
+    // Rückmeldung, damit „Status jetzt prüfen" sichtbar etwas tut.
+    $('apple-checked').textContent = 'zuletzt geprüft: ' + new Date().toLocaleTimeString();
     if (!data.configured) {
       box.textContent = 'Noch keine Apple-ID hinterlegt – ohne sie bleibt die ' +
         'Apple-Zusatzortung aus.';
@@ -1211,15 +1219,23 @@ async function loadApple() {
       stopApplePoll();
       return;
     }
-    box.textContent = 'Hinterlegt: ' + data.appleid + ' · Dienst startet noch – das ' +
-      'kann bis zu einer Minute dauern. Der Status wird automatisch aktualisiert.';
+    box.textContent = 'Hinterlegt: ' + data.appleid + ' · Dienst startet noch. ' +
+      (data.auth_cached
+        ? 'Die Anmeldung hat schon geklappt – der Dienst sollte gleich erreichbar sein.'
+        : 'Die Apple-Anmeldung ist noch nicht abgeschlossen: Apple verlangt einmalig ' +
+          'einen 2FA-Code per SMS – der geht nur im Terminal ' +
+          '(docs/findmy.md, Abschnitt 2c). Danach startet der Dienst von selbst; ' +
+          'wiederholtes Prüfen hilft nicht.');
     startApplePoll();
   } catch (err) {
     box.textContent = 'Status: ' + err.message;
   }
 }
 
-$('apple-check').addEventListener('click', loadApple);
+$('apple-check').addEventListener('click', async () => {
+  $('apple-checked').textContent = 'prüfe …';
+  await loadApple();
+});
 
 // --- Benachrichtigungen (PWA + Web-Push) ---
 function pushStatus(text) { $('push-state').textContent = 'Status: ' + text; }

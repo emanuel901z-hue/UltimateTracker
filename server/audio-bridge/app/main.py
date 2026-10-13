@@ -1909,8 +1909,15 @@ def apple_config_status() -> dict:
 
 @app.get("/api/v1/parent/apple", dependencies=[Depends(require_parent)])
 def apple_status() -> dict:
-    """Apple-Find-My-Einrichtung: Zugangsdaten hinterlegt, Dienst erreichbar?"""
+    """Apple-Find-My-Einrichtung: Zugangsdaten hinterlegt, Dienst erreichbar?
+
+    `auth_cached` sagt, ob der Dienst die Apple-Anmeldung schon einmal
+    abgeschlossen hat (`auth.json` im Volume). Fehlt die Datei, hängt der Dienst
+    meist noch an der Anmeldung (2FA-Bestätigung) oder Apple blockt die Versuche
+    (HTTP 503) – dann hilft Warten, nicht wiederholtes Neustarten.
+    """
     status = apple_config_status()
+    status["auth_cached"] = (APPLE_CONFIG_DIR / "auth.json").exists()
     status["service"] = probe_http("macless-haystack", 6176, "/") if status["configured"] else "down"
     return status
 

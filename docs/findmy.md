@@ -76,6 +76,19 @@ Dienst liest die Datei mit `configparser`-Interpolation und bräche sonst mit
 Statuszeile in **Geräte → „Apple Find My einrichten"** (aktualisiert sich
 automatisch, dazu „Status jetzt prüfen") und der Punkt in der Dienste-Liste.
 
+> **Wichtig – die erste Anmeldung braucht einmalig ein Terminal.** Das Image fragt
+> den **2FA-Code per SMS** über `input()` ab (`register/pypush_gsa_icloud.py`);
+> ohne Terminal endet das im `EOFError` und der Dienst läuft in eine
+> Neustart-Schleife. Die Eingabe in der UI (Apple-ID + Passwort → `config.ini`)
+> ist also nur der erste Teil. Für den SMS-Code einmal
+> `docker compose --profile findmy run --rm macless-haystack` ausführen und
+> Apple-ID, Passwort und Code eingeben – danach liegt `auth.json` im Volume
+> `macless-data` und der Dienst startet von selbst. Alternativ eine fertige
+> `auth.json` übernehmen. Solange das fehlt, meldet die UI
+> „Die Apple-Anmeldung ist noch nicht abgeschlossen" (`auth_cached: false`).
+> Blockt Apple zusätzlich mit **HTTP 503** (`gsa.apple.com`), hilft nur Warten –
+> wiederholtes Neustarten verschärft die Sperre eher.
+
 ```bash
 # Alternativ klassisch auf der Kommandozeile:
 docker compose --profile findmy up -d macless-haystack
