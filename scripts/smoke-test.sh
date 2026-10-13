@@ -361,6 +361,15 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/parent/apple")
 APPLE=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/apple")
 echo "$APPLE" | grep -q '"configured"' && pass "Apple-Status abrufbar" || fail "Apple-Status fehlgeschlagen"
 echo "$APPLE" | grep -q '"auth_cached"' && pass "Anmelde-Status (auth_cached) enthalten" || fail "auth_cached fehlt"
+# Apple-Anmeldung (2FA) über den Helfer-Dienst
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/parent/apple/login")
+[ "$CODE" = "401" ] && pass "Anmelde-Status ohne Anmeldung gesperrt (HTTP 401)" || fail "Schutz: $CODE"
+LOGIN=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/apple/login")
+echo "$LOGIN" | grep -q '"state"' && pass "Anmelde-Zustand abrufbar" || fail "Anmelde-Zustand fehlgeschlagen"
+echo "$LOGIN" | grep -q '"helper"' && pass "Helfer-Status enthalten" || fail "helper fehlt"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Auth-Token: $PTOK" \
+  -H 'Content-Type: application/json' -d '{"code":"abc"}' "$BASE/api/v1/parent/apple/login/code")
+[ "$CODE" = "400" ] && pass "Ungültiger 2FA-Code abgelehnt (HTTP 400)" || fail "Validierung: $CODE"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK"   -H 'Content-Type: application/json' -d '{"appleid":"keine-mail","password":"x"}'   "$BASE/api/v1/parent/apple")
 [ "$CODE" = "400" ] && pass "Ungültige Apple-ID abgelehnt (HTTP 400)" || fail "Validierung: $CODE"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT -H "X-Auth-Token: $PTOK"   -H 'Content-Type: application/json' -d '{"appleid":"test@example.com","password":""}'   "$BASE/api/v1/parent/apple")

@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -1955,6 +1956,82 @@ async def apple_configure(request: Request) -> dict:
         "path": str(path),
         "hint": "Der Dienst startet automatisch neu – das kann bis zu einer Minute dauern.",
     }
+
+
+# --- Apple-Anmeldung (2FA) über den Helfer-Dienst ---------------------------
+# Der Helfer (`apple-login`, Profil `findmy`) führt die Anmeldung aus und nimmt
+# den SMS-Code aus einer Datei. Steuerung über das Volume `macless-data`, damit
+# die Bridge keinen Docker-Zugriff braucht (docs/findmy.md 2c).
+
+APPLE_LOGIN_DIR = APPLE_CONFIG_DIR / "apple-login"
+APPLE_LOGIN_STATES = {"idle", "starting", "waiting", "verifying", "done", "error"}
+
+
+def apple_login_helper_running() -> bool:
+    """Läuft der Helfer? (Heartbeat-Datei, jünger als 20 s.)"""
+    heartbeat = APPLE_LOGIN_DIR / "heartbeat"
+    try:
+        return (time.time() - heartbeat.stat().st_mtime) < 20
+    except OSError:
+        return False
+
+
+@app.get("/api/v1/parent/apple/login", dependencies=[Depends(require_parent)])
+def apple_login_status() -> dict:
+    """Zustand der Apple-Anmeldung (2FA) samt Protokoll der letzten Zeilen."""
+    state = "idle"
+    status_file = APPLE_LOGIN_DIR / "status"
+    if status_file.exists():
+        try:
+            state = str(json.loads(status_file.read_text(encoding="utf-8")).get("state") or "idle")
+        except (OSError, ValueError):
+            state = "idle"
+    if state not in APPLE_LOGIN_STATES:
+        state = "idle"
+    log = ""
+    log_file = APPLE_LOGIN_DIR / "log"
+    if log_file.exists():
+        try:
+            log = log_file.read_text(encoding="utf-8", errors="replace")[-2000:]
+        except OSError:
+            log = ""
+    return {
+        "state": state,
+        "log": log,
+        "helper": apple_login_helper_running(),
+        "auth_cached": (APPLE_CONFIG_DIR / "auth.json").exists(),
+    }
+
+
+@app.post("/api/v1/parent/apple/login", dependencies=[Depends(require_parent)])
+def apple_login_start() -> dict:
+    """Apple-Anmeldung starten (Helfer im Profil `findmy`)."""
+    if not apple_config_status()["configured"]:
+        raise HTTPException(status_code=400,
+                            detail="Bitte zuerst Apple-ID und Passwort speichern")
+    APPLE_LOGIN_DIR.mkdir(parents=True, exist_ok=True)
+    for name in ("status", "code", "log"):
+        (APPLE_LOGIN_DIR / name).unlink(missing_ok=True)
+    # Startzustand selbst setzen: sonst liest die UI zwischen „Datei gelöscht" und
+    # „Helfer schreibt" ein „idle" und stellt das Nachfragen ein.
+    (APPLE_LOGIN_DIR / "status").write_text(json.dumps({"state": "starting"}), encoding="utf-8")
+    (APPLE_LOGIN_DIR / "start").write_text(now_iso(), encoding="utf-8")
+    return {"started": True, "helper": apple_login_helper_running()}
+
+
+@app.post("/api/v1/parent/apple/login/code", dependencies=[Depends(require_parent)])
+async def apple_login_code(request: Request) -> dict:
+    """SMS-2FA-Code an die laufende Anmeldung übergeben."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    code = str(body.get("code") or "").strip()
+    if not re.fullmatch(r"[0-9]{4,8}", code):
+        raise HTTPException(status_code=400, detail="Bitte den Zahlen-Code aus der SMS angeben")
+    APPLE_LOGIN_DIR.mkdir(parents=True, exist_ok=True)
+    (APPLE_LOGIN_DIR / "code").write_text(code + "\n", encoding="utf-8")
+    return {"submitted": True}
 
 
 @app.get("/ca.crt", response_class=FileResponse)

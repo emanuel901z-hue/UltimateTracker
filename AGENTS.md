@@ -51,7 +51,7 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   (`docs/parent-usability.md`).
 - **Verifikation:** `bash scripts/smoke-test.sh` (29 Gruppen) und
   `cd server/audio-bridge && python -m unittest discover -s tests`
-  (Provider/Auth/**Fusion**/Apple-Config, 67 Tests) müssen grün bleiben; Firmware zusätzlich
+  (Provider/Auth/**Fusion**/Apple-Config/Apple-Login, 71 Tests) müssen grün bleiben; Firmware zusätzlich
   `pio run` + `pio test -e native`.
 - **Sensor-Fusion:** Auswahlregeln (Vertrauen → Frische → Genauigkeit,
   Sprungfilter, Zustandserkennung) liegen in `app/fusion.py` – reine Funktionen,
@@ -64,8 +64,16 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
 - **Apple-Zugangsdaten** schreibt die Eltern-UI (Tab „Geräte" → „Apple Find My
   einrichten"; der Assistenten-Schritt verweist dorthin) nach
   `macless-data/config.ini` (`[Settings] appleid`, `appleid_pass`); vorhandene
-  Werte bleiben erhalten, Rechte 0600. Der Dienst startet danach selbst
+  Werte bleiben erhalten, Rechte 0600, `%` wird als `%%` maskiert (sonst scheitert
+  die `configparser`-Interpolation des Dienstes). Der Dienst startet danach selbst
   (`restart: on-failure`).
+- **Apple-Anmeldung (2FA):** Den SMS-Code fragt das Image per `input()` ab – dafür
+  läuft im Profil `findmy` der Helfer **`apple-login`**
+  (`server/apple-login/watch.py`, host-getestet über `tests/test_apple_login.py`).
+  Er steuert die Anmeldung über Dateien im Volume `macless-data`
+  (`apple-login/{start,code,status,log,heartbeat}`) – die Bridge braucht **keinen**
+  Docker-Zugriff. Endpunkte: `GET/POST /api/v1/parent/apple/login`,
+  `POST …/login/code`. Neuer Helfer-Zustand ⇒ `APPLE_LOGIN_STATES` mitziehen.
 - **Shell-Skripte immer mit LF schreiben** (z. B. `Path.write_bytes` bzw.
   `newline="\n"`); CRLF bricht bash in der WSL mit `$'\r': command not found`.
 - Container-Namen nicht fest verdrahten (parallele Compose-Projekte, Testinstanz);

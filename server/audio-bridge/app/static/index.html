@@ -602,6 +602,29 @@
         <p class="hint">Nach dem Speichern startet der Dienst neu – der Status oben
           aktualisiert sich automatisch. Ist er „läuft ✓", öffnet „Apple Find My" in der
           Dienste-Liste die Oberfläche.</p>
+
+        <h3>Apple-Anmeldung (2FA)</h3>
+        <p class="hint">Der erste Login braucht einen Code per SMS von Apple. Hier
+          starten, Code eingeben – danach läuft alles automatisch.</p>
+        <p class="muted" id="apple-login-state" role="status" aria-live="polite">– wird geladen –</p>
+        <div class="row-tight">
+          <button id="apple-login-start">Anmeldung starten</button>
+          <span class="muted" id="apple-login-msg" role="status" aria-live="polite"></span>
+        </div>
+        <div id="apple-login-code-wrap" hidden>
+          <label for="apple-login-code">Code aus der SMS
+            <input id="apple-login-code" type="text" inputmode="numeric" maxlength="8"
+                   autocomplete="one-time-code" aria-describedby="apple-login-code-error">
+          </label>
+          <p class="field-error" id="apple-login-code-error"></p>
+          <div class="row-tight">
+            <button id="apple-login-send" class="primary">Code senden</button>
+          </div>
+        </div>
+        <details id="apple-login-log-wrap" hidden>
+          <summary>Protokoll anzeigen</summary>
+          <pre id="apple-login-log" class="scroll"></pre>
+        </details>
       </div>
     </section>
 
@@ -1235,6 +1258,79 @@ async function loadApple() {
 $('apple-check').addEventListener('click', async () => {
   $('apple-checked').textContent = 'prüfe …';
   await loadApple();
+});
+
+// --- Apple-Anmeldung (2FA) über den Helfer-Dienst -------------------------
+const APPLE_LOGIN_HINTS = {
+  idle: 'Noch keine Anmeldung gestartet.',
+  starting: 'Anmeldung läuft – Apple schickt gleich eine SMS mit dem Code.',
+  waiting: 'Apple hat eine SMS mit dem Code geschickt – bitte unten eingeben.',
+  verifying: 'Code wird geprüft …',
+  done: 'Anmeldung erfolgreich ✓ Der Dienst startet jetzt.',
+  error: 'Anmeldung fehlgeschlagen – Protokoll unten ansehen.',
+};
+let appleLoginTimer = null;
+function stopAppleLoginPoll() {
+  if (appleLoginTimer) { clearInterval(appleLoginTimer); appleLoginTimer = null; }
+}
+
+async function loadAppleLogin() {
+  const box = $('apple-login-state');
+  if (!box || !state.token) return;
+  let data = null;
+  try {
+    const res = await fetch('/api/v1/parent/apple/login', { headers: headers() });
+    if (!res.ok) { box.textContent = 'Status: ' + errText(res); return; }
+    data = await res.json();
+  } catch (err) {
+    box.textContent = 'Status: ' + err.message;
+    return;
+  }
+  const hint = APPLE_LOGIN_HINTS[data.state] || data.state;
+  box.textContent = hint + (data.helper ? ''
+    : ' (Helfer-Dienst läuft nicht – Compose-Profil „findmy" starten)');
+  $('apple-login-code-wrap').hidden = !(data.state === 'waiting' || data.state === 'starting');
+  $('apple-login-log-wrap').hidden = !data.log;
+  if (data.log) $('apple-login-log').textContent = data.log;
+  if (data.state === 'done') {
+    stopAppleLoginPoll();
+    loadApple();  // Dienst-Status mitziehen
+  } else if (data.state === 'error' || data.state === 'idle') {
+    stopAppleLoginPoll();
+  } else if (!appleLoginTimer) {
+    appleLoginTimer = setInterval(loadAppleLogin, 3000);
+  }
+}
+
+$('apple-login-start').addEventListener('click', async () => {
+  $('apple-login-msg').textContent = 'startet …';
+  $('apple-login-code').value = '';
+  $('apple-login-code-error').textContent = '';
+  $('apple-login-log').textContent = '';
+  $('apple-login-log-wrap').hidden = true;
+  const res = await fetch('/api/v1/parent/apple/login', { method: 'POST', headers: headers() });
+  const data = await res.json().catch(() => ({}));
+  $('apple-login-msg').textContent = res.ok
+    ? (data.helper ? '' : 'Der Helfer-Dienst läuft nicht – Compose-Profil „findmy" starten.')
+    : errText(res, data);
+  await loadAppleLogin();
+});
+
+$('apple-login-send').addEventListener('click', async () => {
+  const code = $('apple-login-code').value.trim();
+  if (!/^[0-9]{4,8}$/.test(code)) {
+    $('apple-login-code-error').textContent = 'Bitte den Zahlen-Code aus der SMS eingeben.';
+    return;
+  }
+  $('apple-login-code-error').textContent = '';
+  const res = await fetch('/api/v1/parent/apple/login/code', {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  const data = await res.json().catch(() => ({}));
+  $('apple-login-msg').textContent = res.ok ? 'Code gesendet.' : errText(res, data);
+  await loadAppleLogin();
 });
 
 // --- Benachrichtigungen (PWA + Web-Push) ---
@@ -1952,6 +2048,7 @@ function showApp(user) {
   loadFirmware();
   loadSetup();
   loadApple();
+  loadAppleLogin();
   followNextParameter();
 }
 
@@ -2106,8 +2203,8 @@ function selectTab(tab, moveFocus = true) {
   if (tab.id === 'tab-einrichtung') loadSetup();
   if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); loadSetup(); }
   if (tab.id === 'tab-karte' && leafletMap) leafletMap.invalidateSize();
-  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); loadApple(); }
-  else stopApplePoll();
+  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); loadApple(); loadAppleLogin(); }
+  else { stopApplePoll(); stopAppleLoginPoll(); }
   if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); loadFirmware(); }
   if (tab.id === 'tab-konto') loadUsers();
 }

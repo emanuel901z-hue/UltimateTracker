@@ -17,7 +17,7 @@ Initialisierung (Keys/Geräteregistrierung) und die Auswertung – plus die Gren
 | Offiziell für DIY? | nein (OpenHaystack) | nein (Community-Tools) |
 | Konto nötig | Apple-ID mit 2FA (**nur SMS-2FA**) | Google-Konto + Chrome (Desktop) |
 | Docker-Gegenstück | `findmy-bridge` (automatisch) + `anisette` + `macless-haystack` (Keys/UI) | `google-findmy-webui` (empfohlen) bzw. `google-findmy` (minimal) |
-| Erst-Setup | **Setup-Assistent** in der Eltern-UI (Apple-ID + Passwort) | interaktiv (Chrome-Login in der WebUI) |
+| Erst-Setup | **Eltern-UI** (Apple-ID + Passwort, dann SMS-Code im Tab „Geräte"; Helfer `apple-login`) | interaktiv (Chrome-Login in der WebUI) |
 | Zuverlässigkeit | wackelig (Apple-Filter) | experimentell |
 | Abdeckung | sehr hoch (iPhone-Dichte) | hoch (Android-Dichte) |
 
@@ -76,18 +76,23 @@ Dienst liest die Datei mit `configparser`-Interpolation und bräche sonst mit
 Statuszeile in **Geräte → „Apple Find My einrichten"** (aktualisiert sich
 automatisch, dazu „Status jetzt prüfen") und der Punkt in der Dienste-Liste.
 
-> **Wichtig – die erste Anmeldung braucht einmalig ein Terminal.** Das Image fragt
-> den **2FA-Code per SMS** über `input()` ab (`register/pypush_gsa_icloud.py`);
-> ohne Terminal endet das im `EOFError` und der Dienst läuft in eine
-> Neustart-Schleife. Die Eingabe in der UI (Apple-ID + Passwort → `config.ini`)
-> ist also nur der erste Teil. Für den SMS-Code einmal
-> `docker compose --profile findmy run --rm macless-haystack` ausführen und
-> Apple-ID, Passwort und Code eingeben – danach liegt `auth.json` im Volume
-> `macless-data` und der Dienst startet von selbst. Alternativ eine fertige
-> `auth.json` übernehmen. Solange das fehlt, meldet die UI
-> „Die Apple-Anmeldung ist noch nicht abgeschlossen" (`auth_cached: false`).
-> Blockt Apple zusätzlich mit **HTTP 503** (`gsa.apple.com`), hilft nur Warten –
-> wiederholtes Neustarten verschärft die Sperre eher.
+> **Erste Anmeldung (2FA) direkt in der UI.** Das Image fragt den SMS-Code über
+> `input()` ab – headless unmöglich. Dafür läuft im Profil `findmy` der kleine
+> Helfer **`apple-login`** (`server/apple-login/watch.py`): Er führt die Anmeldung
+> auf Anforderung aus und reicht den Code nach, den die Eltern-UI entgegennimmt.
+> Gesteuert wird ausschließlich über Dateien im Volume `macless-data` – die Bridge
+> braucht **keinen** Docker-Zugriff.
+>
+> Ablauf in **Geräte → „Apple Find My einrichten" → Apple-Anmeldung (2FA):**
+> Apple-ID/Passwort speichern → „Anmeldung starten" → Code aus der SMS eintragen →
+> „Code senden". Danach liegt `auth.json` im Volume und der Dienst startet von
+> selbst. Das **Protokoll** in der UI zeigt, woran es ggf. hängt.
+>
+> Ohne Helfer (z. B. Profil nicht gestartet) geht es klassisch:
+> `docker compose --profile findmy run --rm macless-haystack` (Apple-ID, Passwort,
+> SMS-Code) – oder eine fertige `auth.json` übernehmen. Blockt Apple mit
+> **HTTP 503** (`gsa.apple.com`), hilft nur Warten – wiederholtes Neustarten
+> verschärft die Sperre eher.
 
 ```bash
 # Alternativ klassisch auf der Kommandozeile:

@@ -193,6 +193,24 @@ services:
     networks:
       - utnet
 
+  apple-login:
+    # Fährt die Apple-Anmeldung (2FA) auf Anforderung und reicht den SMS-Code
+    # nach, den die Eltern-UI entgegennimmt (docs/findmy.md 2c). Steuerung nur
+    # über Dateien im Volume `macless-data` – die Bridge braucht keinen
+    # Docker-Zugriff. Braucht denselben Anisette-Dienst wie der Endpunkt.
+    image: christld/macless-haystack:latest
+    profiles: [findmy]
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - macless-data:/app/endpoint/data
+      - ./apple-login:/app/apple-login:ro
+    entrypoint: ["python", "-u", "/app/apple-login/watch.py"]
+    depends_on:
+      - anisette
+    networks:
+      - utnet
+
   google-findmy-webui:
     # EMPFOHLENER Google-Find-Hub-Weg: Web-UI mit Key-Rotations-Fix (PR #114),
     # Geräte-/Scheduling-Verwaltung, Traccar-Preset und Firmware-Build im Browser.
