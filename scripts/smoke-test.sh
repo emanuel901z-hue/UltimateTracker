@@ -323,6 +323,9 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/_sso/traccar")
 [ "$CODE" = "302" ] && pass "Traccar-Auto-Login leitet ohne Anmeldung um (HTTP 302)" || fail "SSO-Antwort: $CODE"
 
 echo "23) Sensor-Fusion (Beacons + fusionierte Position)"
+# Erst eine Position einspeisen: in einer frischen Umgebung (CI) gibt es sonst
+# nichts zu fusionieren.
+curl -s -X POST -H "X-Auth-Token: $DTOK" -H 'Content-Type: application/json'   -d "{\"device_id\":\"TEST123\",\"battery\":80,\"position\":{\"lat\":48.1372,\"lon\":11.5756,\"hdop\":1.1}}"   "$BASE/api/v1/device/sync" >/dev/null
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/parent/beacons")
 [ "$CODE" = "401" ] && pass "Beacon-Liste ohne Anmeldung gesperrt (HTTP 401)" || fail "Schutz: $CODE"
 BEACONS=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/beacons")
