@@ -26,7 +26,7 @@ allerdings bis zu 24 h gepuffert – also ein *queued* Weckruf, keine Sofortakti
 | Baustein | Status |
 |---|---|
 | OAuth2-Token (`POST /oauth/token`, Basic-Auth mit Client-ID/Secret) | ✅ implementiert, **mit echtem Konto getestet** |
-| `GET /api/v1/parent/sms/status` → SIMs + SMS-Kontingent | ✅ (Konto erreichbar; aktuell 0 SIMs zugeordnet) |
+| `GET /api/v1/parent/sms/status` → SIMs + SMS-Kontingent | ✅ (Konto erreichbar; Zuordnung im 1NCE-Portal) |
 | `POST /api/v1/parent/sms` → MT-SMS an eine SIM (`{iccid, text}`) | ✅ implementiert (noch kein Versand getestet – SIM fehlt) |
 | `GET /api/v1/parent/sms?iccid=…` → MT-/MO-Verlauf | ✅ implementiert |
 | UI-Karte „SMS (1NCE)" (Status + Senden) | ✅ |
