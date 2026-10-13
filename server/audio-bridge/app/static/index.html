@@ -346,21 +346,12 @@
           <p class="hint">Für die Apple-Zusatzortung braucht der Dienst eine Apple-ID.
             <strong>Empfehlung:</strong> einen Zweit-Account verwenden (Apple mag häufige
             Abfragen nicht) – die Zugangsdaten liegen nur lokal in dieser Installation.</p>
-          <label for="s-apple-id">Apple-ID (E-Mail)
-            <input id="s-apple-id" type="text" inputmode="email" autocomplete="off"
-                   placeholder="name@example.com" aria-describedby="s-apple-id-error">
-          </label>
-          <p class="field-error" id="s-apple-id-error"></p>
-          <label for="s-apple-pass">Apple-Passwort
-            <input id="s-apple-pass" type="password" autocomplete="off"
-                   aria-describedby="s-apple-pass-hint">
-          </label>
-          <p class="hint" id="s-apple-pass-hint">Wird nur für die Anmeldung des Dienstes
-            verwendet. Bei Zwei-Faktor-Anmeldung kann der erste Start eine Weile dauern.</p>
+          <p id="setup-apple-state" role="status" aria-live="polite">– wird geprüft –</p>
           <div class="row-tight">
-            <button id="s-apple-save" class="primary">Zugangsdaten speichern</button>
-            <span class="muted" id="s-apple-state" role="status" aria-live="polite"></span>
+            <button id="s-apple-goto">Zugangsdaten eintragen (Tab „Geräte")</button>
           </div>
+          <p class="hint">Das Formular ist jederzeit unter <strong>Geräte → Apple Find My
+            einrichten</strong> erreichbar – auch später für weitere Kinder.</p>
         </div>
 
         <div id="setup-step-fertig" hidden>
@@ -584,6 +575,28 @@
       <div class="card">
         <h2>Find My (Apple / Google)</h2>
         <div id="findmy" class="scroll" tabindex="0" role="region" aria-label="Find-My-Positionen"></div>
+      </div>
+      <div class="card">
+        <h2>Apple Find My einrichten</h2>
+        <p class="hint">Für die Apple-Zusatzortung braucht der Dienst eine Apple-ID.
+          <strong>Empfehlung:</strong> einen Zweit-Account verwenden (Apple mag häufige
+          Abfragen nicht). Die Zugangsdaten liegen nur lokal in dieser Installation.</p>
+        <p class="muted" id="apple-status" role="status" aria-live="polite">– wird geladen –</p>
+        <label for="s-apple-id">Apple-ID (E-Mail)
+          <input id="s-apple-id" type="text" inputmode="email" autocomplete="off"
+                 placeholder="name@example.com" aria-describedby="s-apple-id-error">
+        </label>
+        <p class="field-error" id="s-apple-id-error"></p>
+        <label for="s-apple-pass">Apple-Passwort
+          <input id="s-apple-pass" type="password" autocomplete="off"
+                 aria-describedby="s-apple-pass-hint">
+        </label>
+        <p class="hint" id="s-apple-pass-hint">Wird nur für die Anmeldung des Dienstes
+          verwendet. Bei Zwei-Faktor-Anmeldung kann der erste Start eine Weile dauern.</p>
+        <div class="row-tight">
+          <button id="s-apple-save" class="primary">Zugangsdaten speichern</button>
+          <span class="muted" id="s-apple-state" role="status" aria-live="polite"></span>
+        </div>
       </div>
     </section>
 
@@ -1162,6 +1175,29 @@ async function loadFindMy() {
     list.appendChild(li);
   }
   box.appendChild(list);
+}
+
+// Apple-Find-My-Zugangsdaten: Status im Tab „Geräte" (jederzeit erreichbar,
+// nicht nur im Setup-Assistenten).
+async function loadApple() {
+  const box = $('apple-status');
+  if (!box || !state.token) return;
+  try {
+    const res = await fetch('/api/v1/parent/apple', { headers: headers() });
+    if (!res.ok) { box.textContent = 'Status: ' + errText(res); return; }
+    const data = await res.json();
+    if (!data.configured) {
+      box.textContent = 'Noch keine Apple-ID hinterlegt – ohne sie bleibt die ' +
+        'Apple-Zusatzortung aus.';
+      return;
+    }
+    box.textContent = 'Hinterlegt: ' + data.appleid +
+      (data.service === 'up'
+        ? ' · Dienst läuft ✓'
+        : ' · Dienst noch nicht erreichbar (er startet nach dem Speichern neu).');
+  } catch (err) {
+    box.textContent = 'Status: ' + err.message;
+  }
 }
 
 // --- Benachrichtigungen (PWA + Web-Push) ---
@@ -1876,6 +1912,7 @@ function showApp(user) {
   loadSettings();
   loadFirmware();
   loadSetup();
+  loadApple();
   followNextParameter();
 }
 
@@ -2030,7 +2067,7 @@ function selectTab(tab, moveFocus = true) {
   if (tab.id === 'tab-einrichtung') loadSetup();
   if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); loadSetup(); }
   if (tab.id === 'tab-karte' && leafletMap) leafletMap.invalidateSize();
-  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); }
+  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); loadApple(); }
   if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); loadFirmware(); }
   if (tab.id === 'tab-konto') loadUsers();
 }
@@ -2195,6 +2232,9 @@ async function loadSetup() {
     ? 'Es sind bereits Daten angekommen ✓'
     : 'Noch keine Daten – Knopf am Tracker drücken, dann erneut prüfen.';
   if (setupState.tokens) $('s-token').value = setupState.tokens.device || '';
+  $('setup-apple-state').textContent = setupState.steps.apple
+    ? 'Zugangsdaten sind hinterlegt ✓'
+    : 'Noch keine Apple-ID hinterlegt.';
   if (setupState.steps && setupState.steps.apple && !$('s-apple-state').textContent) {
     $('s-apple-state').textContent = 'Zugangsdaten sind hinterlegt ✓';
   }
@@ -2373,7 +2413,13 @@ $('s-apple-save').addEventListener('click', async () => {
   if (res.ok) {
     $('s-apple-pass').value = '';
     loadSetup();
+    loadApple();
   }
+});
+
+$('s-apple-goto').addEventListener('click', () => {
+  selectTab(document.getElementById('tab-geraete'), false);
+  $('s-apple-id').focus();
 });
 
 $('s-ca-check').addEventListener('click', async () => {

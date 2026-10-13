@@ -61,7 +61,8 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   (`https://<dienst>/?sso=<ticket>`); Tickets erzeugt
   `POST /api/v1/parent/sso/ticket` (120 s, einmalig). Nie nackte `/_sso/…`-URLs
   verlinken – Browser-Caches können dort alte Seiten zeigen.
-- **Apple-Zugangsdaten** schreibt der Setup-Assistent nach
+- **Apple-Zugangsdaten** schreibt die Eltern-UI (Tab „Geräte" → „Apple Find My
+  einrichten"; der Assistenten-Schritt verweist dorthin) nach
   `macless-data/config.ini` (`[Settings] appleid`, `appleid_pass`); vorhandene
   Werte bleiben erhalten, Rechte 0600. Der Dienst startet danach selbst
   (`restart: on-failure`).

@@ -61,8 +61,11 @@ ist empfehlenswert.
 
 ### 2c. macless-haystack-Web-UI (optional, manuelle Sicht)
 
-**Über die Eltern-UI (empfohlen, ohne Terminal):** Setup-Assistent → Schritt
-„Apple Find My" → Apple-ID und Passwort eintragen → speichern. Die Bridge
+**Über die Eltern-UI (empfohlen, ohne Terminal):** Tab **Geräte → „Apple Find My
+einrichten"** → Apple-ID und Passwort eintragen → speichern. (Dieselbe Maske gibt
+es im Setup-Assistenten, Schritt „Apple Find My" – der Schritt verweist auf das
+Formular im Tab „Geräte", damit es auch später für weitere Kinder erreichbar
+bleibt.) Die Bridge
 schreibt damit `data/config.ini` im Volume `macless-data` (die interaktive
 Abfrage des Images entfällt) und der Dienst startet automatisch neu
 (`restart: on-failure`).

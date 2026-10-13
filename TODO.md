@@ -35,8 +35,9 @@ Legende: `[ ]` offen · `[x]` erledigt · `(i)` interaktiv – braucht dein Kont
 - [ ] **(i) Apple-Account bereitlegen** (2FA **per SMS** nötig). Empfehlung:
       Zweit-Account verwenden (keine Testkonten verfügbar, siehe `docs/findmy.md` 4b);
       Ban-Risiko beachten (1 Abfrage/30 min gilt als sicher).
-- [x] Apple-Einrichtung läuft über den **Setup-Assistenten** (Schritt „Apple Find My“)
-      statt interaktiv im Container *(2026-10-13)* – offen: echte Apple-ID eintragen
+- [x] Apple-Einrichtung läuft über die UI statt interaktiv im Container
+      *(2026-10-13)*; das Formular liegt jetzt dauerhaft unter **Geräte → „Apple Find My
+      einrichten"** (der Assistenten-Schritt verweist dorthin) – offen: echte Apple-ID eintragen
 - [ ] **(i) Beacon-Keypair erzeugen** (macless-haystack `generate_keys.py`), privaten
       Key in `server/.env` als `APPLE_BEACON_KEYS=…` eintragen.
 - [ ] **(i) 1NCE-SIM aktivieren**, ICCID + MSISDN aus dem Portal in der Geräte-Registry

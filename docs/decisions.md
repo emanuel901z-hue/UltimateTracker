@@ -174,6 +174,10 @@ Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung �
   im Container ohne Terminal endet das im `EOFError` (Neustart-Schleife).
 - **Folgen:** `PUT /api/v1/parent/apple`; vorhandene Werte bleiben erhalten,
   Rechte 0600; `restart: on-failure` statt Limit 3.
+- **Nachtrag 2026-10-13:** Das Formular liegt dauerhaft im Tab **„Geräte"**
+  („Apple Find My einrichten") und ist damit auch für **bestehende** Geräte
+  erreichbar; der Assistenten-Schritt verweist nur noch dorthin (vorher war das
+  Formular ausschließlich im Assistenten und praktisch unauffindbar).
 
 ## D-009 – 2026-10-11 – Find My optional im Stack (Apple + Google), experimentell
 
