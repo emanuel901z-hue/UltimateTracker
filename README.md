@@ -30,6 +30,9 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
   gehört markiert, dazu ein Neu-Zähler und „alle als gehört markieren"
 - **SMS-Verlauf** (vom Anbieter geladen) im gleichen Chat-Stil, inkl. Zustand
   (PENDING/DELIVERED/FAILED)
+- **Sensor-Fusion**: mehrere Quellen (GNSS, Apple/Google Find My, Funkzelle) werden
+  zu **einer** Position je Kind zusammengeführt – auswählen statt mitteln,
+  Traccar bekommt ein Gerät je Kind ([`docs/fusion.md`](docs/fusion.md))
 - **Optional**: Apple-/Google-Find-My-Anbindung als Zusatzortung (experimentell)
 
 ## Aufbau
@@ -64,6 +67,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/sms.md` | Identitäten (IMEI/MSISDN/ICCID) und SMS-Pfad (1NCE: A2P) |
 | `docs/findmy.md` | Apple/Google Find My: Gegenstücke, Setup, Grenzen (experimentell) |
 | `docs/decisions.md` | Entscheidungsprotokoll (ADR-Kurzform) |
+| `docs/fusion.md` | Sensor-Fusion: Quellen, Regeln, Umsetzung, Optimierungsstufen |
 | `firmware/` | ESP32-S3-Firmware: `lib/tracker_core` (host-getestete Logik) + `src/` (Hardware-Glue) |
 | `server/` | Docker-Stack: Traccar + Audio-Bridge (Eltern-UI/API), Caddy, Provider-Vorlagen |
 | `scripts/` | WSL-Sync, Smoke-Test, Simulator, Backups, Mess-Session, Git-Hook |

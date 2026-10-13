@@ -322,5 +322,27 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Auth-Token: $PTOK" \
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/_sso/traccar")
 [ "$CODE" = "302" ] && pass "Traccar-Auto-Login leitet ohne Anmeldung um (HTTP 302)" || fail "SSO-Antwort: $CODE"
 
+echo "23) Sensor-Fusion (Beacons + fusionierte Position)"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/parent/beacons")
+[ "$CODE" = "401" ] && pass "Beacon-Liste ohne Anmeldung gesperrt (HTTP 401)" || fail "Schutz: $CODE"
+BEACONS=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/beacons")
+echo "$BEACONS" | grep -q '"beacons"' && pass "Beacon-Liste abrufbar" || fail "Beacon-Liste fehlgeschlagen"
+FUSED=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/fused?device_id=TEST123")
+echo "$FUSED" | grep -q '"source"' && pass "Fusionierte Position mit Quelle" || fail "Fusion fehlgeschlagen"
+CHECK=$(printf '%s' "$FUSED" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+problems = []
+for key in ('source', 'latitude', 'longitude', 'trust', 'stale', 'sources'):
+    if key not in data:
+        problems.append(key + ' fehlt')
+if data.get('trust', 0) < 1:
+    problems.append('Vertrauensstufe fehlt')
+print('; '.join(problems))
+")
+[ -z "$CHECK" ] && pass "Fusion liefert Quelle, Vertrauen und Quellenliste" || fail "Fusion: $CHECK"
+MAP=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/map")
+echo "$MAP" | grep -q '"reason"' && pass "Karte nutzt fusionierte Positionen" || fail "Karte ohne Fusion"
+
 echo
 echo "Alle Smoke-Tests bestanden."

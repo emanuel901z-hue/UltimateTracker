@@ -508,6 +508,17 @@
         </form>
       </div>
       <div class="card">
+        <h2>Find-My-Beacons zuordnen</h2>
+        <p class="hint">Beacons (Apple/Google) gehören zu einem Kind. Erst durch die Zuordnung
+          fließen ihre Positionen in die <strong>fusionierte Position</strong> des Kindes –
+          Traccar bekommt weiterhin nur <em>ein</em> Gerät je Kind.</p>
+        <ul id="beacons"><li class="muted">– wird geladen –</li></ul>
+        <div class="row-tight">
+          <button id="beacons-refresh">Liste aktualisieren</button>
+          <span class="muted" id="beacons-state" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="card">
         <h2>Find My (Apple / Google)</h2>
         <div id="findmy" class="scroll" tabindex="0" role="region" aria-label="Find-My-Positionen"></div>
       </div>
@@ -1119,6 +1130,58 @@ function loadLeaflet() {
   });
 }
 
+// --- Sensor-Fusion: Beacons zuordnen --------------------------------------
+async function loadBeacons() {
+  if (!state.token) return;
+  const res = await fetch('/api/v1/parent/beacons', { headers: headers() });
+  if (!res.ok) { $('beacons').innerHTML = '<li class="muted">HTTP ' + res.status + '</li>'; return; }
+  const data = await res.json();
+  const devices = data.devices || [];
+  if (!data.beacons.length) {
+    $('beacons').innerHTML = '<li class="muted">Noch keine Beacons empfangen – ' +
+      'Profil „findmy" starten und Beacons einspeisen (docs/findmy.md).</li>';
+    return;
+  }
+  $('beacons').innerHTML = data.beacons.map((beacon) => {
+    const options = ['<option value="">– nicht zugeordnet –</option>'].concat(
+      devices.map((device) => '<option value="' + device.id + '"' +
+        (beacon.device_id === device.id ? ' selected' : '') + '>' +
+        (device.name || device.id) + '</option>')).join('');
+    return '<li><strong>' + beacon.provider + ' / ' + beacon.beacon_id + '</strong> ' +
+      '<span class="muted">' + beacon.positions + ' Positionen · zuletzt ' +
+      (beacon.last_seen ? fmt(beacon.last_seen) : '–') + '</span>' +
+      '<div class="row-tight"><label for="beacon-' + beacon.beacon_id + '">gehört zu' +
+      ' <select id="beacon-' + beacon.beacon_id + '" data-beacon="' + beacon.beacon_id +
+      '" data-provider="' + beacon.provider + '">' + options + '</select></label>' +
+      '<button class="linkish" data-beacon-save="' + beacon.beacon_id + '">speichern</button></div>' +
+      '</li>';
+  }).join('');
+}
+
+$('beacons-refresh').addEventListener('click', loadBeacons);
+
+document.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!target || !target.dataset || !target.dataset.beaconSave) return;
+  const beaconId = target.dataset.beaconSave;
+  const select = document.querySelector('[data-beacon="' + beaconId + '"]');
+  const payload = {
+    device_id: select ? select.value : '',
+    provider: select ? (select.dataset.provider || '') : '',
+  };
+  fetch('/api/v1/parent/beacons/' + encodeURIComponent(beaconId), {
+    method: 'PUT',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(async (res) => {
+    const data = await res.json().catch(() => ({}));
+    $('beacons-state').textContent = res.ok
+      ? (payload.device_id ? 'zugeordnet zu ' + payload.device_id : 'Zuordnung entfernt')
+      : (data.detail || ('HTTP ' + res.status));
+    loadMap();
+  });
+});
+
 async function loadMap() {
   if (!state.token) return;
   try {
@@ -1141,9 +1204,14 @@ async function loadMap() {
 
   const bounds = [];
   data.trackers.forEach((tracker) => {
+    const accuracy = tracker.accuracy ? ' ±' + Math.round(tracker.accuracy) + ' m' : '';
+    const age = tracker.age_s != null ? ' · ' + Math.round(tracker.age_s / 60) + ' min alt' : '';
+    const stale = tracker.stale ? '<br><em>keine frische Quelle – letzter bekannter Stand</em>' : '';
     L.marker([tracker.latitude, tracker.longitude]).addTo(markerLayer).bindPopup(
       '<strong>' + escapeHtml(tracker.name) + '</strong><br>' +
-      (tracker.battery != null ? Math.round(tracker.battery) + ' % · ' : '') + fmt(tracker.received_at));
+      'Quelle: ' + escapeHtml(tracker.source) + accuracy + age + '<br>' +
+      (tracker.battery != null ? Math.round(tracker.battery) + ' % · ' : '') + fmt(tracker.received_at) +
+      stale);
     bounds.push([tracker.latitude, tracker.longitude]);
   });
   data.beacons.forEach((beacon) => {
@@ -1493,7 +1561,7 @@ function selectTab(tab, moveFocus = true) {
   if (tab.id === 'tab-einrichtung') loadSetup();
   if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); loadSetup(); }
   if (tab.id === 'tab-karte' && leafletMap) leafletMap.invalidateSize();
-  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); }
+  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); }
   if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); }
   if (tab.id === 'tab-konto') loadUsers();
 }
