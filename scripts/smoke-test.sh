@@ -397,5 +397,17 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Auth-Token: $PTOK" -F "versi
 curl -s -X DELETE -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/firmware/9.9.9" | grep -q '"deleted"' \
   && pass "Firmware entfernt" || fail "Entfernen fehlgeschlagen"
 
+echo "27) Kein Verbindungs-Leck (Dateideskriptoren stabil)"
+# Viele Anfragen feuern und prüfen, dass die offenen Dateideskriptoren der
+# Bridge nicht mit jeder Anfrage wachsen (Regression: db() schließt die
+# Verbindung; vorher sammelten sich offene FDs bis zum „disk I/O error").
+for _ in $(seq 1 60); do
+  curl -s -o /dev/null -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/overview"
+  curl -s -o /dev/null -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/devices"
+done
+FDS=$(curl -s "$BASE/healthz" | python3 -c "import json,sys; print(json.load(sys.stdin).get('open_fds') or 0)")
+[ "$FDS" -lt 80 ] && pass "Dateideskriptoren stabil nach 120 Anfragen ($FDS offen)" \
+  || fail "FD-Zahl zu hoch: $FDS (Verbindungs-Leck?)"
+
 echo
 echo "Alle Smoke-Tests bestanden."

@@ -21,7 +21,7 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -113,10 +113,25 @@ FMT_PARENT = ["-c:a", "libmp3lame", "-b:a", "48k", "-ar", "8000", "-ac", "1"]
 # --- Datenbank --------------------------------------------------------------
 
 
-def db() -> sqlite3.Connection:
+@contextmanager
+def db():
+    """Kurzlebige Datenbankverbindung: am Ende committen und **schließen**.
+
+    `with sqlite3.connect(...)` committet nur, schließt aber nicht. Die
+    Verbindungen sammelten sich dadurch an (offene Dateideskriptoren auf
+    `bridge.sqlite3`, inkl. WAL/-shm); nach längerem Betrieb brach SQLite mit
+    „disk I/O error" ab. Deshalb hier ein eigener Kontextmanager.
+    """
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db() -> None:
@@ -1887,6 +1902,18 @@ def ca_certificate() -> Response:
                         filename="ultimatetracker-ca.crt")
 
 
+def open_fd_count() -> int | None:
+    """Offene Dateideskriptoren des Prozesses (Monitoring/Regressionstest).
+
+    Steigt die Zahl mit jeder Anfrage, leckt eine Datenbankverbindung
+    (siehe `db()`); None, wenn `/proc` fehlt (nicht-Linux).
+    """
+    try:
+        return len(os.listdir("/proc/self/fd"))
+    except OSError:
+        return None
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {
@@ -1900,6 +1927,7 @@ def healthz() -> dict:
         "sms_api": bool(sim_provider() and sim_provider().configured()),
         "sms_subscribe": SMS_SUBSCRIBE,
         "users": users_count(),
+        "open_fds": open_fd_count(),
     }
 
 
@@ -2300,6 +2328,7 @@ def setup_status(device_id: str | None = None) -> dict:
     A1). Ohne Angabe bleibt es beim ersten Gerät (Rückwärtskompatibilität).
     """
     wanted = (device_id or "").strip()
+    assignments = beacon_assignments()
     with db() as conn:
         devices = [dict(row) for row in conn.execute(
             "SELECT * FROM devices ORDER BY created_at").fetchall()]
@@ -2319,7 +2348,7 @@ def setup_status(device_id: str | None = None) -> dict:
                 "SELECT COUNT(*) AS n FROM messages WHERE device_id = ?",
                 (device["id"],)).fetchone()["n"]
             # Find-My-Positionen zählen mit, wenn ein Beacon diesem Kind gehört.
-            beacons = [b for b, child in beacon_assignments().items() if child == device["id"]]
+            beacons = [b for b, child in assignments.items() if child == device["id"]]
             device_findmy = 0
             if beacons:
                 placeholders = ",".join("?" for _ in beacons)

@@ -87,6 +87,13 @@ Weitere Tabellen: `devices` (Registry: id=IMEI, name, msisdn, notes),
 `findmy_locations` (provider, beacon_id, lat/lon, accuracy, reported_at, raw) und
 `positions` (Tracker-Positionen inkl. Akkustand für das Status-Dashboard).
 
+**Verbindungen:** Der Zugriff läuft über `db()` in `app/main.py` – ein
+Kontextmanager, der am Ende committet **und schließt**. `with sqlite3.connect(…)`
+committet nur, schließt aber nicht; die Verbindungen sammelten sich dadurch an
+(offene Dateideskriptoren auf `bridge.sqlite3`) und SQLite brach nach längerem
+Betrieb mit „disk I/O error" ab. `/healthz` meldet die offenen Deskriptoren
+(`open_fds`), der Smoke-Test (Gruppe 27) prüft ihre Stabilität.
+
 ### 3.2 Endpunkte
 
 | Methode | Pfad | Auth | Zweck |
