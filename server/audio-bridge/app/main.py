@@ -312,8 +312,10 @@ def cookie_domain(request: Request) -> str | None:
     if COOKIE_DOMAIN:
         return COOKIE_DOMAIN
     host = (request.headers.get("host") or "").split(":")[0]
-    if host.endswith(".localhost"):
-        return "localhost"  # gemeinsame Eltern-Domain aller *.localhost-Sites
+    if host == "localhost" or host.endswith(".localhost"):
+        # Deckt localhost UND *.localhost ab – damit gilt die Anmeldung auch,
+        # wenn die UI über den Direktport geöffnet wurde.
+        return "localhost"
     return None  # Standard: Host-Cookie (reicht bei gleichem Host, anderem Port)
 
 
@@ -1504,8 +1506,12 @@ def sso_traccar(request: Request) -> Response:
     if not (token_ok(parent_token(), token) or session_user(token) is not None):
         entry = os.environ.get("SITE_AUDIO", "") or "audio.localhost"
         host = request.headers.get("host") or entry
-        # Mit Rückkehr-Adresse: nach dem Login in der UI geht es hier automatisch
-        # weiter (kein „HTTP ERROR 401" in neuen Tabs).
+        if request.cookies.get(COOKIE_NAME):
+            # Cookie vorhanden, aber nicht gültig für diesen Host: typischerweise
+            # wurde die UI über den Direktport geöffnet (Cookie gilt dann nur für
+            # "localhost"). Klare Meldung statt Schleife.
+            return RedirectResponse(f"https://{entry}/?sso=failed", status_code=302)
+        # Kein Cookie: zur Anmeldung – mit Rückkehr-Adresse.
         back = urllib.parse.quote(f"https://{host}/_sso/traccar", safe="")
         return RedirectResponse(f"https://{entry}/?next={back}", status_code=302)
 

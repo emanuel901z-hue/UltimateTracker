@@ -179,7 +179,7 @@
   </div>
 
   <div class="card" id="next-box" hidden>
-    <p class="hint">Anmeldung erfolgreich – weiter zum gewünschten Dienst:</p>
+    <p class="hint" id="next-text">Anmeldung erfolgreich – weiter zum gewünschten Dienst:</p>
     <p><a id="next-link" class="button-link" href="#">Weiter</a></p>
   </div>
 
@@ -1695,8 +1695,22 @@ $('s-check').addEventListener('click', async () => {
 // Wird von /_sso/traccar gesetzt, damit ein neuer Tab automatisch weiterläuft.
 // Zugelassen sind nur https-Adressen aus derselben Eltern-Domain.
 function followNextParameter() {
-  const next = new URLSearchParams(location.search).get('next');
-  if (!next) return false;
+  const params = new URLSearchParams(location.search);
+  const next = params.get('next');
+  if (!next) {
+    // Sonderfall: Cookie da, aber für diesen Dienst nicht gültig (Direktzugang)
+    if (params.get('sso') === 'failed') {
+      const box = $('next-box');
+      if (box) {
+        box.hidden = false;
+        $('next-text').textContent = 'Der Auto-Login für diesen Dienst klappt nur, wenn du dich über ' +
+          'die SSO-Adresse anmeldest. Bitte dort anmelden – dann gilt eine Anmeldung für alle Dienste.';
+        $('next-link').href = 'https://' + (setupState && setupState.sso ? setupState.sso.entry : 'audio.localhost') + '/';
+        $('next-link').textContent = 'Zur SSO-Anmeldung';
+      }
+    }
+    return false;
+  }
   try {
     const target = new URL(next);
     // Gemeinsame Eltern-Domain: alles nach dem ersten Label vergleichen
@@ -1705,7 +1719,8 @@ function followNextParameter() {
     const domain = (host) => host.split('.').slice(1).join('.');
     if (target.protocol !== 'https:') return false;
     if (!domain(target.hostname) || domain(target.hostname) !== domain(location.hostname)) return false;
-    // Sichtbarer Weg (echter Klick, funktioniert immer) plus automatischer Versuch.
+    // Bewusst KEIN automatischer Sprung: der Browser blockiert Navigationen ohne
+    // Nutzeraktion, und bei nicht durchgereichtem Cookie entstünde eine Schleife.
     const box = $('next-box');
     const link = $('next-link');
     if (box && link) {
@@ -1713,7 +1728,6 @@ function followNextParameter() {
       link.textContent = 'Weiter zu ' + target.hostname;
       box.hidden = false;
     }
-    setTimeout(() => { location.href = target.toString(); }, 500);
     return true;
   } catch (err) {
     return false;
