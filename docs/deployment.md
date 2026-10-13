@@ -173,6 +173,12 @@ Caddy leitet `/_sso/*` **vor** dem Gate an die Bridge, die auf dem Ziel-Host ein
 **host-only** Sitzungscookie setzt und auf die Wurzel weiterleitet
 (`docs/decisions.md` D-018). Danach lässt `forward_auth` durch.
 
+Antwortet ein Dienst nicht (z. B. weil er noch startet), liefert Caddy auf den
+Dienst-Hosts eine **eigene, verständliche Fehlerseite** (502/503/504, Snippet
+`ut_unavailable_page`) mit Verweis auf die Eltern-UI – statt der nackten
+Browser-Meldung „Diese Seite funktioniert nicht". In der Dienste-Liste bietet
+die UI „öffnen" außerdem **nur bei erreichbaren Diensten** an.
+
 **Automatische Traccar-Anmeldung (Cookie):** Die Eltern-UI verlinkt Traccar auf
 `https://<SITE_TRACCAR>/_sso/traccar`. Caddy leitet diesen Pfad an die Bridge –
 **auf demselben Hostnamen**, deshalb darf die Bridge das Traccar-Sitzungscookie

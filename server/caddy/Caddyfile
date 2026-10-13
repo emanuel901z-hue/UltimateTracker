@@ -24,6 +24,21 @@
 	default_sni {$SITE_LAN:localhost}
 }
 
+# ---------------------------------------------------------------------------
+# Freundliche Fehlerseite, wenn ein Dienst (noch) nicht antwortet – statt der
+# nackten Browser-Meldung „Diese Seite funktioniert nicht / HTTP ERROR 502".
+# Wird per `import` in die Dienst-Blöcke eingebunden.
+# ---------------------------------------------------------------------------
+(ut_unavailable_page) {
+	handle_errors {
+		@unavailable expression {err.status_code} in [502, 503, 504]
+		handle @unavailable {
+			header Content-Type "text/html; charset=utf-8"
+			respond "<!doctype html><html lang='de'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Dienst nicht erreichbar – UltimateTracker</title></head><body style='font:1rem/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:36rem;margin:2rem auto;padding:0 1rem;color:#12171c;background:#f4f6f8'><h1 style='font-size:1.25rem'>Dieser Dienst ist gerade nicht erreichbar</h1><p>Die Oberfläche antwortet nicht. Häufigste Ursachen: der Dienst startet noch, oder die Apple-Anmeldung ist noch nicht abgeschlossen (einmaliger 2FA-Code per SMS).</p><p>Status prüfen und einrichten: <a style='color:#0b57c2' href='https://{$SITE_AUDIO:audio.localhost}/'>Eltern-UI</a> → Tab „Geräte“ → „Apple Find My einrichten“.</p></body></html>" 502
+		}
+	}
+}
+
 {$SITE_AUDIO:audio.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
@@ -40,6 +55,7 @@
 {$SITE_TRACCAR:traccar.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
+	import ut_unavailable_page
 	# Auto-Login zuerst: die Bridge meldet sich mit dem Einmal-Ticket (oder dem
 	# Sitzungscookie) serverseitig an und setzt das Traccar-Sitzungscookie.
 	# SSO über die Wurzel-URL: https://<traccar-host>/?sso=<ticket> → Bridge.
@@ -70,6 +86,7 @@
 {$SITE_FINDMY:findmy.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
+	import ut_unavailable_page
 	# Einmal-Ticket einlösen: setzt das Sitzungscookie host-only und leitet auf
 	# die Wurzel weiter. Muss VOR forward_auth liegen (sonst 401, D-018).
 	handle /_sso/* {
@@ -88,6 +105,7 @@
 {$SITE_APPLE:apple.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
+	import ut_unavailable_page
 	handle /_sso/* {
 		reverse_proxy audio-bridge:8085 {
 			header_down Cache-Control "no-store"

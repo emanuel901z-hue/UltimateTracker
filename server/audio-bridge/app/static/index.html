@@ -1446,6 +1446,8 @@ async function refreshTickets() {
 function serviceLink(service) {
   if (service.internal) return ' <span class="muted">(intern – kein Zugriff nötig)</span>';
   if (!service.port) return '';
+  // Nur erreichbare Dienste verlinken – sonst landet man auf einer Fehlerseite.
+  if (service.status !== 'up') return '';
   const open = ' target="_blank" rel="noopener">öffnen</a>';
   if (service.key === 'traccar') {
     return ' <a class="linkish" data-sso-link="traccar" href="' + serviceUrl(service) + '"' + open;
