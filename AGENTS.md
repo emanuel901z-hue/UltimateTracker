@@ -74,6 +74,11 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   (`apple-login/{start,code,status,log,heartbeat}`) – die Bridge braucht **keinen**
   Docker-Zugriff. Endpunkte: `GET/POST /api/v1/parent/apple/login`,
   `POST …/login/code`. Neuer Helfer-Zustand ⇒ `APPLE_LOGIN_STATES` mitziehen.
+- **Apple-Endpunkt:** `macless-haystack` startet über
+  `server/apple-login/endpoint-start.sh` und **wartet ohne Apple-Zugriffe** auf
+  `auth.json` – sonst liefe es in eine Neustart-Schleife und hielte Apples
+  Drosselung (HTTP 503 / `ec -80045`) am Leben. Fehlt `auth.json`, ist der Dienst
+  bewusst „nicht erreichbar".
 - **Shell-Skripte immer mit LF schreiben** (z. B. `Path.write_bytes` bzw.
   `newline="\n"`); CRLF bricht bash in der WSL mit `$'\r': command not found`.
 - Container-Namen nicht fest verdrahten (parallele Compose-Projekte, Testinstanz);

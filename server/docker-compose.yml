@@ -175,19 +175,20 @@ services:
 
   macless-haystack:
     # Apple-Find-My-Endpoint: Key-Generierung und optionale Web-UI (manuelle Sicht).
-    # Braucht beim ersten Start eine Apple-ID (interaktiv, 2FA) – ohne sie beendet
-    # sich der Dienst; deshalb kein Endlos-Neustart.
+    # Braucht eine Apple-Anmeldung (auth.json) – die holt die Eltern-UI über den
+    # Helfer `apple-login` (2FA). Ohne sie wird hier NICHT neu gestartet, sondern
+    # gewartet: das Image würde sonst bei jedem Start einen Apple-Login versuchen
+    # und Apples Sperre (HTTP 503 / ec -80045) am Leben halten.
     # Kein veröffentlichter Port: erreichbar nur über Caddy (apple.localhost) und
     # damit hinter dem Single Sign-on der Eltern-UI.
     image: christld/macless-haystack:latest
     profiles: [findmy]
-    # on-failure ohne Limit: Der Dienst beendet sich, solange keine Apple-ID
-    # hinterlegt ist, und startet mit Backoff neu – sobald der Setup-Assistent
-    # die Zugangsdaten geschrieben hat, läuft er von selbst an.
-    restart: on-failure
+    restart: unless-stopped
     logging: *default-logging
     volumes:
       - macless-data:/app/endpoint/data
+      - ./apple-login:/app/apple-login:ro
+    entrypoint: ["sh", "/app/apple-login/endpoint-start.sh"]
     depends_on:
       - anisette
     networks:

@@ -91,8 +91,13 @@ automatisch, dazu „Status jetzt prüfen") und der Punkt in der Dienste-Liste.
 > Ohne Helfer (z. B. Profil nicht gestartet) geht es klassisch:
 > `docker compose --profile findmy run --rm macless-haystack` (Apple-ID, Passwort,
 > SMS-Code) – oder eine fertige `auth.json` übernehmen. Blockt Apple mit
-> **HTTP 503** (`gsa.apple.com`), hilft nur Warten – wiederholtes Neustarten
-> verschärft die Sperre eher.
+> **HTTP 503** (`gsa.apple.com`) bzw. `ec -80045` („This action cannot be
+> completed at this time"), hilft nur **Warten**: das ist eine Konto-/IP-Drosselung,
+> kein Fehler in der Einrichtung. Der Endpunkt startet deshalb **nicht** in einer
+> Neustart-Schleife, sondern wartet ohne Apple-Zugriffe auf `auth.json`
+> (`server/apple-login/endpoint-start.sh`) – so kann sich die Sperre wieder lösen.
+> (Der Anisette-Dienst liefert gültige Daten; eine nachgestellte GSA-Anfrage
+> antwortet mit HTTP 200 und obigem `ec`.)
 
 ```bash
 # Alternativ klassisch auf der Kommandozeile:
