@@ -2,6 +2,26 @@
 
 Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung – Folgen.
 
+## D-018 – 2026-10-13 – SSO-Gate: Sitzungscookie per Einmal-Ticket auf dem Ziel-Host
+
+- **Entscheidung:** Dienste hinter dem Eltern-Gate (`findmy.localhost`,
+  `apple.localhost`) öffnen sich über
+  `https://<dienst>/_sso/session?ticket=<ticket>&next=/`. Die Bridge validiert
+  das Einmal-Ticket und setzt **auf dem Ziel-Host** ein **host-only**
+  Sitzungscookie (ohne `Domain`); Caddy leitet `/_sso/*` **vor** `forward_auth`
+  an die Bridge.
+- **Begründung:** Das Sitzungscookie der Eltern-UI wird mit `Domain=localhost`
+  gesetzt – das verwerfen die Browser (RFC 6265 verlangt einen Punkt), deshalb
+  kam von `audio.localhost` nie ein Cookie bei `findmy.localhost`/
+  `apple.localhost` an und `forward_auth` antwortete mit „HTTP ERROR 401"
+  (dasselbe Problem, das D-013 für Traccar gelöst hat). Für die Gate-Dienste
+  fehlte die Ticket-Mechanik.
+- **Folgen:** `/_sso/session` (Bridge, erzeugt aus dem Ticket eine echte
+  Sitzung), `handle /_sso/*` in den Find-My-Blöcken des Caddyfiles,
+  `gate`-Flag in `/api/v1/parent/services` und Ticket-Links in der UI.
+  Smoke-Gruppe 29 prüft 302, host-only-Cookie und `verify=200`.
+  (Apple bleibt bei fehlender Apple-ID ein 502 des Upstreams – nicht mehr 401.)
+
 ## D-017 – 2026-10-13 – Eltern-Tauglichkeit: Mehrkind, Geräteverwaltung, Fehlerbild
 
 - **Entscheidung:** Der Server/UI wird für **nicht-technische Eltern** gehärtet

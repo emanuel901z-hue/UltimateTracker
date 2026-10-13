@@ -70,19 +70,35 @@
 {$SITE_FINDMY:findmy.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
-	forward_auth audio-bridge:8085 {
-		uri /api/v1/auth/verify
+	# Einmal-Ticket einlösen: setzt das Sitzungscookie host-only und leitet auf
+	# die Wurzel weiter. Muss VOR forward_auth liegen (sonst 401, D-018).
+	handle /_sso/* {
+		reverse_proxy audio-bridge:8085 {
+			header_down Cache-Control "no-store"
+		}
 	}
-	reverse_proxy google-findmy-webui:4321
+	handle {
+		forward_auth audio-bridge:8085 {
+			uri /api/v1/auth/verify
+		}
+		reverse_proxy google-findmy-webui:4321
+	}
 }
 
 {$SITE_APPLE:apple.localhost} {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
-	forward_auth audio-bridge:8085 {
-		uri /api/v1/auth/verify
+	handle /_sso/* {
+		reverse_proxy audio-bridge:8085 {
+			header_down Cache-Control "no-store"
+		}
 	}
-	reverse_proxy macless-haystack:6176
+	handle {
+		forward_auth audio-bridge:8085 {
+			uri /api/v1/auth/verify
+		}
+		reverse_proxy macless-haystack:6176
+	}
 }
 
 # ---------------------------------------------------------------------------

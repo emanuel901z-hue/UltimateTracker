@@ -1319,6 +1319,9 @@ def services_overview() -> dict:
             "internal": internal,
             # Traccar meldet sich über den Link automatisch an (Einmal-Ticket).
             "own_login": key in ("google-findmy", "apple-findmy"),
+            # Hinter dem Eltern-Gate (Caddy forward_auth): Link braucht ein
+            # Einmal-Ticket für /_sso/session, sonst HTTP 401 (D-018).
+            "gate": key in ("google-findmy", "apple-findmy"),
             "hint": SERVICE_HINTS.get(key, ""),
         })
 
@@ -1727,13 +1730,16 @@ def parent_overview() -> dict:
 
 
 @app.post("/api/v1/parent/sso/ticket", dependencies=[Depends(require_parent)])
-def sso_ticket() -> dict:
+def sso_ticket(request: Request, x_auth_token: str | None = Header(default=None)) -> dict:
     """Einmal-Ticket für den Dienst-Auto-Login.
 
     Warum nicht einfach das Sitzungscookie? Browser verwerfen `Domain=localhost`
     (die Domain braucht laut RFC einen Punkt), deshalb kommt das Cookie von
     `audio.localhost` nie bei `traccar.localhost` an. Das Ticket umgeht das:
     kurz gültig, einmalig, nur mit gültiger Anmeldung erhältlich.
+
+    Zum Ticket wird – falls vorhanden – der angemeldete Benutzer gemerkt, damit
+    `/_sso/session` daraus eine echte Sitzung erzeugen kann (host-only Cookie).
     """
     now = time.time()
     with db() as conn:
@@ -1741,7 +1747,71 @@ def sso_ticket() -> dict:
                      (now,))
     ticket = secrets.token_urlsafe(24)
     state_set(f"sso_ticket:{ticket}", str(now + 120))
+    user = session_user(session_token(request, x_auth_token))
+    if user:
+        state_set(f"sso_ticket_user:{ticket}", str(user["id"]))
     return {"ticket": ticket, "expires_in": 120}
+
+
+@app.get("/_sso/session")
+def sso_session(request: Request) -> Response:
+    """Sitzungscookie für einen SSO-geschützten Dienst setzen (Einmal-Ticket).
+
+    Caddy schützt `findmy.localhost`/`apple.localhost` mit `forward_auth`; das
+    Sitzungscookie der Eltern-UI erreicht diese Hostnamen aber nicht
+    (`Domain=localhost`, siehe `docs/decisions.md` D-013/D-018). Deshalb wird
+    hier **auf dem Ziel-Host** ein host-only Cookie gesetzt – danach lässt
+    `forward_auth` durch.
+
+    Aufruf: `https://<dienst>/_sso/session?ticket=<ticket>&next=/`
+    """
+    ticket = (request.query_params.get("ticket") or "").strip()
+    next_path = (request.query_params.get("next") or "/").strip() or "/"
+    if not next_path.startswith("/"):
+        next_path = "/"
+    entry = os.environ.get("SITE_AUDIO", "") or "audio.localhost"
+
+    user_id = ""
+    authorized = False
+    if ticket:
+        stored = state_get(f"sso_ticket:{ticket}")
+        if stored and float(stored) > time.time():
+            authorized = True
+            user_id = state_get(f"sso_ticket_user:{ticket}") or ""
+        with db() as conn:
+            conn.execute("DELETE FROM state WHERE key IN (?, ?)",
+                         (f"sso_ticket:{ticket}", f"sso_ticket_user:{ticket}"))
+    if not authorized:
+        token = session_token(request)
+        authorized = token_ok(parent_token(), token) or session_user(token) is not None
+
+    if not authorized:
+        # Kein (gültiges) Ticket: zurück zur Anmeldung der Eltern-UI.
+        return RedirectResponse(f"https://{entry}/", status_code=302)
+
+    if user_id:
+        cookie_value = new_session_token()
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO sessions(token, user_id, created_at, expires_at) VALUES(?, ?, ?, ?)",
+                (cookie_value, int(user_id), now_iso(), session_expiry()),
+            )
+    else:
+        # Anmeldung per API-Token (kein Benutzer): Token selbst als Cookie.
+        cookie_value = parent_token()
+
+    response = RedirectResponse(next_path, status_code=302)
+    # Bewusst OHNE `domain=`: host-only, gilt genau für diesen Hostnamen.
+    response.set_cookie(
+        COOKIE_NAME,
+        cookie_value,
+        max_age=24 * 30 * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=request_is_https(request),
+        path="/",
+    )
+    return response
 
 
 def sso_login_response(request: Request, ticket: str) -> Response:

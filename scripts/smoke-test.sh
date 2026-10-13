@@ -444,5 +444,23 @@ N=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/messages?device_id=TES
   | python3 -c "import json,sys; print(len(json.load(sys.stdin)['messages']))")
 [ "$N" = "1" ] && pass "Anzahl-Filter (limit=1) wirkt" || fail "limit ignoriert ($N Nachrichten)"
 
+echo "29) SSO-Gate: Sitzungscookie über Einmal-Ticket"
+TICKET=$(curl -s -X POST -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/sso/ticket" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['ticket'])")
+RESP=$(curl -s -i "$BASE/_sso/session?ticket=$TICKET&next=/")
+printf '%s' "$RESP" | head -1 | grep -q " 302" && pass "Ticket einlösen -> 302" \
+  || fail "Kein 302: $(printf '%s' "$RESP" | head -1)"
+COOKIE=$(printf '%s' "$RESP" | grep -i '^set-cookie:' | sed -E 's/.*ut_session=([^;]+).*/\1/' | tr -d '\r')
+[ -n "$COOKIE" ] && pass "Sitzungscookie gesetzt" || fail "Kein Set-Cookie"
+# Host-only: kein Domain-Attribut (Domain=localhost verwerfen die Browser, D-018)
+printf '%s' "$RESP" | grep -i '^set-cookie:' | grep -qi "domain=" \
+  && fail "Cookie hat ein Domain-Attribut (host-only erwartet)" \
+  || pass "Cookie ist host-only (kein Domain)"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: ut_session=$COOKIE" \
+  "$BASE/api/v1/auth/verify")
+[ "$CODE" = "200" ] && pass "forward_auth-Prüfung mit Cookie -> 200" || fail "verify: HTTP $CODE"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/_sso/session")
+[ "$CODE" = "302" ] && pass "Ohne Ticket -> 302 zur Anmeldung" || fail "Ohne Ticket: HTTP $CODE"
+
 echo
 echo "Alle Smoke-Tests bestanden."

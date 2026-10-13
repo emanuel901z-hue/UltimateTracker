@@ -1201,7 +1201,7 @@ $('push-enable').addEventListener('click', async () => {
   try {
     const reg = await navigator.serviceWorker.register('/sw.js');
     const keyRes = await fetch('/api/v1/parent/push/key', { headers: headers() });
-    if (!keyRes.ok) { pushStatus('Schlüssel: HTTP ' + keyRes.status); return; }
+    if (!keyRes.ok) { pushStatus('Schlüssel: ' + errText(keyRes)); return; }
     const { key } = await keyRes.json();
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
@@ -1316,23 +1316,30 @@ let nextTarget = '';
 let ticketTimer = null;
 
 // Beide SSO-Links (Dienste-Karte und Rückkehr-Karte) bekommen automatisch ein
-// frisches Einmal-Ticket – ohne Ticket leitet /_sso/traccar nur zur Anmeldung
+// frisches Einmal-Ticket – ohne Ticket leitet /_sso/… nur zur Anmeldung
 // zurück (Cookies über Hosts hinweg verwerfen die Browser).
 async function refreshTickets() {
-  const targets = [];
+  // Links mit "?sso=<ticket>" (Traccar & Rückkehr-Karte) …
+  const queryTargets = [];
   const nextLink = $('next-link');
-  if (nextLink && nextTarget && !$('next-box').hidden) targets.push([nextLink, nextTarget]);
+  if (nextLink && nextTarget && !$('next-box').hidden) queryTargets.push([nextLink, nextTarget]);
   const traccar = lastServices.find((item) => item.key === 'traccar');
   if (traccar && traccar.site_host) {
     // Wurzel-URL mit sso-Parameter: das ist Traccars echte SPA-Route (kein
     // „No routes matched" und kein Cache-Problem mit unbekannten Pfaden).
     const base = 'https://' + traccar.site_host + '/';
-    const serviceLink = document.querySelector('[data-sso-link]');
-    if (serviceLink) targets.push([serviceLink, base]);
+    const serviceLink = document.querySelector('[data-sso-link="traccar"]');
+    if (serviceLink) queryTargets.push([serviceLink, base]);
     const mapLink = $('map-link');
-    if (mapLink) targets.push([mapLink, base]);
+    if (mapLink) queryTargets.push([mapLink, base]);
   }
-  for (const [link, base] of targets) {
+  // … und Dienste hinter dem Eltern-Gate: dort wird das Sitzungscookie auf dem
+  // Ziel-Host gesetzt (/_sso/session), sonst antwortet Caddy mit 401 (D-018).
+  const gateTargets = Array.from(document.querySelectorAll('[data-sso-gate]'))
+    .map((link) => [link, link.dataset.ssoGate]);
+
+  const total = queryTargets.length + gateTargets.length;
+  for (const [link, base] of queryTargets) {
     try {
       const res = await fetch('/api/v1/parent/sso/ticket', { method: 'POST', headers: headers() });
       const data = await res.json();
@@ -1341,12 +1348,40 @@ async function refreshTickets() {
       /* ohne Ticket greift der Rückkehr-Weg */
     }
   }
-  if (targets.length && !ticketTimer) {
+  for (const [link, host] of gateTargets) {
+    try {
+      const res = await fetch('/api/v1/parent/sso/ticket', { method: 'POST', headers: headers() });
+      const data = await res.json();
+      if (data.ticket) {
+        link.href = 'https://' + host + '/_sso/session?ticket=' +
+          encodeURIComponent(data.ticket) + '&next=/';
+      }
+    } catch (err) {
+      /* ohne Ticket leitet /_sso/session zur Anmeldung */
+    }
+  }
+  if (total && !ticketTimer) {
     ticketTimer = setInterval(refreshTickets, 30000);  // Tickets sind 120 s gültig
-  } else if (!targets.length && ticketTimer) {
+  } else if (!total && ticketTimer) {
     clearInterval(ticketTimer);
     ticketTimer = null;
   }
+}
+
+// "öffnen"-Link je Dienst: Traccar per ?sso=, Dienste hinter dem Gate per
+// /_sso/session (Ticket setzt refreshTickets ein).
+function serviceLink(service) {
+  if (service.internal) return ' <span class="muted">(intern – kein Zugriff nötig)</span>';
+  if (!service.port) return '';
+  const open = ' target="_blank" rel="noopener">öffnen</a>';
+  if (service.key === 'traccar') {
+    return ' <a class="linkish" data-sso-link="traccar" href="' + serviceUrl(service) + '"' + open;
+  }
+  if (service.gate && service.site_host) {
+    return ' <a class="linkish" data-sso-gate="' + service.site_host + '" href="https://' +
+      service.site_host + '/_sso/session?next=/"' + open;
+  }
+  return ' <a class="linkish" href="' + serviceUrl(service) + '"' + open;
 }
 
 async function loadServices() {
@@ -1374,15 +1409,7 @@ async function loadServices() {
       const cls = statusClass(service.status);
       const label = statusLabel(service.status);
       // Interne Dienste haben keinen Port – also keinen (toten) Link anbieten.
-      const link = service.internal
-        ? ' <span class="muted">(intern – kein Zugriff nötig)</span>'
-        : (service.port
-            ? (service.key === 'traccar'
-                ? ' <a class="linkish" data-sso-link="traccar" href="' + serviceUrl(service) +
-                  '" target="_blank" rel="noopener">öffnen</a>'
-                : ' <a class="linkish" href="' + serviceUrl(service) +
-                  '" target="_blank" rel="noopener">öffnen</a>')
-            : '');
+      const link = serviceLink(service);
       const own = service.own_login ? ' <span class="muted">(eigene Anmeldung im Dienst)</span>' : '';
       const hint = service.hint && service.status !== 'up'
         ? ' <span class="muted">· ' + service.hint + '</span>' : '';

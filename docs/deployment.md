@@ -149,8 +149,8 @@ durch.
 | Eltern-UI/API | Benutzerkonto (PBKDF2 + Sitzungstoken) | – |
 | Karte in der UI | läuft über die Bridge (`/api/v1/parent/map`) | **keine** ✓ |
 | Traccar (Verlauf, Geofences, Berichte) | **Traccars eigenes Konto** – der bequeme Weg ist „öffnen" (Einmal-Ticket, automatische Anmeldung) | automatisch per Ticket ✓ |
-| Google-Find-Hub-WebUI | über die Bridge-Session (Caddy `forward_auth`) | **keine** ✓ |
-| Apple (macless-haystack) | über die Bridge-Session (Caddy `forward_auth`) | **keine** ✓ |
+| Google-Find-Hub-WebUI | über die Bridge-Session (Caddy `forward_auth`); „öffnen" löst ein Einmal-Ticket ein | **keine** ✓ |
+| Apple (macless-haystack) | über die Bridge-Session (Caddy `forward_auth`); „öffnen" löst ein Einmal-Ticket ein | **keine** ✓ |
 
 **Warum Traccar kein `forward_auth` mehr hat:** Browser verwerfen Cookies mit
 `Domain=localhost` (RFC 6265 verlangt einen Punkt in der Domain). Ein Gate auf
@@ -165,9 +165,13 @@ Oberfläche zeigt dann „Registriere dein erstes Gerät", obwohl die Geräte
 existieren. Die Bridge ordnet deshalb nach jedem Weiterleiten alle bekannten
 Geräte dem Konto zu (über `?all=true`, höchstens alle 10 Minuten, idempotent).
 
-Die **Find-My-Oberflächen** haben kein eigenes Konto und bleiben daher hinter
-dem `forward_auth`-Gate (erreichbar mit dem Sitzungscookie, also beim Zugang
-über `https://audio.localhost`).
+**Gate-Dienste (Google/Apple):** Sie haben kein eigenes Konto und bleiben hinter
+dem `forward_auth`-Gate. Das Sitzungscookie der Eltern-UI erreicht sie aber
+nicht (`Domain=localhost`, siehe oben) – ein direkter Aufruf endete deshalb in
+„HTTP ERROR 401". Deshalb löst „öffnen" auch hier ein **Einmal-Ticket** ein:
+Caddy leitet `/_sso/*` **vor** dem Gate an die Bridge, die auf dem Ziel-Host ein
+**host-only** Sitzungscookie setzt und auf die Wurzel weiterleitet
+(`docs/decisions.md` D-018). Danach lässt `forward_auth` durch.
 
 **Automatische Traccar-Anmeldung (Cookie):** Die Eltern-UI verlinkt Traccar auf
 `https://<SITE_TRACCAR>/_sso/traccar`. Caddy leitet diesen Pfad an die Bridge –
@@ -180,9 +184,10 @@ aus `server/.env` an (Werte stehen in `ADMIN-ZUGANG.txt`) und gibt das
 **Keine zweite Anmeldung bei Google/Apple:** Die Find-My-Oberflächen
 veröffentlichen keine Ports mehr und laufen ohne eigene Basic-Auth – sie
 sind ausschließlich über Caddy und damit hinter dem SSO der Eltern-UI
-erreichbar. Es gibt also nichts zu konfigurieren: **ein Login, alle
-Dienste** ✓. (Nur wer die Dienste bewusst direkt veröffentlicht, setzt in
-`server/.env` wieder `WEBUI_USER`/`WEBUI_PASSWORD`.)
+erreichbar (beim „öffnen"-Klick wird ein Einmal-Ticket eingelöst). Es gibt
+also nichts zu konfigurieren: **ein Login, alle Dienste** ✓. (Nur wer die
+Dienste bewusst direkt veröffentlicht, setzt in `server/.env` wieder
+`WEBUI_USER`/`WEBUI_PASSWORD`.)
 
 **Warum die Karte nicht mehr eingebettet wird:** Traccar verlangt sein eigenes
 Konto, und in einem iframe hält diese Sitzung wegen der Third-Party-Cookie-

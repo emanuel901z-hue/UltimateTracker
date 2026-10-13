@@ -49,7 +49,7 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   Status ist **pro Kind** (`?device_id=<IMEI>`; ohne Parameter das erste Gerät) –
   „SIM", „Funktionstest" und „done" beziehen sich auf genau dieses Gerät
   (`docs/parent-usability.md`).
-- **Verifikation:** `bash scripts/smoke-test.sh` (28 Gruppen) und
+- **Verifikation:** `bash scripts/smoke-test.sh` (29 Gruppen) und
   `cd server/audio-bridge && python -m unittest discover -s tests`
   (Provider/Auth/**Fusion**, 59 Tests) müssen grün bleiben; Firmware zusätzlich
   `pio run` + `pio test -e native`.
