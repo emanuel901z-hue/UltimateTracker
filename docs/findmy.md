@@ -92,11 +92,12 @@ automatisch, dazu „Status jetzt prüfen") und der Punkt in der Dienste-Liste.
 > `docker compose --profile findmy run --rm macless-haystack` (Apple-ID, Passwort,
 > SMS-Code) – oder eine fertige `auth.json` übernehmen. Blockt Apple mit
 > **HTTP 503** (`gsa.apple.com`) bzw. `ec -80045` („This action cannot be
-> completed at this time"), hilft nur **Warten**: das ist eine Konto-/IP-Drosselung,
-> kein Fehler in der Einrichtung. Konto prüfen/bestätigen (und ggf. Zahlungs-/
-> Kontodaten ergänzen, Stichwort „account score"): <https://account.apple.com> –
-> die frühere Adresse `appleid.apple.com` leitet dorthin um (Apple ID heißt seit
-> iOS 18 „Apple Account"; `appleid.apple.com` bleibt nur die OIDC-Domain).
+> completed at this time"), ist das eine Einschränkung des **Apple-Kontos** (siehe
+> Liste unten) – kein Fehler in der Einrichtung. Konto prüfen/bestätigen (und ggf.
+> Zahlungs-/Kontodaten ergänzen, Stichwort „account score"):
+> <https://account.apple.com> – die frühere Adresse `appleid.apple.com` leitet
+> dorthin um (Apple ID heißt seit iOS 18 „Apple Account"; `appleid.apple.com`
+> bleibt nur die OIDC-Domain).
 > Der Endpunkt startet deshalb **nicht** in einer
 > Neustart-Schleife, sondern wartet ohne Apple-Zugriffe auf `auth.json`
 > (`server/apple-login/endpoint-start.sh`) – so kann sich die Sperre wieder lösen.
@@ -113,9 +114,25 @@ docker compose up -d macless-haystack
 
 Auswertung: Web-Frontend <https://dchristl.github.io/macless-haystack/>
 (Endpunkt `http://<host>:6176`, `*_devices.json` importieren). Vor dem Exponieren
-per `config.ini` (`endpoint_user`/`endpoint_pass`) absichern. FAQ-Hinweise: neue
-Apple-IDs brauchen ggf. Zahlungsmethode/Daten; zu viele Geräte im Account stören
-den Login.
+per `config.ini` (`endpoint_user`/`endpoint_pass`) absichern.
+
+**Wenn Apple die Anmeldung ablehnt** (`ec -80045` / „This action cannot be
+completed at this time", teils HTTP 503): Das ist laut
+[FAQ des Projekts](https://github.com/dchristl/macless-haystack/blob/main/FAQ.md)
+eine Einschränkung des **Apple-Kontos** („account score") – nicht der Einrichtung.
+Ein Browser-Login auf `account.apple.com` kann trotzdem klappen. Typische Ursachen
+und Abhilfen, in dieser Reihenfolge:
+
+1. **Geräteliste aufräumen:** Jeder Anmeldeversuch legt im Konto ein neues Gerät
+   an (`MacBookPro13,2`). Zu viele davon blockieren den Login →
+   <https://account.apple.com> → Geräte entfernen, dann erneut versuchen.
+2. **Einmal an einem echten Apple-Gerät anmelden** (iPhone/iPad/Mac) – danach gilt
+   das Konto als „vertrauenswürdiger" (mehrfach bestätigter Fix in den Issues).
+3. **Kontodaten vervollständigen** (Zahlungsmethode/Adresse) – hebt den „score".
+4. **Anderes Apple-Konto probieren:** „manche Konten funktionieren, andere nicht,
+   warum weiß nur Apple".
+5. Alternativ eine passende `auth.json` von einem anderen Rechner/Tool übernehmen –
+   liegt sie im Volume, überspringt der Endpunkt die Registrierung.
 
 ### 2d. Verworfene Alternativen (geprüft)
 
