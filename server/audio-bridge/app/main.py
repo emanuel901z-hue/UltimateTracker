@@ -1577,6 +1577,27 @@ def sso_traccar(request: Request) -> Response:
     return redirect
 
 
+CA_FILE = Path(os.environ.get("CADDY_CA_FILE", "/caddy-data/caddy/pki/authorities/local/root.crt"))
+
+
+@app.get("/ca.crt", response_class=FileResponse)
+def ca_certificate() -> Response:
+    """Root-Zertifikat der Caddy-CA zum Installieren auf den Geräten.
+
+    Bewusst ohne Anmeldung und über HTTP erreichbar: Solange das Zertifikat
+    nicht installiert ist, zeigt der Browser für HTTPS eine Warnung – der
+    Download muss also ohne vertrauenswürdiges TLS funktionieren. Das Zertifikat
+    selbst ist öffentlich (der private Schlüssel bleibt in Caddy).
+    """
+    if not CA_FILE.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Kein CA-Zertifikat gefunden – läuft Caddy? (docker compose --profile tls up -d)",
+        )
+    return FileResponse(CA_FILE, media_type="application/x-x509-ca-cert",
+                        filename="ultimatetracker-ca.crt")
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {
@@ -1990,6 +2011,8 @@ def setup_status() -> dict:
             "sim": any(device.get("iccid") for device in devices),
             "traccar": probe_http("traccar", 8082, "/api/server") == "up",
             "benachrichtigungen": push_subscription_count() > 0,
+            # Zertifikat: nur relevant, wenn Caddy läuft (dann gibt es /ca.crt)
+            "zertifikat": caddy_available() and CA_FILE.exists(),
             "funktionstest": bool(positions or messages or findmy),
         },
         "device": devices[0] if devices else None,

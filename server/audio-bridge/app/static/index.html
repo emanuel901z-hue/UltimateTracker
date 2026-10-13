@@ -298,6 +298,36 @@
             erneut versuchen. Ohne Netz sucht der Tracker selbstständig weiter.</p>
         </div>
 
+        <div id="setup-step-zertifikat" hidden>
+          <h3>6 · Zertifikat einrichten (optional)</h3>
+          <p class="hint">Damit HTTPS ohne Warnung funktioniert (und Push-Benachrichtigungen
+            erlaubt sind), muss das Zertifikat dieser Installation einmal auf jedem Gerät
+            installiert werden. Der Browser darf das aus Sicherheitsgründen nicht selbst –
+            aber der Rest geht hier:</p>
+          <p><a class="button-link" href="/ca.crt" download>Zertifikat herunterladen</a></p>
+          <p class="hint" id="setup-ca-state" role="status" aria-live="polite"></p>
+          <details>
+            <summary>Anleitung je Gerät</summary>
+            <ul>
+              <li><strong>Windows:</strong> heruntergeladene Datei doppelklicken →
+                „Zertifikat installieren" → <em>Lokaler Computer</em> → „Alle Zertifikate
+                in folgendem Speicher ablegen" → <em>Vertrauenswürdige
+                Stammzertifizierungsstellen</em> → Fertig → Browser neu starten.</li>
+              <li><strong>Android:</strong> Datei öffnen → „CA-Zertifikat" → installieren
+                (Einstellungen → Sicherheit → Verschlüsselung → Zertifikat installieren).</li>
+              <li><strong>iPhone/iPad:</strong> Datei öffnen → Profil laden →
+                Einstellungen → Allgemein → Info → Zertifikatsvertrauenseinstellungen →
+                „Immer vertrauen".</li>
+            </ul>
+            <p class="hint">Im Internet-Betrieb mit echter Domain (Let's Encrypt) ist
+              dieser Schritt <strong>nicht</strong> nötig – dann ist das Zertifikat
+              automatisch vertrauenswürdig.</p>
+          </details>
+          <div class="row-tight">
+            <button id="s-ca-check">Vertrauen prüfen</button>
+          </div>
+        </div>
+
         <div id="setup-step-fertig" hidden>
           <h3>Fertig 🎉</h3>
           <p id="setup-summary"></p>
@@ -493,6 +523,13 @@
           <button id="backup">Backup herunterladen</button>
         </div>
         <p class="hint">Das Backup enthält Audio, Datenbank und Ereignislog als tar.gz.</p>
+      </div>
+      <div class="card">
+        <h2>Zertifikat</h2>
+        <p class="hint">Für HTTPS ohne Browser-Warnung (und Push-Benachrichtigungen) muss das
+          Zertifikat einmal je Gerät installiert werden – Anleitung im Tab „Einrichtung",
+          Schritt „Zertifikat einrichten".</p>
+        <p><a class="button-link" href="/ca.crt" download>Zertifikat herunterladen</a></p>
       </div>
       <div class="card">
         <h2>Einstellungen</h2>
@@ -1575,13 +1612,13 @@ $('sms-text').addEventListener('input', updateSmsCounter);
 
 // --- Setup-Assistent (Eltern durch die Geräte-Einführung führen) ------------
 const SETUP_STEPS = ['willkommen', 'geraet', 'sim', 'traccar', 'benachrichtigungen',
-  'funktionstest', 'fertig'];
+  'zertifikat', 'funktionstest', 'fertig'];
 const SETUP_TITLES = {
   willkommen: 'Willkommen', geraet: 'Tracker anlegen', sim: 'SIM eintragen',
   traccar: 'Karte prüfen', benachrichtigungen: 'Benachrichtigungen',
-  funktionstest: 'Funktionstest', fertig: 'Fertig',
+  zertifikat: 'Zertifikat einrichten', funktionstest: 'Funktionstest', fertig: 'Fertig',
 };
-const SETUP_OPTIONAL = new Set(['sim', 'traccar', 'benachrichtigungen', 'funktionstest']);
+const SETUP_OPTIONAL = new Set(['sim', 'traccar', 'benachrichtigungen', 'zertifikat', 'funktionstest']);
 let setupIndex = 0;
 let setupState = null;
 
@@ -1720,6 +1757,20 @@ $('s-sim-save').addEventListener('click', async () => {
   if (res.ok) {
     await loadSetup();
     showSetupStep(setupIndex + 1);
+  }
+});
+
+$('s-ca-check').addEventListener('click', async () => {
+  $('setup-ca-state').textContent = 'prüfe …';
+  try {
+    // Über HTTPS erreichbar = Zertifikat ist vertraut
+    const res = await fetch('https://' + location.hostname + '/healthz', { cache: 'no-store' });
+    $('setup-ca-state').textContent = res.ok
+      ? 'Das Zertifikat ist auf diesem Gerät installiert ✓'
+      : 'Noch nicht installiert (HTTP ' + res.status + ') – Anleitung oben befolgen.';
+  } catch (err) {
+    $('setup-ca-state').textContent = 'Noch nicht installiert – Anleitung oben befolgen ' +
+      '(die Seite muss dafür über HTTPS geöffnet sein).';
   }
 });
 

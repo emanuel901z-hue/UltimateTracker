@@ -244,8 +244,13 @@ Damit sind alle Oberflächen unter **einem** TLS-Frontdoor erreichbar:
 | `apple.localhost` | Apple-Oberfläche (macless-haystack, Profil `findmy`) |
 
 **LAN-Betrieb (Default, `TLS_ARG=internal`):** Caddy erzeugt eine eigene CA.
-Einmalig das Root-Zertifikat exportieren und auf den Geräten (Handys der Eltern!)
-installieren und als vertrauenswürdig markieren:
+Das Root-Zertifikat gibt es **in der UI** zum Herunterladen – Tab „Betrieb" →
+Karte „Zertifikat" oder im Setup-Assistenten (Schritt „Zertifikat einrichten"),
+mit Anleitung für Windows/Android/iOS. Der Download läuft bewusst über HTTP und
+ohne Anmeldung (`GET /ca.crt`), weil er ja gerade dann nötig ist, wenn HTTPS
+noch eine Warnung zeigt.
+
+Für Skripte/Server ohne Browser geht es weiterhin klassisch:
 
 ```bash
 docker compose --profile tls exec caddy cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
