@@ -328,6 +328,28 @@
           </div>
         </div>
 
+        <div id="setup-step-apple" hidden>
+          <h3>7 · Apple Find My (optional)</h3>
+          <p class="hint">Für die Apple-Zusatzortung braucht der Dienst eine Apple-ID.
+            <strong>Empfehlung:</strong> einen Zweit-Account verwenden (Apple mag häufige
+            Abfragen nicht) – die Zugangsdaten liegen nur lokal in dieser Installation.</p>
+          <label for="s-apple-id">Apple-ID (E-Mail)
+            <input id="s-apple-id" type="text" inputmode="email" autocomplete="off"
+                   placeholder="name@example.com" aria-describedby="s-apple-id-error">
+          </label>
+          <p class="field-error" id="s-apple-id-error"></p>
+          <label for="s-apple-pass">Apple-Passwort
+            <input id="s-apple-pass" type="password" autocomplete="off"
+                   aria-describedby="s-apple-pass-hint">
+          </label>
+          <p class="hint" id="s-apple-pass-hint">Wird nur für die Anmeldung des Dienstes
+            verwendet. Bei Zwei-Faktor-Anmeldung kann der erste Start eine Weile dauern.</p>
+          <div class="row-tight">
+            <button id="s-apple-save" class="primary">Zugangsdaten speichern</button>
+            <span class="muted" id="s-apple-state" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+
         <div id="setup-step-fertig" hidden>
           <h3>Fertig 🎉</h3>
           <p id="setup-summary"></p>
@@ -1700,13 +1722,15 @@ $('sms-text').addEventListener('input', updateSmsCounter);
 
 // --- Setup-Assistent (Eltern durch die Geräte-Einführung führen) ------------
 const SETUP_STEPS = ['willkommen', 'geraet', 'sim', 'traccar', 'benachrichtigungen',
-  'zertifikat', 'funktionstest', 'fertig'];
+  'zertifikat', 'apple', 'funktionstest', 'fertig'];
 const SETUP_TITLES = {
   willkommen: 'Willkommen', geraet: 'Tracker anlegen', sim: 'SIM eintragen',
   traccar: 'Karte prüfen', benachrichtigungen: 'Benachrichtigungen',
-  zertifikat: 'Zertifikat einrichten', funktionstest: 'Funktionstest', fertig: 'Fertig',
+  zertifikat: 'Zertifikat einrichten', apple: 'Apple Find My',
+  funktionstest: 'Funktionstest', fertig: 'Fertig',
 };
-const SETUP_OPTIONAL = new Set(['sim', 'traccar', 'benachrichtigungen', 'zertifikat', 'funktionstest']);
+const SETUP_OPTIONAL = new Set(['sim', 'traccar', 'benachrichtigungen', 'zertifikat',
+  'apple', 'funktionstest']);
 let setupIndex = 0;
 let setupState = null;
 
@@ -1731,6 +1755,9 @@ async function loadSetup() {
     ? 'Es sind bereits Daten angekommen ✓'
     : 'Noch keine Daten – Knopf am Tracker drücken, dann erneut prüfen.';
   if (setupState.tokens) $('s-token').value = setupState.tokens.device || '';
+  if (setupState.steps && setupState.steps.apple && !$('s-apple-state').textContent) {
+    $('s-apple-state').textContent = 'Zugangsdaten sind hinterlegt ✓';
+  }
   const traccar = setupState.traccar || {};
   $('setup-traccar-creds').textContent = traccar.email
     ? 'Zugang: ' + traccar.email + ' · Passwort: ' + traccar.password +
@@ -1845,6 +1872,34 @@ $('s-sim-save').addEventListener('click', async () => {
   if (res.ok) {
     await loadSetup();
     showSetupStep(setupIndex + 1);
+  }
+});
+
+$('s-apple-save').addEventListener('click', async () => {
+  const appleid = $('s-apple-id').value.trim();
+  const password = $('s-apple-pass').value;
+  if (!appleid || appleid.indexOf('@') < 0) {
+    $('s-apple-id-error').textContent = 'Bitte die Apple-ID als E-Mail-Adresse angeben.';
+    return;
+  }
+  if (!password) {
+    $('s-apple-state').textContent = 'Bitte das Apple-Passwort angeben.';
+    return;
+  }
+  $('s-apple-id-error').textContent = '';
+  $('s-apple-state').textContent = 'wird gespeichert …';
+  const res = await fetch('/api/v1/parent/apple', {
+    method: 'PUT',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ appleid, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  $('s-apple-state').textContent = res.ok
+    ? (data.hint || 'gespeichert ✓')
+    : (data.detail || ('HTTP ' + res.status));
+  if (res.ok) {
+    $('s-apple-pass').value = '';
+    loadSetup();
   }
 });
 

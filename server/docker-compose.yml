@@ -80,6 +80,9 @@ services:
       - ./sim-providers:/etc/ut/providers:ro
       # Root-Zertifikat der Caddy-CA zum Herunterladen (Eltern-UI → „Zertifikat einrichten")
       - caddy-data:/caddy-data:ro
+      # Apple-Zugangsdaten (config.ini für macless-haystack) schreiben –
+      # der Setup-Assistent übernimmt damit die interaktive Erst-Einrichtung.
+      - macless-data:/macless-data
     depends_on:
       - traccar
     healthcheck:
@@ -178,7 +181,10 @@ services:
     # damit hinter dem Single Sign-on der Eltern-UI.
     image: christld/macless-haystack:latest
     profiles: [findmy]
-    restart: on-failure:3
+    # on-failure ohne Limit: Der Dienst beendet sich, solange keine Apple-ID
+    # hinterlegt ist, und startet mit Backoff neu – sobald der Setup-Assistent
+    # die Zugangsdaten geschrieben hat, läuft er von selbst an.
+    restart: on-failure
     logging: *default-logging
     volumes:
       - macless-data:/app/endpoint/data

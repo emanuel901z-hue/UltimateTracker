@@ -61,9 +61,15 @@ ist empfehlenswert.
 
 ### 2c. macless-haystack-Web-UI (optional, manuelle Sicht)
 
+**Über die Eltern-UI (empfohlen, ohne Terminal):** Setup-Assistent → Schritt
+„Apple Find My" → Apple-ID und Passwort eintragen → speichern. Die Bridge
+schreibt damit `data/config.ini` im Volume `macless-data` (die interaktive
+Abfrage des Images entfällt) und der Dienst startet automatisch neu
+(`restart: on-failure`).
+
 ```bash
+# Alternativ klassisch auf der Kommandozeile:
 docker compose --profile findmy up -d macless-haystack
-# Erst-Registrierung (falls noch nicht geschehen):
 docker compose stop macless-haystack
 docker compose run --rm macless-haystack    # Apple-ID, Passwort, SMS-2FA
 docker compose up -d macless-haystack

@@ -7,6 +7,7 @@ Konfiguration über Umgebungsvariablen (siehe server/.env.example).
 from __future__ import annotations
 
 import asyncio
+import configparser
 import hashlib
 import json
 import os
@@ -1766,6 +1767,78 @@ def sso_traccar(request: Request) -> Response:
 
 
 CA_FILE = Path(os.environ.get("CADDY_CA_FILE", "/caddy-data/caddy/pki/authorities/local/root.crt"))
+# Verzeichnis der macless-haystack-Daten (Volume) – dort liegt config.ini
+APPLE_CONFIG_DIR = Path(os.environ.get("APPLE_CONFIG_DIR", "/macless-data"))
+
+
+def apple_config_status() -> dict:
+    """Ist für macless-haystack eine Apple-ID hinterlegt?"""
+    path = APPLE_CONFIG_DIR / "config.ini"
+    if not path.exists():
+        return {"configured": False, "path": str(path), "appleid": ""}
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(path)
+        appleid = parser.get("Settings", "appleid", fallback="") if parser.has_section("Settings") else ""
+    except Exception:
+        appleid = ""
+    return {"configured": bool(appleid), "path": str(path), "appleid": appleid}
+
+
+@app.get("/api/v1/parent/apple", dependencies=[Depends(require_parent)])
+def apple_status() -> dict:
+    """Apple-Find-My-Einrichtung: Zugangsdaten hinterlegt, Dienst erreichbar?"""
+    status = apple_config_status()
+    status["service"] = probe_http("macless-haystack", 6176, "/") if status["configured"] else "down"
+    return status
+
+
+@app.put("/api/v1/parent/apple", dependencies=[Depends(require_parent)])
+async def apple_configure(request: Request) -> dict:
+    """Apple-ID für macless-haystack hinterlegen.
+
+    Das Image fragt die Zugangsdaten beim ersten Start **interaktiv** ab – in
+    einem Container ohne Terminal endet das im EOFError. Der Assistent schreibt
+    sie stattdessen in `data/config.ini`; der Dienst startet danach von selbst
+    (restart: on-failure).
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON erwartet")
+    appleid = str(body.get("appleid") or "").strip()
+    password = str(body.get("password") or "")
+    if not appleid or "@" not in appleid:
+        raise HTTPException(status_code=400, detail="Bitte die Apple-ID (E-Mail) angeben")
+    if not password:
+        raise HTTPException(status_code=400, detail="Bitte das Apple-Passwort angeben")
+
+    APPLE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    path = APPLE_CONFIG_DIR / "config.ini"
+    parser = configparser.ConfigParser()
+    if path.exists():
+        try:
+            parser.read(path)
+        except Exception:
+            parser = configparser.ConfigParser()
+    if not parser.has_section("Settings"):
+        parser.add_section("Settings")
+    parser.set("Settings", "appleid", appleid)
+    parser.set("Settings", "appleid_pass", password)
+    parser.set("Settings", "anisette_url", os.environ.get("ANISETTE_URL", "http://anisette:6969"))
+    parser.set("Settings", "port", "6176")
+    with path.open("w", encoding="utf-8") as handle:
+        parser.write(handle)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    print(f"[apple] Zugangsdaten hinterlegt für {appleid}", flush=True)
+    return {
+        "configured": True,
+        "path": str(path),
+        "hint": "Der Dienst startet automatisch neu – das kann bis zu einer Minute dauern.",
+    }
 
 
 @app.get("/ca.crt", response_class=FileResponse)
@@ -2212,6 +2285,8 @@ def setup_status() -> dict:
             "benachrichtigungen": push_subscription_count() > 0,
             # Zertifikat: nur relevant, wenn Caddy läuft (dann gibt es /ca.crt)
             "zertifikat": caddy_available() and CA_FILE.exists(),
+            # Apple Find My: Zugangsdaten für macless-haystack hinterlegt?
+            "apple": apple_config_status()["configured"],
             "funktionstest": bool(positions or messages or findmy),
         },
         "device": devices[0] if devices else None,

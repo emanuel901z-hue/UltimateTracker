@@ -18,8 +18,8 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
   über eine Web-Oberfläche (auch als PWA aufs Handy installierbar)
 - **Suchalarm** (Piezo) und **Bewegungs-Wake** über einen Beschleunigungssensor
 - **Setup-Assistent** beim ersten Login: führt Eltern Schritt für Schritt durch die
-  Geräte-Einführung (Tracker anlegen, SIM, Karte prüfen, Benachrichtigungen,
-  Funktionstest) – jeder Schritt wird serverseitig geprüft, „Weiter" erst wenn er
+  Geräte-Einführung (Tracker anlegen, SIM, Karte prüfen, Benachrichtigungen, Zertifikat,
+  Apple Find My, Funktionstest) – jeder Schritt wird serverseitig geprüft, „Weiter" erst wenn er
   wirklich passt
 - **Operationszentrale** für die Eltern: **eigene Karte** (Leaflet, selbst
   gehostet – ohne zweite Anmeldung), Kinder-Übersicht, Nachrichten,

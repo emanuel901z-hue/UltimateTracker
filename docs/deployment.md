@@ -224,6 +224,8 @@ Schritt wirklich erledigt ist:
 | SIM eintragen (ICCID/MSISDN) | ICCID gesetzt | ✓ |
 | Karte prüfen (Traccar) | Traccar erreichbar | ✓ |
 | Benachrichtigungen | Web-Push abonniert | ✓ |
+| Zertifikat einrichten | CA-Datei vorhanden (Caddy läuft) | ✓ |
+| **Apple Find My** | Apple-ID in `macless-data/config.ini` hinterlegt | ✓ |
 | Funktionstest (PTT drücken) | Position/Nachricht/Beacon angekommen | ✓ |
 | Fertig | Zusammenfassung + nächste Schritte | – |
 
