@@ -43,14 +43,20 @@
 	# Auto-Login zuerst: die Bridge meldet sich mit dem Einmal-Ticket (oder dem
 	# Sitzungscookie) serverseitig an und setzt das Traccar-Sitzungscookie.
 	handle /_sso/* {
-		reverse_proxy audio-bridge:8085
+		reverse_proxy audio-bridge:8085 {
+			# Nie cachen: die Antwort ist eine Weiterleitung mit Sitzungscookie.
+			# Sonst zeigt der Browser hier später eine alte (Traccar-)Seite aus dem
+			# Cache – Traccars SPA liefert max-age=3600 für jede Pfadangabe.
+			header_down Cache-Control "no-store"
+		}
 	}
 	handle {
-		# Bewusst OHNE forward_auth: Browser verwerfen Cookies mit Domain=localhost
-		# (RFC 6265 verlangt einen Punkt), deshalb könnte das Gate hier nie erfüllt
-		# werden – jede direkte Traccar-URL ergäbe „HTTP ERROR 401". Traccar hat
-		# sein eigenes Login; der bequeme Weg führt über „öffnen" (Einmal-Ticket).
-		reverse_proxy traccar:8082
+		reverse_proxy traccar:8082 {
+			# Traccar schickt für seine Oberfläche max-age=3600,public mit. Bei einer
+			# lokalen Installation ohne CDN führt das zu veralteten Oberflächen nach
+			# Updates – deshalb hier auf no-cache setzen.
+			header_down Cache-Control "no-cache"
+		}
 	}
 }
 
