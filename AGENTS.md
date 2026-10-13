@@ -21,8 +21,10 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   startet sonst am Akku nicht); kein DAC → Audio nur über I2S.
 - **Geräte-ID ist die IMEI** (Bridge-Registry, `docs/sms.md`); MSISDN nur für den
   optionalen SMS-Pfad mitführen.
-- Find My (Apple/Google) ist **experimentell** und läuft im Compose-Profil `findmy`
-  (`docs/findmy.md`) – nicht als stabilen Pfad voraussetzen.
+- **Find My:** Apple/Google sind **experimentell** (`docs/findmy.md`) und laufen im
+  Compose-Profil `findmy`. Google-Positionen kommen über die WebUI-Weiterleitung
+  (`bash scripts/setup-google-forwarding.sh`, idempotent) an den Bridge-Ingest;
+  **nur zugeordnete** Beacons fließen in die Fusion/Traccar.
 - `firmware/lib/tracker_core` muss **C++11-kompatibel** bleiben (der Arduino-Build
   nutzt `gnu++11`); die Host-Tests laufen bewusst mit demselben Standard
   (`pio test -e native`), damit Abweichungen auffallen.

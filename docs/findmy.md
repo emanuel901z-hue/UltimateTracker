@@ -194,6 +194,37 @@ klicken. Der Status steht als Diagnose auf derselben Seite (`username`,
 - Logs + Apprise-Benachrichtigungen (ntfy, Telegram, E-Mail …), Rate-Limiting,
   `/metrics` (Prometheus)
 
+**Weiterleitung an unsere Bridge (der eigentliche Anschluss).** In
+**„Forwarding Settings"** bekommt **jedes Gerät** einen Endpunkt auf unseren
+Ingest. Am einfachsten:
+
+```bash
+bash scripts/setup-google-forwarding.sh   # idempotent, alle Geräte
+```
+
+Das Skript setzt pro Gerät einen POST auf
+`http://audio-bridge:8085/api/v1/findmy/locations` (Cron `*/15 * * * *`) und
+lässt vorhandene Endpunkte unangetastet. Manuell geht es genauso – Gerät →
+„+ Add endpoint" → Preset **Custom**:
+
+| Feld | Wert |
+|---|---|
+| Method | `POST` |
+| URL | `http://audio-bridge:8085/api/v1/findmy/locations` |
+| Body type | `json` |
+| Body | `{"provider": "google", "beacon_id": "{{device_name}}", "lat": {{latitude}}, "lon": {{longitude}}, "accuracy": {{accuracy_m}}, "timestamp": {{google_timestamp}}}` |
+| Cron | `*/15 * * * *` |
+
+Danach in der **Eltern-UI: Geräte → „Find-My-Beacons zuordnen"** die Beacons den
+Kindern zuordnen – die Einträge heißen `google / <Gerätename>`. **Nur zugeordnete**
+Beacons fließen in die fusionierte Position (und damit nach Traccar); nicht
+zugeordnete bleiben in der Bridge-Liste, erzeugen aber kein Fremdgerät in Traccar
+(`docs/fusion.md`).
+
+Verifiziert (2026-10-13): WebUI → Bridge-Ingest → Fusion → Karte; nach dem
+Zuordnen war die Google-Position die Position des Kindes
+(`GET /api/v1/parent/fused?device_id=…` → `source: google`).
+
 **Wenn das eingebettete noVNC-Fenster „keine Verbindung" meldet** – zwei Ursachen
 sind bekannt und behoben bzw. umschiffbar:
 
