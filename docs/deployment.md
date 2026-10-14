@@ -295,16 +295,38 @@ H2-Fallback (nur wenn gewünscht): `DATABASE_DRIVER=org.h2.Driver`,
 
 ## 7. Backup & Umzug auf den Thin Client
 
+**Der Datenbestand liegt in PostgreSQL** (Positionen, Fahrten, Geofences) – nicht
+in `traccar-data` (dort stehen nur Medien). Deshalb sichert
+`scripts/backup-volumes.sh` **beides**: einen konsistenten `pg_dump` **und** die
+Volumes (Audio-Nachrichten, Geräte-Registry, Find-My, Zertifikate).
+
 ```bash
-# Volumes sichern
+bash scripts/backup-volumes.sh [Zielverzeichnis]   # Standard: ~/UltimateTracker/backups
+```
+
+Cron (täglich 03:00) – Beispiel steht im Kopf des Skripts:
+
+```cron
+0 3 * * * bash "$HOME/UltimateTracker/scripts/backup-volumes.sh" >> "$HOME/UltimateTracker/backups/backup.log" 2>&1
+```
+
+Einzelne Volumes von Hand:
+
+```bash
 docker run --rm -v ultimatetracker_audio-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/audio-data.tgz -C /data .
-docker run --rm -v ultimatetracker_traccar-data:/data -v "$PWD":/backup alpine \
-  tar czf /backup/traccar-data.tgz -C /data .
+```
+
+Wiederherstellen (Beispiele):
+
+```bash
+gunzip -c traccar-db-<STAMP>.sql.gz | docker exec -i <postgres-container> psql -U traccar traccar
+docker run --rm -v ultimatetracker_audio-data:/data -v "$PWD":/backup alpine \
+  sh -c "rm -rf /data/* && tar xzf /backup/audio-data-<STAMP>.tgz -C /data"
 ```
 
 Umzug: auf dem Thin Client Docker installieren, Repo klonen/kopieren, `server/.env`
-übernehmen, Volumes zurückspielen, `docker compose up -d`.
+übernehmen, Datenbank-Dump einspielen, Volumes zurückspielen, `docker compose up -d`.
 
 ## 8. Blick vom Windows-Host & parallele Test-Instanz
 
@@ -437,7 +459,7 @@ auf die `SITE_*`-Hostnamen umstellt (HTTPS-Modus).
 | Passwörter | mindestens 10 Zeichen erzwungen; Admin-Reset dokumentiert (Abschnitt 10) |
 | Nur nötige Ports | 80/443 (+ ggf. 8443/8444/8445) – Datenbank, Postgres, Anisette bleiben intern |
 | Updates | Images sind gepinnt (Abschnitt 2/5) – bewusst aktualisieren, nicht automatisch |
-| Backups | UI-Knopf (Abschnitt 10.4) + `scripts/backup-volumes.sh` |
+| Backups | UI-Knopf (Abschnitt 10.4) + `scripts/backup-volumes.sh` (pg_dump **und** Volumes, Abschnitt 7) |
 | Angriffsfläche | Find-My-Dienste nur bei Bedarf starten (`--profile findmy`) |
 | Rate-Limits | Caddy-Plugin (`caddy-ratelimit`) oder fail2ban auf 401er – optional |
 | Alternative ohne Exposition | **Tailscale/WireGuard**: Geräte im privaten Netz, kein offener Port |
