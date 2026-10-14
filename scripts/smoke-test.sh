@@ -490,5 +490,37 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: ut_session=$COOKIE" \
 CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/_sso/session")
 [ "$CODE" = "302" ] && pass "Ohne Ticket -> 302 zur Anmeldung" || fail "Ohne Ticket: HTTP $CODE"
 
+echo "30) Find-My-Anbindung: OsmAnd-Ingest, Quellen-Status, Beacon-Schlüssel"
+# OsmAnd-kompatibler Ingest (dieses Protokoll spricht die Apple-Bridge)
+OSM=$(curl -s "$BASE/api/v1/findmy/osmand?id=SMOKE-OSMAND&lat=48.2&lon=11.6&hdop=30&timestamp=$(date +%s)&provider=apple")
+echo "$OSM" | grep -q '"stored":1' && pass "OsmAnd-Ingest speichert" || fail "OsmAnd-Ingest: $OSM"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/findmy/osmand?id=SMOKE-OSMAND")
+[ "$CODE" = "400" ] && pass "OsmAnd-Ingest validiert (HTTP 400)" || fail "Validierung: $CODE"
+curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/findmy/locations?provider=apple&limit=20" \
+  | grep -q 'SMOKE-OSMAND' && pass "Position in der Bridge sichtbar" || fail "Position fehlt"
+SRC=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/sources")
+echo "$SRC" | grep -q '"tracker"' && pass "Quellen-Status enthält den Tracker" || fail "Quellen-Status: $SRC"
+echo "$SRC" | grep -q '"apple"' && pass "Quellen-Status enthält Apple" || fail "apple fehlt"
+# Beacon-Schlüssel ist (provider, beacon_id): gleiche ID in zwei Netzen bleibt getrennt
+curl -s -o /dev/null "$BASE/api/v1/findmy/osmand?id=SMOKE-SHARED&lat=48.2&lon=11.6&provider=apple"
+curl -s -o /dev/null -X POST -H 'Content-Type: application/json' \
+  -d '{"provider":"google","beacon_id":"SMOKE-SHARED","lat":48.2,"lon":11.6}' "$BASE/api/v1/findmy/locations"
+for pair in "apple" "google"; do
+  curl -s -o /dev/null -X PUT -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+    -d "{\"device_id\":\"TEST123\",\"provider\":\"$pair\"}" "$BASE/api/v1/parent/beacons/SMOKE-SHARED"
+done
+SEP=$(curl -s -H "X-Auth-Token: $PTOK" "$BASE/api/v1/parent/beacons" | python3 -c "
+import json, sys
+rows = [b for b in json.load(sys.stdin)['beacons'] if b['beacon_id'] == 'SMOKE-SHARED']
+print(len(rows), sum(1 for b in rows if b['device_id'] == 'TEST123'))
+")
+[ "$SEP" = "2 2" ] && pass "Beacon-Schlüssel trennt Provider (2 Zeilen, beide zugeordnet)" \
+  || fail "Provider-Trennung: $SEP"
+for pair in "apple" "google"; do
+  curl -s -o /dev/null -X PUT -H "X-Auth-Token: $PTOK" -H 'Content-Type: application/json' \
+    -d "{\"device_id\":\"\",\"provider\":\"$pair\"}" "$BASE/api/v1/parent/beacons/SMOKE-SHARED"
+done
+info "Testzuordnungen wieder entfernt"
+
 echo
 echo "Alle Smoke-Tests bestanden."

@@ -2,6 +2,28 @@
 
 Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung – Folgen.
 
+## D-019 – 2026-10-13 – Ein Ingest für alle Find-My-Wege, Beacon-Schlüssel (provider, id)
+
+- **Entscheidung:** Alle Positionsquellen laufen über **einen** Anlaufpunkt in der
+  Bridge. Dafür ergänzt die Bridge einen **OsmAnd-kompatiblen Ingest**
+  (`GET /api/v1/findmy/osmand?id=&lat=&lon=&timestamp=&hdop=&provider=`), und die
+  Apple-Bridge (`findmy-bridge`) zeigt dorthin (`APPLE_BRIDGE_TARGET`) statt
+  direkt auf Traccar. Der Beacon-Schlüssel der Fusion ist jetzt
+  **(provider, beacon_id)** statt nur `beacon_id`; bestehende Zuordnungen werden
+  migriert.
+- **Begründung:** Zuvor hatten die beiden Find-My-Wege verschiedene Ziele: Google
+  → Bridge (Fusion ✓), Apple → Traccar (an der Fusion **vorbei**). Damit war die
+  in `README`/`project.md` beworbene Fusion „GNSS + Apple/Google" für Apple nicht
+  wirksam, und Apple-Positionen erschienen als Fremdgerät in Traccar. Ein
+  OsmAnd-Ingest genügt, weil dieses Protokoll die beteiligten Werkzeuge ohnehin
+  sprechen. Der Provider im Beacon-Schlüssel verhindert, dass gleichnamige Beacons
+  zweier Netze einander überschreiben (vorher war `beacon_id` der Primärschlüssel).
+- **Folgen:** Ein Prinzip statt drei Ziel-Konfigurationen („alles postet an den
+  Ingest; die Bridge entscheidet"). Neuer Endpunkt `GET /api/v1/parent/sources`
+  (letzte Position je Quelle) plus UI-Karte. Smoke-Gruppe 30 deckt Ingest,
+  Quellen-Status und Provider-Trennung ab. Der Traccar-Forward bleibt optional
+  (`TRACCAR_FORWARD_URL`).
+
 ## D-018 – 2026-10-13 – SSO-Gate: Sitzungscookie per Einmal-Ticket auf dem Ziel-Host
 
 - **Entscheidung:** Dienste hinter dem Eltern-Gate (`findmy.localhost`,

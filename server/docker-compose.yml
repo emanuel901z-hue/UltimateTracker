@@ -157,7 +157,10 @@ services:
     restart: on-failure:3
     logging: *default-logging
     environment:
-      BRIDGE_TRACCAR_SERVER: http://traccar:5055
+      # Apple-Positionen gehen an UNSEREN Ingest (OsmAnd-kompatibel) statt direkt
+      # an Traccar: so fließen sie in die Sensor-Fusion und Traccar bekommt eine
+      # Position je Kind (docs/fusion.md, docs/findmy.md).
+      BRIDGE_TRACCAR_SERVER: ${APPLE_BRIDGE_TARGET:-http://audio-bridge:8085/api/v1/findmy/osmand}
       BRIDGE_PRIVATE_KEYS: ${APPLE_BEACON_KEYS:-}
       BRIDGE_POLL_INTERVAL: ${APPLE_POLL_INTERVAL:-3600}
       BRIDGE_LOGGING_LEVEL: INFO

@@ -573,6 +573,16 @@
         </div>
       </div>
       <div class="card">
+        <h2>Quellen (letzte Position)</h2>
+        <p class="hint">Welche Positionsquelle zuletzt etwas geliefert hat – praktisch,
+          um die experimentellen Find-My-Wege zu prüfen (Tracker, Apple, Google).</p>
+        <ul id="sources"><li class="muted">– wird geladen –</li></ul>
+        <div class="row-tight">
+          <button id="sources-refresh">Liste aktualisieren</button>
+          <span class="muted" id="sources-state" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="card">
         <h2>Find My (Apple / Google)</h2>
         <div id="findmy" class="scroll" tabindex="0" role="region" aria-label="Find-My-Positionen"></div>
       </div>
@@ -1176,6 +1186,36 @@ async function loadSmsHistory() {
 }
 
 $('sms-history').addEventListener('click', loadSmsHistory);
+
+// --- Quellen-Status (letzte Position je Quelle) ---
+function sourceLabel(source) {
+  return {
+    tracker: 'Tracker (GNSS)', apple: 'Apple Find My', google: 'Google Find Hub',
+    network: 'Funkzelle', findmy: 'Find My',
+  }[source] || source;
+}
+
+async function loadSources() {
+  const list = $('sources');
+  if (!list || !state.token) return;
+  try {
+    const res = await fetch('/api/v1/parent/sources', { headers: headers() });
+    if (!res.ok) { list.innerHTML = '<li class="muted">' + errText(res) + '</li>'; return; }
+    const data = await res.json();
+    list.innerHTML = data.sources.map((entry) => {
+      const cls = entry.age_s === null ? 'na' : (entry.fresh ? 'up' : 'error');
+      const when = entry.age_s === null ? 'noch nichts empfangen'
+        : (ageText(entry.last_at) || '–') + (entry.fresh ? '' : ' · veraltet');
+      return '<li><span class="dot ' + cls + '"></span><strong>' +
+        escapeHtml(sourceLabel(entry.source)) + '</strong> <span class="muted">' + when +
+        ' · ' + entry.count + ' Position(en)</span></li>';
+    }).join('');
+    $('sources-state').textContent = '';
+  } catch (err) {
+    list.innerHTML = '<li class="muted">Fehler: ' + err.message + '</li>';
+  }
+}
+$('sources-refresh').addEventListener('click', loadSources);
 
 async function loadFindMy() {
   if (!state.token) return;
@@ -2049,6 +2089,7 @@ function showApp(user) {
   loadSetup();
   loadApple();
   loadAppleLogin();
+  loadSources();
   followNextParameter();
 }
 
@@ -2203,7 +2244,7 @@ function selectTab(tab, moveFocus = true) {
   if (tab.id === 'tab-einrichtung') loadSetup();
   if (tab.id === 'tab-uebersicht') { loadChildren(); loadServices(); loadSetup(); }
   if (tab.id === 'tab-karte' && leafletMap) leafletMap.invalidateSize();
-  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); loadApple(); loadAppleLogin(); }
+  if (tab.id === 'tab-geraete') { loadDevices(); loadFindMy(); loadBeacons(); loadApple(); loadAppleLogin(); loadSources(); }
   else { stopApplePoll(); stopAppleLoginPoll(); }
   if (tab.id === 'tab-betrieb') { loadSystem(); loadSettings(); loadFirmware(); }
   if (tab.id === 'tab-konto') loadUsers();

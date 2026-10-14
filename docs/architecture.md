@@ -120,6 +120,7 @@ Betrieb mit „disk I/O error" ab. `/healthz` meldet die offenen Deskriptoren
 | GET | `/api/v1/parent/overview` | Parent | alle Kinder (Akku, letzte Position, Suchmodus) |
 | GET | `/api/v1/parent/map` | Parent | Kartendaten (letzte Position je Tracker/Beacon + Kacheln) |
 | GET | `/api/v1/parent/fused` | Parent | fusionierte Position eines Kindes (Quelle, Vertrauen, Quellenliste) |
+| GET | `/api/v1/parent/sources` | Parent | letzte Position je Quelle (Alter, Vertrauen, Gültigkeit) |
 | GET/PUT | `/api/v1/parent/beacons[/{id}]` | Parent | Find-My-Beacons einem Kind zuordnen |
 | GET | `/api/v1/parent/setup` | Parent | Setup-Assistent: Schritt-Status, Tokens, Traccar-Zugang |
 | POST | `/api/v1/parent/sso/ticket` | Parent | Einmal-Ticket für den Dienst-Auto-Login (120 s) |
@@ -136,6 +137,7 @@ Betrieb mit „disk I/O error" ab. `/healthz` meldet die offenen Deskriptoren
 | PUT | `/api/v1/parent/devices/{id}` | Parent-Token | Gerät anlegen/ändern |
 | DELETE | `/api/v1/parent/devices/{id}` | Parent-Token | Gerät löschen |
 | POST | `/api/v1/findmy/locations` | optional Token | Find-My-Ingest (Apple/Google, tolerant) |
+| GET | `/api/v1/findmy/osmand` | optional Token | Find-My-Ingest im OsmAnd-Protokoll (z. B. `findmy-bridge`) |
 | GET | `/api/v1/parent/findmy/locations` | Parent-Token | letzte Find-My-Positionen |
 | POST | `/api/v1/traccar/events` | optional Token | Webhook-Empfänger (Traccar) |
 

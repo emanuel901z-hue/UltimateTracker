@@ -251,15 +251,39 @@ def init_db() -> None:
         message_columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
         if "listened_at" not in message_columns:
             conn.execute("ALTER TABLE messages ADD COLUMN listened_at TEXT")
-        # Zuordnung Find-My-Beacon → Kind (Sensor-Fusion, docs/fusion.md)
+        # Zuordnung Find-My-Beacon → Kind (Sensor-Fusion, docs/fusion.md).
+        # Schlüssel ist (provider, beacon_id): Apple und Google dürfen
+        # gleichnamige Beacons haben (docs/decisions.md D-019).
         conn.execute(
             """CREATE TABLE IF NOT EXISTS beacons (
-                   beacon_id TEXT PRIMARY KEY,
                    provider TEXT NOT NULL DEFAULT '',
+                   beacon_id TEXT NOT NULL,
                    device_id TEXT NOT NULL,
-                   created_at TEXT NOT NULL
+                   created_at TEXT NOT NULL,
+                   PRIMARY KEY (provider, beacon_id)
                )"""
         )
+        # Migration: ältere Installationen hatten nur `beacon_id` als Schlüssel.
+        beacons_row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='beacons'").fetchone()
+        beacons_sql = (beacons_row["sql"] if beacons_row else "") or ""
+        if "PRIMARY KEY (provider, beacon_id)" not in beacons_sql:
+            conn.execute(
+                """CREATE TABLE beacons_migrated (
+                       provider TEXT NOT NULL DEFAULT '',
+                       beacon_id TEXT NOT NULL,
+                       device_id TEXT NOT NULL,
+                       created_at TEXT NOT NULL,
+                       PRIMARY KEY (provider, beacon_id)
+                   )"""
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO beacons_migrated(provider, beacon_id, device_id, created_at) "
+                "SELECT provider, beacon_id, device_id, created_at FROM beacons"
+            )
+            conn.execute("DROP TABLE beacons")
+            conn.execute("ALTER TABLE beacons_migrated RENAME TO beacons")
+            print("[db] beacons auf (provider, beacon_id) umgestellt", flush=True)
 
 
 def now_iso() -> str:
@@ -1155,17 +1179,43 @@ def traccar_session() -> tuple[str, int] | None:
 # Die Logik liegt in app/fusion.py (reine Funktionen, host-getestet). Hier nur
 # die Datenbeschaffung aus der Bridge-Datenbank.
 
-def beacon_assignments() -> dict[str, str]:
-    """Beacon-ID (klein) → Geräte-ID des Kindes."""
+def beacon_rows() -> list[dict]:
+    """Alle Beacon-Zuordnungen (provider, beacon_id → device_id)."""
     with db() as conn:
-        rows = conn.execute("SELECT beacon_id, device_id FROM beacons").fetchall()
-    return {row["beacon_id"].lower(): row["device_id"] for row in rows}
+        rows = conn.execute("SELECT provider, beacon_id, device_id FROM beacons").fetchall()
+    return [dict(row) for row in rows]
+
+
+def beacon_child(rows: list[dict], provider: str, beacon_id: str) -> str | None:
+    """Kind zu einem Beacon: exakt über (provider, id), sonst nur über die ID.
+
+    Der Rückfall auf die ID allein hält Zuordnungen aus früheren Versionen
+    lauffähig, die noch keinen Provider im Schlüssel hatten
+    (`docs/fusion.md`, `docs/decisions.md` D-019).
+    """
+    wanted_id = (beacon_id or "").lower()
+    if not wanted_id:
+        return None
+    wanted_provider = (provider or "").lower()
+    for row in rows:
+        if (row["beacon_id"] or "").lower() == wanted_id \
+                and (row["provider"] or "").lower() == wanted_provider:
+            return row["device_id"]
+    for row in rows:
+        if (row["beacon_id"] or "").lower() == wanted_id:
+            return row["device_id"]
+    return None
+
+
+def beacons_for_device(rows: list[dict], device_id: str) -> list[tuple[str, str]]:
+    """Zugeordnete Beacons eines Kindes als (provider, beacon_id klein)."""
+    return [((row["provider"] or "").lower(), (row["beacon_id"] or "").lower())
+            for row in rows if row["device_id"] == device_id]
 
 
 def candidate_positions(device_id: str, limit: int = 40) -> list[dict]:
     """Alle aktuellen Positionsquellen eines Kindes (Tracker + zugeordnete Beacons)."""
-    assignments = beacon_assignments()
-    beacons = [beacon for beacon, child in assignments.items() if child == device_id]
+    pairs = beacons_for_device(beacon_rows(), device_id)
     candidates: list[dict] = []
     with db() as conn:
         row = conn.execute(
@@ -1177,14 +1227,17 @@ def candidate_positions(device_id: str, limit: int = 40) -> list[dict]:
                 "source": "tracker", "latitude": row["latitude"], "longitude": row["longitude"],
                 "accuracy": None, "battery": row["battery"], "received_at": row["received_at"],
             })
-        if beacons:
-            placeholders = ",".join("?" for _ in beacons)
+        if pairs:
+            # Auf (provider, id) prüfen – gleichnamige Beacons verschiedener
+            # Netze dürfen sich nicht gegenseitig mitziehen.
+            clause = " OR ".join("(lower(provider) = ? AND lower(beacon_id) = ?)" for _ in pairs)
+            params = [value for pair in pairs for value in pair]
             for beacon in conn.execute(
                 f"SELECT provider, beacon_id, latitude, longitude, accuracy, received_at "
-                f"FROM findmy_locations WHERE lower(beacon_id) IN ({placeholders}) "
+                f"FROM findmy_locations WHERE ({clause}) "
                 f"AND id IN (SELECT MAX(id) FROM findmy_locations "
-                f"           GROUP BY provider, lower(beacon_id))",
-                beacons,
+                f"           GROUP BY lower(provider), lower(beacon_id))",
+                params,
             ).fetchall():
                 candidates.append({
                     "source": (beacon["provider"] or "findmy").lower(),
@@ -2499,7 +2552,7 @@ def setup_status(device_id: str | None = None) -> dict:
     A1). Ohne Angabe bleibt es beim ersten Gerät (Rückwärtskompatibilität).
     """
     wanted = (device_id or "").strip()
-    assignments = beacon_assignments()
+    assignments = beacon_rows()
     with db() as conn:
         devices = [dict(row) for row in conn.execute(
             "SELECT * FROM devices ORDER BY created_at").fetchall()]
@@ -2519,7 +2572,8 @@ def setup_status(device_id: str | None = None) -> dict:
                 "SELECT COUNT(*) AS n FROM messages WHERE device_id = ?",
                 (device["id"],)).fetchone()["n"]
             # Find-My-Positionen zählen mit, wenn ein Beacon diesem Kind gehört.
-            beacons = [b for b, child in assignments.items() if child == device["id"]]
+            beacons = [beacon_id for _provider, beacon_id
+                       in beacons_for_device(assignments, device["id"])]
             device_findmy = 0
             if beacons:
                 placeholders = ",".join("?" for _ in beacons)
@@ -2563,7 +2617,7 @@ def setup_status(device_id: str | None = None) -> dict:
 @app.get("/api/v1/parent/beacons", dependencies=[Depends(require_parent)])
 def beacons_list() -> dict:
     """Bekannte Find-My-Beacons mit Zuordnung zum Kind (Sensor-Fusion)."""
-    assignments = beacon_assignments()
+    assignments = beacon_rows()
     with db() as conn:
         rows = conn.execute(
             "SELECT provider, beacon_id, MAX(received_at) AS seen, COUNT(*) AS n "
@@ -2577,7 +2631,7 @@ def beacons_list() -> dict:
                 "beacon_id": row["beacon_id"],
                 "last_seen": row["seen"],
                 "positions": row["n"],
-                "device_id": assignments.get((row["beacon_id"] or "").lower(), ""),
+                "device_id": beacon_child(assignments, row["provider"], row["beacon_id"]) or "",
             }
             for row in rows
         ],
@@ -2600,11 +2654,17 @@ async def beacon_assign(beacon_id: str, request: Request) -> dict:
     device_id = str(body.get("device_id") or "").strip()
     provider = str(body.get("provider") or "").strip()
     with db() as conn:
-        conn.execute("DELETE FROM beacons WHERE lower(beacon_id) = lower(?)", (beacon_id,))
+        # Nur die passende Zuordnung ersetzen – plus Altbestände ohne Provider
+        # (früher war `beacon_id` allein der Schlüssel, D-019).
+        conn.execute(
+            "DELETE FROM beacons WHERE lower(beacon_id) = lower(?) "
+            "AND (lower(provider) = lower(?) OR provider = '')",
+            (beacon_id, provider),
+        )
         if device_id:
             conn.execute(
-                "INSERT INTO beacons(beacon_id, provider, device_id, created_at) VALUES(?, ?, ?, ?)",
-                (beacon_id, provider, device_id, now_iso()),
+                "INSERT INTO beacons(provider, beacon_id, device_id, created_at) VALUES(?, ?, ?, ?)",
+                (provider, beacon_id, device_id, now_iso()),
             )
     return {"beacon_id": beacon_id, "device_id": device_id}
 
@@ -2616,6 +2676,41 @@ def parent_fused(device_id: str) -> dict:
     if best is None:
         raise HTTPException(status_code=404, detail="Keine Position für dieses Gerät")
     return best
+
+
+@app.get("/api/v1/parent/sources", dependencies=[Depends(require_parent)])
+def sources_status() -> dict:
+    """Wann kam zuletzt etwas – **je Positionsquelle**?
+
+    Zeigt für Tracker und jedes Find-My-Netz die jüngste Position samt Alter,
+    Vertrauensstufe und Gültigkeitsfenster. Damit lässt sich prüfen, ob ein
+    (experimenteller) Weg überhaupt Daten liefert (`docs/fusion.md`).
+    """
+    now = time.time()
+    entries: list[dict] = []
+    with db() as conn:
+        row = conn.execute("SELECT received_at FROM positions ORDER BY id DESC LIMIT 1").fetchone()
+        entries.append({
+            "source": "tracker",
+            "last_at": row["received_at"] if row else None,
+            "count": conn.execute("SELECT COUNT(*) AS n FROM positions").fetchone()["n"],
+        })
+        for row in conn.execute(
+            "SELECT provider, MAX(received_at) AS last_at, COUNT(*) AS n "
+            "FROM findmy_locations GROUP BY lower(provider) ORDER BY last_at DESC"
+        ).fetchall():
+            entries.append({
+                "source": (row["provider"] or "findmy").lower(),
+                "last_at": row["last_at"],
+                "count": row["n"],
+            })
+    for entry in entries:
+        epoch = _to_epoch(entry["last_at"]) or 0
+        entry["age_s"] = max(0, int(now - epoch)) if epoch else None
+        entry["valid_s"] = source_valid_seconds(entry["source"])
+        entry["trust"] = source_trust(entry["source"])
+        entry["fresh"] = entry["age_s"] is not None and entry["age_s"] <= entry["valid_s"]
+    return {"sources": entries, "checked_at": now_iso()}
 
 
 @app.get("/api/v1/parent/devices", dependencies=[Depends(require_parent)])
@@ -2775,6 +2870,18 @@ def sms_list(iccid: str, limit: int = 20) -> dict:
 # --- Find My (Apple / Google) ----------------------------------------------
 
 
+def store_findmy_location(loc: dict, raw: dict, assignments: list[dict]) -> bool:
+    """Find-My-Position speichern und – wenn zugeordnet – die Fusion anstoßen.
+
+    Rückgabe: True, wenn ein Kind zugeordnet ist und die fusionierte Position
+    weitergegeben wurde. Nicht zugeordnete Beacons erscheinen nur in der Bridge
+    (Karte/UI), damit Traccar keine Fremdgeräte bekommt (`docs/fusion.md`).
+    """
+    insert_findmy(loc, raw)
+    child = beacon_child(assignments, loc.get("provider", ""), loc.get("beacon_id", ""))
+    return bool(child) and forward_fused_to_traccar(child)
+
+
 @app.post("/api/v1/findmy/locations")
 async def findmy_ingest(request: Request, x_auth_token: str | None = Header(default=None)) -> dict:
     """Ingest für Find-My-Positionen (Apple/Google-Gegenstücke).
@@ -2790,6 +2897,7 @@ async def findmy_ingest(request: Request, x_auth_token: str | None = Header(defa
     except Exception:
         raise HTTPException(status_code=400, detail="JSON erwartet")
     items = payload if isinstance(payload, list) else [payload]
+    assignments = beacon_rows()  # einmal laden statt pro Position
     stored = 0
     forwarded = 0
     for item in items:
@@ -2798,15 +2906,56 @@ async def findmy_ingest(request: Request, x_auth_token: str | None = Header(defa
         loc = extract_location(item)
         if loc is None:
             continue
-        insert_findmy(loc, item)
-        stored += 1
-        # Nur zugeordnete Beacons fließen in die fusionierte Position des Kindes.
-        # Nicht zugeordnete Beacons erscheinen nur in der Bridge (Karte/UI), damit
-        # Traccar nicht mit Fremdgeräten zugestellt wird.
-        child = beacon_assignments().get((loc.get("beacon_id") or "").lower())
-        if child and forward_fused_to_traccar(child):
+        if store_findmy_location(loc, item, assignments):
             forwarded += 1
+        stored += 1
     return {"stored": stored, "forwarded": forwarded}
+
+
+@app.get("/api/v1/findmy/osmand")
+@app.get("/api/v1/findmy/osmand/")
+def findmy_osmand(request: Request, x_auth_token: str | None = Header(default=None)) -> dict:
+    """OsmAnd-kompatibler Ingest (GET mit Query-Parametern).
+
+    Damit können Werkzeuge, die Traccars **OsmAnd-Protokoll** sprechen – z. B.
+    die Apple-Bridge `findmy-bridge` – direkt an die Bridge liefern, **statt an
+    Traccar vorbei**. So fließen auch Apple-Positionen in die Sensor-Fusion
+    (`docs/fusion.md`).
+
+    Parameter wie im OsmAnd-Protokoll: `id` (Beacon/Gerät), `lat`, `lon`,
+    `timestamp`, `hdop` (Genauigkeit); zusätzlich `provider` (Standard `apple`,
+    z. B. `google` oder `network`). Weitere OsmAnd-Felder werden ignoriert.
+    Optionaler Token wie beim JSON-Ingest (`FINDMY_TOKEN`).
+    """
+    if FINDMY_TOKEN and not token_ok(FINDMY_TOKEN, x_auth_token):
+        raise HTTPException(status_code=401, detail="Ungültiges Find-My-Token")
+    params = request.query_params
+    beacon_id = (params.get("id") or params.get("device_id") or "").strip()
+    if not beacon_id:
+        raise HTTPException(status_code=400, detail="id fehlt")
+    try:
+        latitude = float(params.get("lat"))
+        longitude = float(params.get("lon"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="lat/lon fehlen oder sind keine Zahlen")
+    accuracy = params.get("hdop") or params.get("accuracy") or params.get("acc")
+    try:
+        accuracy = float(accuracy) if accuracy not in (None, "") else None
+    except (TypeError, ValueError):
+        accuracy = None
+    reported = params.get("timestamp") or params.get("time")
+    loc = {
+        "provider": (params.get("provider") or params.get("source") or "apple").strip().lower()
+        or "apple",
+        "beacon_id": beacon_id,
+        "latitude": latitude,
+        "longitude": longitude,
+        "accuracy": accuracy,
+        "reported_at": str(reported) if reported else None,
+        "reported_epoch": _to_epoch(reported),
+    }
+    forwarded = store_findmy_location(loc, dict(params), beacon_rows())
+    return {"stored": 1, "forwarded": 1 if forwarded else 0}
 
 
 @app.get("/api/v1/parent/findmy/locations", dependencies=[Depends(require_parent)])

@@ -230,6 +230,7 @@ Herstellerdokumentation geprüft (siehe `docs/hardware-review.md`).
 | Eltern → Bridge | POST | `/api/v1/parent/messages` (Sprachnachricht aufnehmen) |
 | Eltern ← Bridge | GET | `/` (Web-UI), `/api/v1/parent/messages` (Liste) |
 | Traccar → Bridge | POST | `/api/v1/traccar/events` (event.forward) |
+| Find My → Bridge | POST | `/api/v1/findmy/locations` (JSON, tolerant) bzw. `GET /api/v1/findmy/osmand` (OsmAnd-Protokoll, z. B. Apple-Bridge) |
 
 ## 5. Energiebudget (Schätzung, nachzumessen)
 

@@ -31,10 +31,15 @@ Apple.
 
 ## 3. Umsetzung
 
+- **Ein Anlaufpunkt:** Alle Quellen laufen über die Bridge – Tracker per
+  `/api/v1/device/sync`, Find-My-Gegenstücke per JSON (`/api/v1/findmy/locations`)
+  oder OsmAnd (`/api/v1/findmy/osmand`, z. B. die Apple-Bridge). Nur die Bridge
+  entscheidet, was weitergeht (Fusion → optional Traccar); `docs/decisions.md` D-019.
 - **Beacon-Zuordnung** (`beacons`-Tabelle): Ein Find-My-Beacon gehört zu einem
-  Kind (Geräte-Registry, ID = IMEI). Pflege in der UI: *Geräte → Find-My-Beacons
-  zuordnen*. Ohne Zuordnung erscheint ein Beacon **nur** in der Bridge – nicht in
-  Traccar (sonst stünden dort Fremdgeräte).
+  Kind (Geräte-Registry, ID = IMEI). **Schlüssel ist `(provider, beacon_id)`** –
+  gleichnamige Beacons zweier Netze bleiben getrennt. Pflege in der UI:
+  *Geräte → Find-My-Beacons zuordnen*. Ohne Zuordnung erscheint ein Beacon **nur**
+  in der Bridge – nicht in Traccar (sonst stünden dort Fremdgeräte).
 - **Fusion** (`app/fusion.py` – reine Funktionen, **host-getestet** über
   `tests/test_fusion.py`): wählt die beste Position und liefert Quelle,
   Genauigkeit, Alter, Begründung, Zustand und **alle** Quellen zur Kontrolle.

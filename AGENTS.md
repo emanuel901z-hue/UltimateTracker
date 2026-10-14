@@ -22,9 +22,12 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
 - **Geräte-ID ist die IMEI** (Bridge-Registry, `docs/sms.md`); MSISDN nur für den
   optionalen SMS-Pfad mitführen.
 - **Find My:** Apple/Google sind **experimentell** (`docs/findmy.md`) und laufen im
-  Compose-Profil `findmy`. Google-Positionen kommen über die WebUI-Weiterleitung
-  (`bash scripts/setup-google-forwarding.sh`, idempotent) an den Bridge-Ingest;
-  **nur zugeordnete** Beacons fließen in die Fusion/Traccar.
+  Compose-Profil `findmy`. **Alle Wege posten an einen Ingest der Bridge** – JSON
+  (`/api/v1/findmy/locations`) oder OsmAnd (`/api/v1/findmy/osmand`, Ziel von
+  `findmy-bridge` via `APPLE_BRIDGE_TARGET`); Google über die WebUI-Weiterleitung
+  (`bash scripts/setup-google-forwarding.sh` bzw. `scripts/setup-findmy.sh`).
+  **Nur zugeordnete** Beacons fließen in die Fusion/Traccar; der Beacon-Schlüssel
+  ist `(provider, beacon_id)`. Quellen-Status: `GET /api/v1/parent/sources`.
 - `firmware/lib/tracker_core` muss **C++11-kompatibel** bleiben (der Arduino-Build
   nutzt `gnu++11`); die Host-Tests laufen bewusst mit demselben Standard
   (`pio test -e native`), damit Abweichungen auffallen.
@@ -51,7 +54,7 @@ Autarker Kinder-Tracker (ESP32-S3 + SIM7080G) mit selbst gehostetem Server
   Status ist **pro Kind** (`?device_id=<IMEI>`; ohne Parameter das erste Gerät) –
   „SIM", „Funktionstest" und „done" beziehen sich auf genau dieses Gerät
   (`docs/parent-usability.md`).
-- **Verifikation:** `bash scripts/smoke-test.sh` (29 Gruppen) und
+- **Verifikation:** `bash scripts/smoke-test.sh` (30 Gruppen) und
   `cd server/audio-bridge && python -m unittest discover -s tests`
   (Provider/Auth/**Fusion**/Apple-Config/Apple-Login, 71 Tests) müssen grün bleiben; Firmware zusätzlich
   `pio run` + `pio test -e native`.

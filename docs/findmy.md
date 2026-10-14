@@ -32,7 +32,7 @@ Drei Bausteine arbeiten zusammen:
 | Baustein | Aufgabe |
 |---|---|
 | `anisette` | Apple-Authentifizierung (Anisette-Daten), wird von der Bridge genutzt |
-| **`findmy-bridge`** (findmy.py) | **Automatisch**: holt die Standorte der DIY-/OpenHaystack-Beacons und pusht sie in Traccar (OsmAnd, Port 5055) |
+| **`findmy-bridge`** (findmy.py) | **Automatisch**: holt die Standorte der DIY-/OpenHaystack-Beacons und pusht sie **in unsere Bridge** (`APPLE_BRIDGE_TARGET`, OsmAnd-Protokoll) – von dort in die Sensor-Fusion und (optional) nach Traccar |
 | `macless-haystack` | Key-Generierung (`generate_keys.py`) und optional Web-UI für manuelle Sicht |
 
 ### 2a. Bridge starten und initialisieren
@@ -46,6 +46,12 @@ docker compose --profile findmy exec findmy-bridge .venv/bin/findmy-traccar-brid
 
 Konfiguration über `server/.env`: `APPLE_BEACON_KEYS` (Private Keys der Beacons,
 kommasepariert) und `APPLE_POLL_INTERVAL` (Default 3600 s).
+
+**Ziel der Bridge:** Standardmäßig unser **OsmAnd-kompatibler Ingest**
+(`APPLE_BRIDGE_TARGET=http://audio-bridge:8085/api/v1/findmy/osmand`). Damit
+landen Apple-Positionen in der Sensor-Fusion, und Traccar bekommt **eine**
+Position je Kind (statt eines Fremdgeräts). Nur zum Zurückschalten auf das alte
+Verhalten zeigt die Variable wieder direkt auf Traccar (`http://traccar:5055`).
 **Ban-Risiko:** Apple mag häufige Abfragen nicht – 1 Abfrage/30 min gilt als
 „relativ sicher“, das Default (1/h) ist bewusst konservativ. Ein Zweit-Account
 ist empfehlenswert.
@@ -283,18 +289,34 @@ E2EE-Daten.
 
 ## 4. Ingest & Auswertung in der Bridge
 
-- `POST /api/v1/findmy/locations` – **toleranter** Ingest (Einzelobjekt oder Liste).
-  Erkannt werden u. a. `lat/latitude`, `lon/lng/longitude`, `accuracy/acc`,
+**Ein Anlaufpunkt für alle Wege** (`docs/decisions.md` D-019): jedes
+Find-My-Gegenstück postet nur noch an die Bridge – die entscheidet, was passiert
+(Fusion → optional Traccar). Zwei Protokolle stehen bereit:
+
+- `POST /api/v1/findmy/locations` – **toleranter** JSON-Ingest (Einzelobjekt oder
+  Liste). Erkannt werden u. a. `lat/latitude`, `lon/lng/longitude`, `accuracy/acc`,
   `timestamp/time/reported_at`, `id/beacon_id/device_id`, `provider/source`.
   Unbekannte Formate werden inkl. Roh-JSON gespeichert (nichts geht verloren).
+- `GET /api/v1/findmy/osmand?id=&lat=&lon=&timestamp=&hdop=&provider=` –
+  **OsmAnd-Protokoll** (das sprechen `findmy-bridge` und die Traccar-Presets der
+  WebUI). `provider` ist optional, Standard `apple`. Antwort: `{"stored":1,"forwarded":0|1}`.
+
 - Optional Token: `FINDMY_TOKEN` als Header `X-Auth-Token` (leer = offen; dann
   den Port nicht nach außen exponieren).
-- Mit gesetztem `TRACCAR_FORWARD_URL` geht jede Position zusätzlich als
-  OsmAnd-Position an Traccar → Beacon erscheint als **eigenes Gerät** auf der Karte.
+- **Beacon-Schlüssel:** `(provider, beacon_id)`. Gleichnamige Beacons zweier Netze
+  bleiben damit getrennt; Zuordnungen aus früheren Versionen werden migriert.
+- Mit gesetztem `TRACCAR_FORWARD_URL` geht die **fusionierte** Position jedes
+  Kindes als OsmAnd-Position an Traccar → **ein Gerät je Kind** (nicht je Beacon).
   **ID-Bereinigung:** Traccar akzeptiert in Geräte-IDs keine Bindestriche (HTTP 400);
-  beim Forwarding wird die Beacon-ID deshalb auf `A–Z a–z 0–9 . _` reduziert
+  beim Forwarding wird die ID deshalb auf `A–Z a–z 0–9 . _` reduziert
   (`BEACON-TEST-1` → `BEACONTEST1`). Die Original-ID bleibt in der Bridge erhalten.
 - Eltern-UI zeigt die letzten Positionen; API: `GET /api/v1/parent/findmy/locations`.
+- **Quellen-Status:** `GET /api/v1/parent/sources` liefert je Quelle die jüngste
+  Position, ihr Alter, Vertrauensstufe und Gültigkeitsfenster – damit ist
+  sichtbar, ob ein (experimenteller) Weg überhaupt Daten liefert. In der UI:
+  Tab „Geräte" → Karte „Quellen (letzte Position)".
+- **Alles auf einmal einrichten:** `bash scripts/setup-findmy.sh` (Google-Weiterleitung
+  setzen + Apple-Zustand melden), danach die Beacons in der UI zuordnen.
 
 Test:
 
