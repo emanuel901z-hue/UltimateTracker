@@ -31,7 +31,7 @@ Drei Bausteine arbeiten zusammen:
 
 | Baustein | Aufgabe |
 |---|---|
-| `anisette` | Apple-Authentifizierung (Anisette-Daten), wird von der Bridge genutzt |
+| `anisette` | Apple-Authentifizierung (Anisette-Daten), wird von der Bridge genutzt. Bei uns **`dadoum/anisette-v3-server`** (aktuell v2.2.2, Debian 13); der Client fragt die v1-kompatible Wurzel ab, das *Provision* ist v3 (`X-Apple-I-MD-RINFO`). Wechselbar über `ANISETTE_URL` in `server/.env` – nur auf **v3**-Server, ältere v1-Server können Apple-Sperren provozieren. |
 | **`findmy-bridge`** (findmy.py) | **Automatisch**: holt die Standorte der DIY-/OpenHaystack-Beacons und pusht sie **in unsere Bridge** (`APPLE_BRIDGE_TARGET`, OsmAnd-Protokoll) – von dort in die Sensor-Fusion und (optional) nach Traccar |
 | `macless-haystack` | Key-Generierung (`generate_keys.py`) und optional Web-UI für manuelle Sicht |
 
@@ -139,6 +139,10 @@ und Abhilfen, in dieser Reihenfolge:
    warum weiß nur Apple".
 5. Alternativ eine passende `auth.json` von einem anderen Rechner/Tool übernehmen –
    liegt sie im Volume, überspringt der Endpunkt die Registrierung.
+6. **Anisette-Server prüfen** (nur falls ein fremder Dienst eingetragen ist): Es
+   muss ein **v3**-Server sein – ältere v1-Server können Apple-Sperren
+   provozieren. Bei uns läuft bereits `dadoum/anisette-v3-server`; ein Wechsel
+   ändert am `ec -80045` nichts (siehe Diagnose unten).
 
 **Diagnose bei uns (2026-10-13)** – schließt Konto und Anisette als Ursache aus:
 
