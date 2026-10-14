@@ -5,14 +5,28 @@
 #
 # Prüft:
 #   * Plattenplatz auf / (Warnung ab 85 %)
-#   * SMART-Gesundheit der Systemplatte (falls smartctl vorhanden)
+#   * SMART-Gesundheit der Platten (falls smartctl vorhanden)
 #   * Alter der letzten Sicherung (Warnung ab 2 Tagen)
 #   * Zustand der Tracker-Container (nicht "running")
+#
+# Meldet **nur**, wenn es etwas zu melden gibt (sonst still).
 
 set -u
 
-ALERT="${UT_ALERT:-$HOME/UltimateTracker/ops/alerts/ut-alert.sh}"
-BACKUP_DIR="${UT_BACKUP_DIR:-$HOME/UltimateTracker/backups}"
+# Basisverzeichnis robust bestimmen: unter sudo/root zeigt $HOME auf /root,
+# deshalb zusätzlich den üblichen Installationsort prüfen.
+UT_BASE="${UT_BASE:-}"
+if [ -z "$UT_BASE" ]; then
+	for candidate in "$HOME/UltimateTracker" /home/administrator/UltimateTracker; do
+		if [ -d "$candidate" ]; then
+			UT_BASE="$candidate"
+			break
+		fi
+	done
+fi
+
+ALERT="${UT_ALERT:-$UT_BASE/ops/alerts/ut-alert.sh}"
+BACKUP_DIR="${UT_BACKUP_DIR:-$UT_BASE/backups}"
 WARN_PERCENT="${UT_DISK_WARN_PERCENT:-85}"
 BACKUP_MAX_AGE_DAYS="${UT_BACKUP_MAX_AGE_DAYS:-2}"
 
@@ -38,22 +52,23 @@ if command -v smartctl >/dev/null 2>&1; then
 fi
 
 # --- letzte Sicherung ---
-newest=$(find "$BACKUP_DIR" -name '*.sql.gz' -o -name '*.tgz' 2>/dev/null | head -1)
+newest=$(find "$BACKUP_DIR" -maxdepth 1 \( -name '*.sql.gz' -o -name '*.tgz' \) \
+	-printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1)
 if [ -z "$newest" ]; then
 	problems+=("Keine Sicherung in $BACKUP_DIR gefunden")
 else
-	age_days=$((($(date +%s) - $(stat -c %Y "$(find "$BACKUP_DIR" -name '*.sql.gz' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)" 2>/dev/null || echo 0)) / 86400))
+	age_days=$((( $(date +%s) - ${newest%%.*} ) / 86400))
 	if [ "$age_days" -ge "$BACKUP_MAX_AGE_DAYS" ]; then
 		problems+=("Letzte Sicherung ist $age_days Tage alt (Grenze ${BACKUP_MAX_AGE_DAYS})")
 	fi
 fi
 
-# --- Container des Tracker-Stacks ---
+# --- Container des Tracker-Stacks (Namen mit Bindestrich!) ---
 if command -v docker >/dev/null 2>&1; then
 	while read -r name state; do
 		[ -n "$name" ] || continue
 		[ "$state" = "running" ] || problems+=("Container $name ist nicht running ($state)")
-	done < <(docker ps -a --filter 'name=ultimatetracker_' --format '{{.Names}} {{.State}}')
+	done < <(docker ps -a --filter 'name=ultimatetracker-' --format '{{.Names}} {{.State}}')
 fi
 
 if [ "${#problems[@]}" -eq 0 ]; then
