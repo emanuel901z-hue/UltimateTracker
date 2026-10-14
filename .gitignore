@@ -39,3 +39,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.code-workspace
+
+# Betriebswerkzeuge (ops/): lokale Geheimnisse der Maschine
+ops/.env
+ops/dozzle-users.yml

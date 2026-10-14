@@ -1,0 +1,120 @@
+# Betriebswerkzeuge für die Server-Maschine (manucloud) – bewusst GETRENNT vom
+# Tracker-Stack: eigenes Compose-Projekt, eigene Volumes, unabhängige Updates.
+#
+# Start:   cd ~/ops && docker compose up -d
+# Zugriff: nur im LAN (UFW); siehe docs/operations-manucloud.md
+#
+# Enthalten:
+#   ntfy    – selbst gehosteter Push-Dienst (Ziel für Apprise-Alarme; kein Dritter)
+#   dozzle  – Container-Logs live im Browser (Ergänzung zu Portainer)
+#   diun    – meldet neue Image-Versionen (nur Benachrichtigung, KEIN Auto-Update)
+#   beszel  – Verlaufs-Metriken (CPU/RAM/Disk/Container) + Alarme
+#
+# Versionen sind gepinnt (bewusst aktualisieren, nicht automatisch).
+
+name: utops
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  # Damit die Audio-Bridge den Dienst über den Docker-Namen erreicht
+  # (Apprise-Ziel `ntfy://ntfy:80/<thema>`).
+  utnet:
+    external: true
+    name: ultimatetracker_utnet
+
+volumes:
+  ntfy-cache:
+  ntfy-data:
+  diun-data:
+  beszel-data:
+
+services:
+  ntfy:
+    image: binwiederhier/ntfy:v2.29.0
+    command: serve
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      # Nur für die Anzeige/Links; der Dienst selbst bleibt im LAN.
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-http://10.1.9.53:8086}
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_AUTH_FILE: /var/lib/ntfy/user.db
+      NTFY_CACHE_DURATION: 48h
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+      - ntfy-data:/var/lib/ntfy
+    ports:
+      - "8086:80"
+    networks:
+      - utnet
+
+  dozzle:
+    image: amir20/dozzle:v11.1.3
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      DOZZLE_HOSTNAME: manucloud
+      # Nur ansehen – keine Aktionen (Neustart/Stop) aus dem Browser.
+      DOZZLE_ENABLE_ACTIONS: "false"
+      # Zugangsschutz (siehe ops/README.md): einfache Anmeldung mit users.yml.
+      DOZZLE_AUTH_PROVIDER: ${DOZZLE_AUTH_PROVIDER:-simple}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./dozzle-users.yml:/data/users.yml:ro
+    ports:
+      - "8088:8080"
+
+  diun:
+    image: crazymax/diun:4.33.0
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      TZ: Europe/Berlin
+      DIUN_WATCH_SCHEDULE: "0 6 * * *"
+      DIUN_WATCH_WORKERS: "5"
+      DIUN_WATCH_FIRSTCHECKNOTIF: "false"
+      DIUN_PROVIDERS_DOCKER: "true"
+      DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT: "true"
+      # Meldet neue Versionen an unser ntfy (kein Auto-Update!).
+      DIUN_NOTIF_NTFY_ENDPOINT: "http://ntfy:80"
+      DIUN_NOTIF_NTFY_TOPIC: ${NTFY_TOPIC:-ut-alerts}
+      DIUN_NOTIF_NTFY_PRIORITY: "2"
+      DIUN_NOTIF_NTFY_TAGS: "package"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - diun-data:/data
+    networks:
+      - utnet
+
+  beszel:
+    image: henrygd/beszel:0.21.0
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - beszel-data:/beszel_data
+    ports:
+      - "8090:8090"
+    networks:
+      - utnet
+
+  # Agent für die Systemwerte (CPU/RAM/Disk/Container).
+  # Er braucht KEY und TOKEN aus dem Hub („Add system") – deshalb erst nach dem
+  # Anlegen des Hub-Kontos einkommentieren und starten:
+  #   docker compose up -d beszel-agent
+  # beszel-agent:
+  #   image: henrygd/beszel-agent:0.21.0
+  #   restart: unless-stopped
+  #   logging: *default-logging
+  #   environment:
+  #     LISTEN: "45876"
+  #     KEY: "<öffentlicher Schlüssel aus dem Hub>"
+  #     TOKEN: "<Token aus dem Hub>"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   networks:
+  #     - utnet
