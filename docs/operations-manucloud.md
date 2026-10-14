@@ -13,7 +13,7 @@ läuft (im Unterschied zu `docs/deployment.md`, das den Aufbau beschreibt).
 | Hardware | 4 vCPU, 30 GiB RAM, 8 GiB Swap, **Intenso SSD 477 GB** (LVM, 466 GB nutzbar) |
 | Docker | 29.9.0 + Compose v5.6.0, Loglimits + `live-restore` in `/etc/docker/daemon.json` |
 | Zeit | Europe/Berlin, NTP synchron |
-| Updates | `unattended-upgrades` aktiv |
+| Updates | `unattended-upgrades` aktiv; journald auf 500 MB begrenzt |
 
 ## 2. Was läuft wo
 
@@ -23,12 +23,14 @@ läuft (im Unterschied zu `docs/deployment.md`, das den Aufbau beschreibt).
 | | `audio-bridge` | 8085 | Eltern-UI/API + Tracker-Uplink |
 | | `traccar` | 8082, 5055 | Karte; 5055 = OsmAnd-Ingest |
 | | `postgres` | – | **hier liegen die Positionen** |
-| Betriebswerkzeuge (`~/ops`) | `ntfy` | 8086 | Push-Kanal für Alarme |
-| | `dozzle` | 8088 | Container-Logs |
-| | `beszel` | 8090 | Verlaufs-Metriken |
-| | `diun` | – | Image-Update-Meldungen |
-| Fremd | `HomeAssistant` | 8123, 18555, 40000 | läuft weiter (host-Netz) |
+| Betriebswerkzeuge (`~/ops`, Projekt `utops`) | `ntfy` | 8086 | Push-Kanal für Alarme (selbst gehostet) |
+| | `dozzle` | 8088 | Container-Logs (Anmeldung aus `dozzle-users.yml`) |
+| | `beszel` | 8090 | Verlaufs-Metriken (Agent optional) |
+| | `diun` | – | meldet neue Image-Versionen an ntfy |
+| System | `cockpit` | 9090 | OS-Verwaltung im Browser (systemd, LVM, Journal, Terminal) |
 | | `portainer` | 9443 | Container-Verwaltung |
+| | `fail2ban`, `smartd` | – | Login-Schutz, Plattenüberwachung |
+| Fremd | `HomeAssistant` | 8123, 18555, 40000 | läuft weiter (host-Netz) |
 
 Profil `findmy` (Apple/Google) ist hier **nicht** gestartet.
 
@@ -41,9 +43,10 @@ Default: eingehend **abweisen**, ausgehend erlauben.
 | 22/tcp | LAN | SSH |
 | 80, 443/tcp | überall | Caddy (später Let's Encrypt) |
 | 8085, 8082, 5055/tcp | LAN | Tracker/UI, Traccar |
-| 8086, 8088, 8090/tcp | LAN | ntfy, Dozzle, Beszel |
+| 8086, 8088, 8090, 9090/tcp | LAN | ntfy, Dozzle, Beszel, Cockpit |
 | 9443/tcp | LAN | Portainer |
 | 8123, 18555, 40000/tcp, 5353/udp | LAN | HomeAssistant |
+| `tailscale0` | – | Tailscale (nach `tailscale up`) |
 
 ```bash
 sudo ufw status verbose
@@ -67,8 +70,9 @@ Geheimnisse stehen **nicht** in diesem Dokument:
 | Traccar | `TRACCAR_SSO_EMAIL` / `TRACCAR_SSO_PASSWORD` (Auto-Login per Ticket) |
 | Tracker-Token | `DEVICE_TOKEN` (im Setup-Assistenten sichtbar) |
 | Portainer | eigenes Konto (beim Einrichten gesetzt) |
-| Dozzle | `~/ops/dozzle-users.yml` |
-| ntfy-Thema | `~/ops/.env` → `NTFY_TOPIC` |
+| Dozzle | `~/ops/dozzle-users.yml` (neu erzeugen: siehe `ops/README.md`) |
+| ntfy-Thema | `~/ops/.env` → `NTFY_TOPIC` (auch die App am Handy braucht es) |
+| Cockpit | Systemkonto (`administrator`) |
 
 Zertifikat fürs Handy: `http://10.1.9.53:8085/ca.crt` importieren → danach ist
 `https://10.1.9.53/` ohne Warnung.
@@ -80,14 +84,16 @@ cd ~/UltimateTracker && bash scripts/backup-volumes.sh    # pg_dump + Volumes
 ```
 
 - Ziel: `~/UltimateTracker/backups` (Aufbewahrung 30 Tage)
-- **Cron:** täglich 03:30 (`crontab -l`)
-- **Off-Site:** `scripts/pull-manucloud-backups.ps1` holt die Dateien auf den
-  Windows-Host (Task Scheduler, täglich 04:30). Eine Sicherung auf derselben
-  Platte schützt **nicht** gegen Plattenausfall.
+- **Cron:** täglich **03:30**; schlägt der Lauf fehl, kommt sofort ein Alarm
+- **Off-Site:** geplante Aufgabe **„UltimateTracker Backup-Abholung"** auf dem
+  Windows-Host holt die Dateien täglich **04:30** nach `D:\Backups\manucloud`
+  (`scripts/pull-manucloud-backups.ps1`, angelegt mit
+  `scripts/register-backup-task.ps1`). Eine Sicherung auf derselben Platte
+  schützt **nicht** gegen Plattenausfall.
 
 Wiederherstellen: `docs/deployment.md` §7.
 
-## 6. Alarme (Apprise → ntfy)
+## 6. Alarme (ein Kanal für alles)
 
 `~/UltimateTracker/server/.env`:
 
@@ -95,12 +101,23 @@ Wiederherstellen: `docs/deployment.md` §7.
 APPRISE_URLS=ntfy://ntfy:80/<NTFY_TOPIC>
 ```
 
-Damit melden sich Akku-warnungen, Suchmodus, neue Nachrichten **und** die
-Betriebsmeldungen. Test:
+Damit melden sich Akku-Warnungen, Suchmodus und neue Nachrichten **und** die
+Betriebsmeldungen der Maschine. Test:
 
 ```bash
 docker compose exec audio-bridge python -c "import app.main as m; m.notify('Test','ok')"
 ```
+
+**Betriebsmeldungen** (`ops/alerts/`, installiert nach `/usr/local/bin`):
+
+| Skript | Wann | Meldet |
+|---|---|---|
+| `ut-check.sh` | Cron täglich **07:00** | Plattenplatz ≥ 85 %, SMART-Problem, Sicherung ≥ 2 Tage alt, Container nicht `running` |
+| `ut-smart-alert.sh` | `smartd` (`-M exec`) | Plattenproblem sofort |
+| `ut-alert.sh` | von beiden genutzt | sendet Titel/Text an ntfy |
+| Backup-Cron | bei Fehlschlag | „Backup fehlgeschlagen" |
+
+Am Handy: ntfy-App → Server `http://10.1.9.53:8086` → Thema abonnieren.
 
 ## 7. Updates (bewusst, nicht automatisch)
 
@@ -110,8 +127,8 @@ cd server && docker compose --profile tls pull && docker compose --profile tls u
 cd ~/ops && docker compose pull && docker compose up -d
 ```
 
-Image-Versionen sind gepinnt; **Diun** meldet per ntfy, wenn es Neues gibt.
-Systempakete macht `unattended-upgrades` (Sicherheitsupdates) selbst.
+Image-Versionen sind gepinnt; **Diun** meldet per ntfy, wenn es Neues gibt
+(täglich 06:00). Systempakete macht `unattended-upgrades` selbst.
 
 ## 8. Diagnose
 
@@ -121,13 +138,23 @@ Systempakete macht `unattended-upgrades` (Sicherheitsupdates) selbst.
 | Bridge gesund? | `curl -s localhost:8085/healthz` |
 | Dienste-Status | Eltern-UI → Übersicht → „Dienste" |
 | Welche Quelle liefert? | Eltern-UI → Geräte → „Quellen (letzte Position)" |
-| Container-Logs | `docker compose logs -f audio-bridge` oder Dozzle (8088) |
-| Plattenplatz | `df -h /` · SMART: `sudo smartctl -H /dev/sda` |
+| Container-Logs | Dozzle (8088) oder `docker compose logs -f audio-bridge` |
+| Verlauf CPU/RAM/Disk | Beszel (8090) |
+| OS-Ebene (Dienste, LVM, Journal) | Cockpit (9090) |
+| Plattenplatz / SMART | `df -h /` · `sudo smartctl -H /dev/sda` |
 | Firewall | `sudo ufw status verbose` |
 | Fehlgeschlagene Logins | `sudo fail2ban-client status sshd` |
+| Betriebscheck sofort | `/usr/local/bin/ut-check.sh` |
 
-## 9. Was NICHT auf dieser Maschine liegt
+## 9. Fernzugriff
 
-- `xrdp` ist **deaktiviert** (Fernzugriff nur per SSH).
-- TeamViewer ist installiert, aber inaktiv (kein Dienst) – kann entfernt werden.
+- **SSH** (Schlüssel) – der normale Weg.
+- **Tailscale** ist installiert (`tailscale` 1.104). Aktivieren:
+  `sudo tailscale up` → Link im Browser bestätigen. Danach ist die Maschine ohne
+  offene Ports von außen erreichbar; UFW erlaubt das Interface `tailscale0`.
+- `xrdp` ist **deaktiviert**, TeamViewer inaktiv (Paket liegt noch).
+
+## 10. Was NICHT auf dieser Maschine liegt
+
 - Teddycloud wurde entfernt (Volumes + Image).
+- Das Compose-Profil `findmy` (Apple/Google) ist hier nicht gestartet.
