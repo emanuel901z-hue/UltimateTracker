@@ -202,9 +202,9 @@ Image-Versionen sind gepinnt; **Diun** meldet per ntfy, wenn es Neues gibt
 ## 9. Fernzugriff
 
 - **SSH** (Schlüssel) – der normale Weg.
-- **Tailscale** ist installiert (`tailscale` 1.104). Aktivieren:
-  `sudo tailscale up` → Link im Browser bestätigen. Danach ist die Maschine ohne
-  offene Ports von außen erreichbar; UFW erlaubt das Interface `tailscale0`.
+- **Tailscale** ist installiert (`tailscale` 1.104) und **aktiv** (Tailnet
+  `tail0c6f95.ts.net`, Node `manucloud`). Der Zugriff auf die Eltern-UI läuft
+  darüber – Einrichtung, Adressen und Zertifikat: **§4b**.
 - `xrdp` ist **deaktiviert**, TeamViewer inaktiv (Paket liegt noch).
 
 ## 10. Was NICHT auf dieser Maschine liegt
