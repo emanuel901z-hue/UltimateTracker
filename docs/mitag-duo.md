@@ -134,11 +134,54 @@ belegen.
   Pogo-Pad zugänglich machen.
 - **Bare PCB schützen**: kleine Druck-Halterung oder Kapton auf der Unterseite,
   damit nichts gegen das ESP-Board scheuert. Nur die Antennenzone **nicht** vergießen.
-- **Zwei Tags im Gehäuse** piepen und warnen unabhängig voneinander – akustisch
-  und in der Ortung. Wenn nur einer integriert wird, den anderen außen am Riemen
-  tragen (besserer Funkweg, leichter zu servicen).
+- **Zwei Tags (Apple + Google)**: Bauform, Entkopplung und Zuordnung in der UI –
+  siehe **§5**.
 
-## 5. Prüfpunkte beim Einbau
+## 5. Zwei Tags (1× Apple, 1× Google)
+
+**Elektrisch ändert sich fast nichts:** DC5 kann 1 A, zwei Tags ziehen zusammen
+≈ 44 µA (Spitzen ~19 mA). Jeder Tag bekommt seine eigene Entkopplung, dazu ein
+gemeinsamer Bulk-Kondensator:
+
+```
+DC5 ──[Ferrit]──┬── 47 µF ──────────── GND
+                ├── 100 nF + 10 µF ─── MiTag 1 (Apple)
+                └── 100 nF + 10 µF ─── MiTag 2 (Google)
+```
+
+(Eine eigene Ferritperle je Tag ist genauso gut – dann koppeln sich die
+Advertising-Spitzen der beiden nicht.)
+
+**In der UI taucht nur der Google-Tag auf** (§2). Deshalb:
+
+- Tags **sprechend benennen** – der Beacon-Schlüssel ist `google / <Gerätename>`,
+  also z. B. „Mia-Google". Sonst ist die Zuordnung in der Eltern-UI nicht eindeutig.
+- Der Apple-Tag bleibt reine Handy-Sicht („Wo ist?").
+
+**Mechanik – hier wird es eng.** Ein Tag misst **37 × 37 × 5 mm**, das Board ist
+**32 mm breit**. Zwei davon unterzubringen heißt:
+
+- **Breite:** das Gehäuse muss auf **≥ ~41 mm** wachsen (oder der Tag liegt schräg
+  bzw. außen).
+- **Höhe:** Board (~10 mm) + LiPo (10 mm) + 2 × 5 mm = **~30 mm** – das Ziel von
+  20–22 mm (`project.md` §1.3) ist damit nicht mehr zu halten.
+
+Drei Auswege:
+
+1. **Gehäuse größer** (Breite +5 mm, Höhe +10 mm) – einfachste Lösung, wenn die
+   Trageform mitspielt.
+2. **Ein Tag innen, einer außen**: innen den **Google**-Tag (der in der UI
+   sichtbar ist), den Apple-Tag in einer kleinen Tasche am Riemen – besserer
+   Funkweg, keine Bauformänderung.
+3. **Beide außen** in einer separaten Tasche – dann bleibt der Tracker selbst schlank.
+
+**Beide Taster erreichbar lassen** (§4): Der Reset (6× drücken) ist der einzige Weg,
+ein Tag später auf das andere Netz umzustellen.
+
+**Anti-Stalking ×2:** beide Tags piepen unabhängig und lösen fremde
+„Tracker reist mit dir"-Warnungen aus – doppelt so oft wie mit einem.
+
+## 6. Prüfpunkte beim Einbau
 
 | # | Prüfung | Erwartung |
 |---|---|---|
@@ -149,8 +192,9 @@ belegen.
 | 5 | Reset erreichbar | 6× drücken + halten funktioniert noch eingebaut |
 | 6 | Funkreichweite | 80–100 m Freifeld; im Gehäuse messen (M7 analog) |
 | 7 | GNSS-Störung | GNSS-Fix-Zeit mit/ohne eingebauten Tag vergleichen |
+| 8 | Zwei Tags | beide gleichzeitig gekoppelt und in ihrer App sichtbar |
 
-## 6. Rechtliches (kurz)
+## 7. Rechtliches (kurz)
 
 - Ausbauen und Umversorgen entwertet die **CE-/FCC-Zertifizierung** des Moduls *als
   Produkt*.
