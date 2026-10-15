@@ -140,8 +140,15 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 ## E. Optional / experimentell
 
 - [ ] Beacon-Stromversorgung entscheiden (Always-on-Chip vs. Wake-Zyklen)
+- [ ] **MiTag Duo einbauen** (2× bestellt): 3,0-V-LDO am LiPo-Zweig, Antennen- und
+      Taster-Platzierung, Prüfpunkte 1–7 (`docs/mitag-duo.md`) – Google-Tag in den
+      Stack, Apple-Tag als Handy-Zusatzortung
 - [ ] Google: Beacon in der WebUI registrieren + Firmware im Browser flashen
-- [ ] Apple: echte AirTags anbinden (Key-Extraktion braucht macOS)
+      (zertifizierte Find-Hub-Tracker laufen ohne Code über den Google-Weg,
+      `docs/findmy.md` §3d)
+- [ ] Apple: echte AirTags/MiTag anbinden – **bei zertifizierten Accessoires nicht
+      serverseitig möglich** (Key liegt im Gerät/iCloud), nur Handy-App
+      (`docs/mitag-duo.md` §2)
 - [ ] SMS-Gateway evaluieren (nur falls M4 erfolgreich und Server-SMS gewünscht)
 - [ ] Traccar Relay (Android) evaluieren (braucht Preview-Traccar + `notificator.traccar.key`)
 

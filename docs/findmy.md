@@ -291,6 +291,30 @@ in diesem Fall auf 3a (WebUI) wechseln.
 Device“ mit „Mit Netzwerk in allen Bereichen“ aktivieren, sonst fehlen die
 E2EE-Daten.
 
+### 3d. Zertifizierte Tracker (z. B. MiLi MiTag Duo)
+
+Der Google-Weg ist **nicht auf DIY-Beacons beschränkt**: `GoogleFindMyTools` liest
+die E2EE-Keys der im Konto registrierten Find-Hub-Geräte aus – also auch
+**zertifizierter** Tracker (Chipolo, Pebblebee, MiLi MiTag Duo …). Sie stehen in
+der WebUI in **derselben** Geräteliste und werden genauso weitergeleitet.
+
+Ablauf (einmalig):
+
+1. Tracker in der **Google-Find-Hub-App** einem Google-Konto zuordnen (Android).
+2. In der WebUI mit **demselben** Konto anmelden (Abschnitt 3a) – der Tracker
+   erscheint in der Geräteliste.
+3. `bash scripts/setup-google-forwarding.sh` – setzt den Weiterleitungs-Endpunkt
+   für alle Geräte (idempotent, lässt Vorhandenes stehen).
+4. Eltern-UI → **Geräte → „Find-My-Beacons zuordnen"** – Eintrag
+   `google / <Gerätename>` einem Kind zuweisen. Erst dann fließt die Position in
+   die fusionierte Position des Kindes.
+
+**Apple bleibt außen vor:** Bei zertifizierten Accessoires liegt der Schlüssel im
+Gerät bzw. iCloud-Schlüsselbund – unser Apple-Weg (`macless-haystack`) ist auf
+**DIY-Beacons** beschränkt, deren Keys du selbst erzeugst. Hardware-Einbau,
+Stromversorgung und die Anti-Stalking-Grenzen:
+[`mitag-duo.md`](mitag-duo.md).
+
 ## 4. Ingest & Auswertung in der Bridge
 
 **Ein Anlaufpunkt für alle Wege** (`docs/decisions.md` D-019): jedes

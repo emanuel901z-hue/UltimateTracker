@@ -69,6 +69,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/sim-providers.md` | Anbieterneutrale SIM-/SMS-Schicht + Vorlagen für andere MVNOs |
 | `docs/sms.md` | Identitäten (IMEI/MSISDN/ICCID) und SMS-Pfad (1NCE: A2P) |
 | `docs/findmy.md` | Apple/Google Find My: Gegenstücke, Setup, Grenzen (experimentell) |
+| `docs/mitag-duo.md` | Zertifizierte Find-My-Tracker (MiTag Duo): Einbau, Stromversorgung, Grenzen |
 | `docs/decisions.md` | Entscheidungsprotokoll (ADR-Kurzform) |
 | `docs/fusion.md` | Sensor-Fusion: Quellen, Regeln, Umsetzung, Optimierungsstufen |
 | `docs/parent-usability.md` | Eltern-Tauglichkeit: Analyse, Sprintplan, Umsetzung |
