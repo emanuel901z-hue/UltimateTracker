@@ -57,25 +57,59 @@ meist **nicht** dabei → der Tag piept potenziell unterwegs/im Unterricht.
 
 ## 3. Stromversorgung
 
-Der MiTag wird aus der Tracker-LiPo versorgt, **nicht** über die 3V3-Rail des
-ESP-Boards.
+Der MiTag braucht **2,6–3,6 V** und darf **nicht** direkt an die LiPo
+(3,5–4,2 V). Drei Wege, vom einfachsten zum saubersten.
 
-- **3,0-V-LDO mit winzigem Ruhestrom** statt Schaltregler. Begründung: 22 µA Last –
-  ein Buck bringt hier keinen Wirkungsgradvorteil, kostet aber Induktor und
-  **EMV-Streuung** direkt neben BLE- und GNSS-Antenne.
-  Geeignet: `TPS7A02` (≈ 25 nA Iq), `HT7330` (≈ 4 µA), `XC6206` (≈ 1 µA).
+### 3a. Schon an Bord: die AXP2101-Rails (kein Extra-LDO nötig)
+
+Der PMU bringt mehrere Rail-Typen mit (AXP2101-Datenblatt):
+
+| Rail | Bereich | Strom | Anmerkung |
+|---|---|---|---|
+| DCDC1 / DCDC5 | 1,5–3,4 V / 1,4–3,7 V | 2 A / 1 A | DC1 = **3,3 V** (ESP), DC5 = 3,3 V |
+| DCDC3 | 1,6–3,4 V | 2 A | DC3 = **3,0 V – Modem/GPS**, per PMU schaltbar |
+| ALDO1–4 | 0,5–3,5 V, 100-mV-Stufen | 300 mA | ALDO3/4 sind **low-noise**; ALDO2/ALDO4 sind im Projekt für den Mikrofon-Load-Switch vorgemerkt |
+| BLDO1/2 | 0,5–3,5 V, 100-mV-Stufen | 300 mA | BLDO1 = 1,8 V (Level-Shifter, **muss anbleiben**), BLDO2 = 3,3 V |
+
+Auf dem Board verifiziert (2026-10-12): DC1 3,3 V, DC3 3,0 V, DC5 3,3 V,
+BLDO1 1,8 V, BLDO2 3,3 V aktiv (`docs/hardware-review.md`).
+
+**Empfehlung:**
+
+1. **3V3 (DC1/DC5) vom Header anzapfen** – null Bauteile. 3,3 V liegt im Bereich
+   des Tags. Nur entkoppeln (100 nF + 10 µF, optional Ferrit in Reihe). Die Sorge
+   „die ESP-Rail schroten" ist unbegründet: 22 µA sind bei einer Rail, die
+   hunderte mA kann, nichts.
+2. **ALDO2 oder ALDO4** auf 3,0 V – frei, schaltbar, low-noise. Braucht eine
+   Firmware-Zeile (I2C: Register `0x90`, Bit `1<<n` = Enable; Register `0x92+n` =
+   Spannung in 100-mV-Stufen ab 500 mV) und einen Lötpunkt am PMU-Ausgang. Dafür
+   kann der ESP den Tag **stromlos schalten**.
+3. **Nicht DC3** – das ist die Modem/GPS-Rail und wird laut Plan (B1, Variante 3)
+   bei jedem Wake **zyklisch abgeschaltet**; der Tag würde mit dem Modem neu
+   starten.
+4. BLDO1 (1,8 V) ist zu niedrig und muss anbleiben; BLDO2 (3,3 V) ist belegt.
+
+**Zu prüfen:** ob ALDO2/ALDO4 auf dem Board herausgeführt sind (sonst am
+Ausgangs-Kondensator/Testpad abgreifen) – und den **Ruhestrom messen**. Das
+Datenblatt nennt für den PMU im Leerlauf ~40 µA, die Ground-Ströme der LDOs stehen
+dort nicht. Bei 22 µA Tag-Strom ist genau das die entscheidende Zahl.
+
+### 3b. Eigener 3,0-V-LDO (wenn du volle Trennung willst)
+
+- **Low-Iq-LDO statt Schaltregler.** Begründung: 22 µA Last – ein Buck bringt hier
+  keinen Wirkungsgradvorteil, kostet aber Induktor und **EMV-Streuung** direkt
+  neben BLE- und GNSS-Antenne.
+  Geeignet: `MCP1700-3002` (TO-92, ≈ 1,6 µA), `HT7330-3.0` (TO-92, ≈ 4 µA),
+  `TPS7A02` (SOT-23, ≈ 25 nA). **Nicht** `AMS1117` (≈ 5 mA Iq).
 - **Warum das aufgeht:** das Board schaltet bei ~3,5 V ab → der LiPo liefert
   3,5–4,2 V, der LDO bleibt bis zum Ende in Regulation (untere Grenze des Tags ist
   2,6 V).
 - **Eigener Zweig** an der LiPo: kleine Sicherung (z. B. 100 mA) + **100 nF und
   10 µF** direkt an den MiTag-Pads (BLE-Sendespitzen).
-- **Lötpunkt**: der CR2032-Halter (Zelle raus, dünne Litze an die Pads).
-  **Polung vorher messen** (siehe `project.md` 2.3).
 - **Optional**: P-Kanal-MOSFET als Lastschalter an einem freien GPIO – damit kann
   der ESP den Tag **stromlos schalten** (falls er sich aufhängt). Standard = an.
-- **Alternative ohne Extra-Bauteil**: eine freie AXP2101-Rail (ALDO2/ALDO4) auf
-  3,0–3,3 V. Achtung: dieselben Rails sind im Projekt als Kandidat für den
-  **Mikrofon-Load-Switch** notiert – nicht doppelt belegen.
+  Ein **BJT** taugt dafür nicht: bei 9,5 mA Spitzen bräuchte ein BC327 ~100 µA
+  Basisstrom – mehr als die durchschnittliche Last des Tags.
 - Nebeneffekt: der Tag meldet dauerhaft „voll" (konstante Spannung). Für uns egal –
   wir sehen die Batterie des Trackers, nicht die des Tags.
 
