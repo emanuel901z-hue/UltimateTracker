@@ -60,39 +60,43 @@ meist **nicht** dabei → der Tag piept potenziell unterwegs/im Unterricht.
 Der MiTag braucht **2,6–3,6 V** und darf **nicht** direkt an die LiPo
 (3,5–4,2 V). Drei Wege, vom einfachsten zum saubersten.
 
-### 3a. Schon an Bord: die AXP2101-Rails (kein Extra-LDO nötig)
+### 3a. Schon an Bord: `DC5` vom Header (kein Extra-Bauteil nötig)
 
-Der PMU bringt mehrere Rail-Typen mit (AXP2101-Datenblatt):
+LilyGO dokumentiert die **Power-Domains** im Hersteller-Repo
+(`Xinyuan-LilyGO/LilyGo-T-SIM7080G`, README Abschnitt „Power domain"):
 
-| Rail | Bereich | Strom | Anmerkung |
-|---|---|---|---|
-| DCDC1 / DCDC5 | 1,5–3,4 V / 1,4–3,7 V | 2 A / 1 A | DC1 = **3,3 V** (ESP), DC5 = 3,3 V |
-| DCDC3 | 1,6–3,4 V | 2 A | DC3 = **3,0 V – Modem/GPS**, per PMU schaltbar |
-| ALDO1–4 | 0,5–3,5 V, 100-mV-Stufen | 300 mA | ALDO3/4 sind **low-noise**; ALDO2/ALDO4 sind im Projekt für den Mikrofon-Load-Switch vorgemerkt |
-| BLDO1/2 | 0,5–3,5 V, 100-mV-Stufen | 300 mA | BLDO1 = 1,8 V (Level-Shifter, **muss anbleiben**), BLDO2 = 3,3 V |
+| Rail | versorgt | für uns |
+|---|---|---|
+| **DC5** | **kein Bordperipherie** – als **Header-Pin** herausgeführt, 1,4–3,7 V, max. 1 A, per Software einstellbar | **die Lösung** |
+| DC3 / BLDO2 | Modem + GPS | nicht anfassen – wird laut Plan (B1, Variante 3) bei jedem Wake zyklisch abgeschaltet |
+| DC1 | ESP32-S3-Kern, fest 3,3 V | Herstellerwarnung: **nicht** per Software verstellen |
+| ALDO1 / ALDO2 / ALDO4 | Kamera | frei, wenn keine Kamera – aber **nicht** am Header |
+| ALDO3 | SD-Karte | frei, wenn keine SD – aber **nicht** am Header |
+| BLDO1 | Level-Shifter (1,8 V) | **muss anbleiben**, sonst reden ESP32-S3 und SIM7080G nicht mehr |
 
-Auf dem Board verifiziert (2026-10-12): DC1 3,3 V, DC3 3,0 V, DC5 3,3 V,
-BLDO1 1,8 V, BLDO2 3,3 V aktiv (`docs/hardware-review.md`).
+**Empfehlung: den `DC5`-Header-Pin nehmen.**
 
-**Empfehlung:**
+- Er ist bereits herausgeführt und im Auslieferungszustand aktiv (Messung
+  2026-10-12: **DC5 = 3,3 V**) – und er versorgt **kein** Bordperipherie.
+- 3,3 V liegen im Bereich des Tags (2,6–3,6 V) → **nichts einzustellen**.
+  Wer exakt 3,0 V will, kann DC5 per Software verstellen (max. 1 A).
+- Nur entkoppeln: 100 nF + 10 µF direkt an den MiTag-Pads, optional ein Ferrit in
+  Reihe (die 9,5-mA-Advertising-Spitzen sollen nicht in GNSS/BLE streuen).
 
-1. **3V3 (DC1/DC5) vom Header anzapfen** – null Bauteile. 3,3 V liegt im Bereich
-   des Tags. Nur entkoppeln (100 nF + 10 µF, optional Ferrit in Reihe). Die Sorge
-   „die ESP-Rail schroten" ist unbegründet: 22 µA sind bei einer Rail, die
-   hunderte mA kann, nichts.
-2. **ALDO2 oder ALDO4** auf 3,0 V – frei, schaltbar, low-noise. Braucht eine
-   Firmware-Zeile (I2C: Register `0x90`, Bit `1<<n` = Enable; Register `0x92+n` =
-   Spannung in 100-mV-Stufen ab 500 mV) und einen Lötpunkt am PMU-Ausgang. Dafür
-   kann der ESP den Tag **stromlos schalten**.
-3. **Nicht DC3** – das ist die Modem/GPS-Rail und wird laut Plan (B1, Variante 3)
-   bei jedem Wake **zyklisch abgeschaltet**; der Tag würde mit dem Modem neu
-   starten.
-4. BLDO1 (1,8 V) ist zu niedrig und muss anbleiben; BLDO2 (3,3 V) ist belegt.
+Damit brauchst du **weder LDO noch Lastschalter**, und der Tag hängt **nicht** an
+der 3V3-/DC1-Rail des ESP. Auch der Ruhestrom kostet nichts extra: die Rail ist
+ohnehin an.
 
-**Zu prüfen:** ob ALDO2/ALDO4 auf dem Board herausgeführt sind (sonst am
-Ausgangs-Kondensator/Testpad abgreifen) – und den **Ruhestrom messen**. Das
-Datenblatt nennt für den PMU im Leerlauf ~40 µA, die Ground-Ströme der LDOs stehen
-dort nicht. Bei 22 µA Tag-Strom ist genau das die entscheidende Zahl.
+Falls du ihn doch **schaltbar** willst: die Kamera-Rails (ALDO1/ALDO2/ALDO4) sind
+ohne Kamera frei, aber nicht am Header – dann müsstest du am PMU-Ausgang löten.
+Firmware: I2C-Register `0x90`, Bit `1<<n` = Enable (n: 0=ALDO1 … 3=ALDO4),
+`0x92+n` = Spannung in 100-mV-Stufen ab 500 mV. Achtung: dieselben Rails sind im
+Projekt als Kandidat für den **Mikrofon-Load-Switch** notiert – nicht doppelt
+belegen.
+
+> **Warum nicht die 3V3-Rail des ESP?** Technisch ginge es (3,3 V, 22 µA sind
+> nichts), aber DC1 ist laut Hersteller die Kernversorgung, die man nicht
+> verstellen soll – und DC5 ist ohnehin da und frei.
 
 ### 3b. Eigener 3,0-V-LDO (wenn du volle Trennung willst)
 
@@ -131,8 +135,8 @@ dort nicht. Bei 22 µA Tag-Strom ist genau das die entscheidende Zahl.
 
 | # | Prüfung | Erwartung |
 |---|---|---|
-| 1 | Spannung an den MiTag-Pads | **3,0 V**, belastbar bis 9,5 mA |
-| 2 | Ruhestrom des Zweigs | **< 30 µA** (Tag + LDO) |
+| 1 | Spannung an den MiTag-Pads | **DC5 = 3,3 V** (im Bereich 2,6–3,6 V), belastbar bis 9,5 mA |
+| 2 | Ruhestrom des Zweigs | Tag ≈ 22 µA – die Rail ist ohnehin an, es kommt nichts dazu |
 | 3 | Polung | vor dem Einstecken messen |
 | 4 | Kopplung | Tag wird in „Wo ist?" bzw. „Google Find Hub" gefunden |
 | 5 | Reset erreichbar | 6× drücken + halten funktioniert noch eingebaut |
