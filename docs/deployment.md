@@ -399,7 +399,7 @@ Konfigurationsfehler im Stack. Drei Wege:
 |---|---|---|
 | **Port-Weiterleitung auf dem Host** | `powershell -ExecutionPolicy Bypass -File scripts\windows-lan-forward.ps1` (als **Administrator**) | leitet 8085/8082/80/443 per `netsh portproxy` auf die WSL-IP und öffnet die Firewall-Regeln. Nach jedem Distro-Neustart erneut ausführen (WSL-IP ändert sich) |
 | **Mirrored Networking** | `C:\Users\<du>\.wslconfig`: `[wsl2]` + `networkingMode=mirrored`, danach `wsl --shutdown` | WSL teilt sich die Host-IP → LAN-Zugriff ohne Weiterleitung (Windows 11 22H2+). Gilt für **alle** Distros |
-| **Tailscale** (empfohlen für „von außen") | in der WSL: `curl -fsSL https://tailscale.com/install.sh \| sh` + `sudo tailscale up` | eigenes Tailnet-Gerät, **kein** offener Port, Zugriff vom Handy überall – ohne DynDNS. Ideal, weil auf dem Windows-Host ohnehin Tailscale läuft |
+| **Tailscale** (empfohlen für „von außen") | in der WSL: `curl -fsSL https://tailscale.com/install.sh \| sh` + `sudo tailscale up` | eigenes Tailnet-Gerät, **kein** offener Port, Zugriff vom Handy überall – ohne DynDNS. Ideal, weil auf dem Windows-Host ohnehin Tailscale läuft. Konkret eingerichtet über `SITE_LAN_ALIASES` (IP + MagicDNS-Name) – siehe `docs/operations-manucloud.md` §4b und `docs/onboarding.md` |
 
 **HTTPS über die nackte IP:** In `server/.env` `SITE_LAN=192.168.1.50` setzen – Caddy
 stellt dafür ein Zertifikat aus. Wichtig: Browser senden bei **IP-Adressen kein

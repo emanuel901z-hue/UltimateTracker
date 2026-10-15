@@ -2540,6 +2540,24 @@ def maintenance_cleanup() -> dict:
 # --- Geräte-Registry (Identitäten: IMEI ↔ MSISDN ↔ Name) --------------------
 
 
+def tracker_server_url() -> str:
+    """Vorschlag für die Server-Adresse, die der Tracker (per LTE) erreichen muss.
+
+    Reihenfolge: `TRACKER_SERVER_URL` (explizit) → echter Hostname aus `SITE_AUDIO`
+    (kein `*.localhost`/`*.ts.net`) → LAN-Adresse als Test-Vorschlag. Die UI zeigt
+    den Wert in einem editierbaren Feld; er muss aus dem Mobilfunknetz erreichbar
+    sein (der Tracker hängt per LTE, nicht im LAN).
+    """
+    explicit = (os.environ.get("TRACKER_SERVER_URL") or "").strip()
+    if explicit:
+        return explicit
+    site = (os.environ.get("SITE_AUDIO") or "").strip()
+    if site and not site.endswith((".localhost", ".ts.net")):
+        return f"https://{site}"
+    lan = (os.environ.get("SITE_LAN") or "").strip()
+    return f"http://{lan}:8085" if lan else ""
+
+
 @app.get("/api/v1/parent/setup", dependencies=[Depends(require_parent)])
 def setup_status(device_id: str | None = None) -> dict:
     """Was fehlt noch, bis der Tracker läuft? Grundlage für den Setup-Assistenten.
@@ -2608,6 +2626,8 @@ def setup_status(device_id: str | None = None) -> dict:
                 "entry": os.environ.get("SITE_AUDIO", "") or "audio.localhost"},
         # Erststart ohne Terminal: Tokens und Traccar-Zugang zeigt der Assistent an
         "tokens": {"device": device_token(), "parent": parent_token()},
+        # Server-Adresse für das Provisioning der Firmware (LTE-erreichbar).
+        "tracker_server": tracker_server_url(),
         "traccar": ensure_traccar_admin(),
         "done": device is not None and bool(device_activity),
         "checked_at": now_iso(),

@@ -72,6 +72,7 @@ Ein kompakter, am Körper getragener Tracker für Kinder:
 | `docs/decisions.md` | Entscheidungsprotokoll (ADR-Kurzform) |
 | `docs/fusion.md` | Sensor-Fusion: Quellen, Regeln, Umsetzung, Optimierungsstufen |
 | `docs/parent-usability.md` | Eltern-Tauglichkeit: Analyse, Sprintplan, Umsetzung |
+| `docs/onboarding.md` | Erst-Einrichtung vom DAU aus: Zugangswege, geführter Geräte-Ablauf, offene Lücken |
 | `firmware/` | ESP32-S3-Firmware: `lib/tracker_core` (host-getestete Logik) + `src/` (Hardware-Glue) |
 | `server/` | Docker-Stack: Traccar + Audio-Bridge (Eltern-UI/API), Caddy, Provider-Vorlagen |
 | `scripts/` | WSL-Sync, Smoke-Test, Simulator, Backups, Mess-Session, Git-Hook |

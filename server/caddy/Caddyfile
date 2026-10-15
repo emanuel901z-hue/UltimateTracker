@@ -39,7 +39,10 @@
 	}
 }
 
-{$SITE_AUDIO:audio.localhost} {
+# Hinweis: Die zweite Adresse (audio.localhost) ist der Rückfall für den
+# Server selbst. SITE_AUDIO darf zusätzlich den echten Einstieg tragen – auch
+# einen Host mit Port (Ein-Host-Muster, docs/deployment.md §10.2).
+{$SITE_AUDIO:audio.localhost} audio.localhost {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
 	reverse_proxy audio-bridge:8085
@@ -52,7 +55,9 @@
 # hinweg gültig (siehe SESSION_COOKIE_DOMAIN / *.localhost in docs/deployment.md).
 # ---------------------------------------------------------------------------
 
-{$SITE_TRACCAR:traccar.localhost} {
+# Zweite Adresse: Rückfall für den Server selbst. SITE_TRACCAR trägt im
+# Ein-Host-Muster den Namen MIT Port (z. B. host:8443).
+{$SITE_TRACCAR:traccar.localhost} traccar.localhost {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
 	import ut_unavailable_page
@@ -83,7 +88,7 @@
 	}
 }
 
-{$SITE_FINDMY:findmy.localhost} {
+{$SITE_FINDMY:findmy.localhost} findmy.localhost {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
 	import ut_unavailable_page
@@ -108,7 +113,7 @@
 	}
 }
 
-{$SITE_APPLE:apple.localhost} {
+{$SITE_APPLE:apple.localhost} apple.localhost {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
 	import ut_unavailable_page
@@ -131,10 +136,39 @@
 # LAN-/Schnellzugriff: nackter Hostname oder IP-Adresse (z. B. https://192.168.1.50/)
 # landet direkt in der Eltern-UI – dem Einstiegspunkt.
 # In server/.env setzen:  SITE_LAN=192.168.1.50   (oder der Rechnername)
+# Weitere Namen/IPs (z. B. die Tailscale-IP) kommen in SITE_LAN_ALIASES,
+# durch Leerzeichen getrennt:  SITE_LAN_ALIASES=100.124.33.92
+# Zertifikate: Caddy stellt **je Adresse** ein eigenes Zertifikat aus. Browser
+# senden bei IP-Adressen kein SNI, dann präsentiert Caddy das default_sni-
+# Zertifikat (oben = SITE_LAN). Eine andere IP zeigt deshalb eine Namenswarnung –
+# für den warnungsfreien Zugriff einen **Namen** verwenden (z. B. SITE_AUDIO).
 # Ohne Eintrag bedient der Block nur "localhost".
 # ---------------------------------------------------------------------------
-{$SITE_LAN:localhost} localhost {
+{$SITE_LAN:localhost} {$SITE_LAN_ALIASES:} localhost {
 	tls {$TLS_ARG:internal}
 	encode zstd gzip
 	reverse_proxy audio-bridge:8085
+}
+
+# ---------------------------------------------------------------------------
+# Zertifikat OHNE Warnung holen (Port 80, bewusst KEIN HTTPS-Redirect).
+# Ein eigener http://-Block unterdrückt Caddys automatische Umleitung für genau
+# diese Hosts: /ca.crt bleibt damit auch dann erreichbar, wenn das Zertifikat
+# noch fehlt. Alles andere geht weiter auf HTTPS.
+# Wichtig: Jede Adresse braucht ihr eigenes "http://" – das Schema gilt nur für
+# die erste. Und: im Internet-Betrieb mit Let's Encrypt (TLS_ARG=<E-Mail>) die
+# ACME-Domain hier NICHT eintragen (die Prüfung läuft ebenfalls über Port 80) –
+# dann diesen Block auf eine reine LAN-/IP-Adresse beschränken.
+# ---------------------------------------------------------------------------
+http://{$SITE_LAN:localhost} http://{$SITE_AUDIO:audio.localhost} {
+	handle /ca.crt {
+		reverse_proxy audio-bridge:8085
+	}
+	handle / {
+		header Content-Type "text/html; charset=utf-8"
+		respond "<!doctype html><html lang='de'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Zertifikat einrichten – UltimateTracker</title></head><body style='font:1rem/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;color:#12171c;background:#f4f6f8'><h1 style='font-size:1.35rem'>Zertifikat einrichten</h1><p>Diese Seite läuft bewusst über <strong>HTTP</strong> – also ohne die Zertifikatswarnung, die du gerade vermeiden willst. Lade hier das Zertifikat deines Trackers herunter und installiere es <strong>einmal pro Gerät</strong>. Danach ist <a style='color:#0b57c2' href='https://{host}/'>https://{host}/</a> ohne Warnung erreichbar.</p><p><a style='display:inline-block;min-height:44px;line-height:44px;padding:0 1.25rem;background:#0b57c2;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600' href='/ca.crt'>Zertifikat herunterladen</a></p><h2 style='font-size:1rem;margin-top:1.5rem'>Kurzanleitung</h2><ul><li><strong>Android:</strong> Einstellungen → Sicherheit → Verschlüsselung &amp; Anmeldedaten → Zertifikat installieren → <em>CA-Zertifikat</em> → Datei auswählen.</li><li><strong>iPhone/iPad:</strong> Datei öffnen → Profil laden (Einstellungen → Allgemein → VPN &amp; Geräteverwaltung), danach Einstellungen → Allgemein → Info → Zertifikatsvertrauenseinstellungen → für diese CA aktivieren.</li><li><strong>Windows:</strong> Datei doppelklicken → Zertifikat installieren → „Lokaler Computer“ → „Alle Zertifikate in folgendem Speicher ablegen“ → <em>Vertrauenswürdige Stammzertifizierungsstellen</em>.</li></ul><p style='color:#555'>Das Zertifikat ist öffentlich – der private Schlüssel bleibt auf dem Server.</p></body></html>" 200
+	}
+	handle {
+		redir https://{host}{uri} permanent
+	}
 }

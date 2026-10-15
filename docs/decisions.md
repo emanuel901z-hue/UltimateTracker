@@ -2,6 +2,65 @@
 
 Neue Einträge oben ergänzen. Format: Datum – Entscheidung – Begründung – Folgen.
 
+## D-022 – 2026-10-14 – Ports/Härtung: zweistufig, `ufw-docker` erst zur Produktion
+
+- **Entscheidung:** Die veröffentlichten Docker-Ports werden **jetzt nicht**
+  gehärtet. **Stufe 1 (Entwicklung):** am Router nur 80/443 weiterleiten.
+  **Stufe 2 (vor Produktion):** „nur Caddy exponiert" – alles andere intern bzw.
+  auf `127.0.0.1` gebunden, Tracker-Upload über einen Caddy-Hostnamen,
+  Admin-Werkzeuge über Tailscale; dafür `ufw-docker` mit Freigabe für
+  `100.64.0.0/10` einführen.
+- **Begründung:** Docker schreibt seine DNAT-Regeln in die eigene Kette und läuft
+  **vor** UFWs Filter – UFW ist für Container-Ports blind (`DOCKER-USER` leer,
+  kein `ufw-docker`). Solange der Host hinter NAT hängt und nur 80/443
+  weitergeleitet werden, ist das folgenlos. `ufw-docker` jetzt einzuführen kostet
+  nur Pflege; das Binden an die Tailscale-IP ist fragil (startet Docker vor
+  `tailscale0`, schlägt das Binden fehl).
+- **Folgen:** Festgehalten in `docs/onboarding.md` §7; Umsetzung als TODO
+  (Abschnitt D). Ein späterer URL-/IP-Wechsel bleibt eine `.env`-Änderung –
+  mit echten Domains entfallen CA-Import und die Ports 8443–8445.
+
+## D-021 – 2026-10-14 – Zertifikat-Download auf der Anmeldeseite und über HTTP
+
+- **Entscheidung:** Das CA-Zertifikat ist **vor** dem Login erreichbar: ein Block
+  „Zertifikat einrichten" (Download + Kurzanleitung für Android/iPhone/Windows)
+  steht direkt auf der **Anmeldeseite**, und Caddy liefert `GET /ca.crt` auf
+  **Port 80 bewusst ohne HTTPS-Umleitung** aus (`http://<SITE_LAN>/ca.crt`).
+- **Begründung:** Bisher hing der Download im Tab „Betrieb" bzw. im Assistenten –
+  **beide erst nach dem Login** (Henne-Ei: um das Zertifikat zu bekommen, musste
+  man erst durch die Warnung, die es beseitigt). Zusätzlich leitete
+  `http://<host>/ca.crt` per 308 auf HTTPS um – also genau in die Warnung. Der
+  dokumentierte „Download über HTTP" funktionierte nur über den Bridge-Port 8085.
+- **Folgen:** HTTP-Block im Caddyfile (nur `SITE_LAN` und `SITE_AUDIO`, je mit
+  eigenem `http://`; ein Catch-all `:80` wäre mit der ACME-Prüfung im
+  Internet-Betrieb kollidiert). Anmeldeseite (`index.html`) mit CA-Block; die
+  `check-ui-a11y.py`-Prüfung bleibt grün.
+
+## D-020 – 2026-10-14 – Zugang „von außen" über Tailscale (Name + interne CA)
+
+- **Entscheidung:** Der Eltern-Zugang von unterwegs läuft über **Tailscale**
+  (kein offener Port). `SITE_AUDIO` ist der **MagicDNS-Name**, die Tailscale-IP
+  steht als Zusatz-Einstieg in `SITE_LAN_ALIASES`. Da MagicDNS **keine
+  Subdomains** kennt, laufen die Zusatzdienste im **Ein-Host-Muster** unter
+  demselben Namen auf eigenen Ports (Traccar **8443**, Google **8444**, Apple
+  **8445**). Zertifikat: interne CA (**Option B**); ein echtes Zertifikat für den
+  Tailscale-Namen (`tailscale cert`, **Option A**) folgt später.
+- **Begründung:** Die Tailscale-URL war **funktionslos** (`https://100.124.33.92/`
+  → HTTP 200 mit leerem Body): Caddy wählt die Site über den **Host-Header**, und
+  die Tailscale-Adresse stand in keiner Site (Kontrolltest mit fremdem Host →
+  ebenfalls „200 + leer"). Zusätzlich senden Browser bei **IP-Adressen kein SNI**,
+  deshalb zeigt eine IP immer eine Namenswarnung – der Name ist der richtige Weg.
+  Ohne das Port-Muster wären die Dienste-Links (Karte, Find My) außerhalb des
+  Servers tot, weil sie auf `*.localhost` zeigten. Der **Tracker** (LTE) kann
+  Tailscale nicht nutzen und braucht weiterhin einen öffentlichen Ingress
+  (DynDNS, `docs/deployment.md` §10.2) – Tailscale löst nur die Eltern-Seite.
+- **Folgen:** Caddyfile (Ports, `SITE_LAN_ALIASES`, HTTP-Block), `docker-compose.yml`
+  (Ports 8443–8445 veröffentlicht), `server/.env(.example)`. Zugangsmodell und
+  DAU-Weg in `docs/onboarding.md`, Betrieb in `docs/operations-manucloud.md` §4b.
+  **Nebenbefund:** Veröffentlichte Docker-Ports gehen an **UFW vorbei**
+  (`DOCKER-USER` leer, kein `ufw-docker`) – die „nur LAN"-Regeln greifen nicht;
+  bei Bedarf `ufw-docker` einsetzen. **Offen:** endgültiger Tracker-Ingress.
+
 ## D-019 – 2026-10-13 – Ein Ingest für alle Find-My-Wege, Beacon-Schlüssel (provider, id)
 
 - **Entscheidung:** Alle Positionsquellen laufen über **einen** Anlaufpunkt in der

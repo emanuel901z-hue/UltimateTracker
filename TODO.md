@@ -19,6 +19,26 @@ Legende: `[ ]` offen · `[x]` erledigt · `(i)` interaktiv – braucht dein Kont
 
 ## A. Sofort möglich (ohne Hardware)
 
+- [x] **Zugang „von außen" über Tailscale** – `SITE_AUDIO` = MagicDNS-Name, IP in
+      `SITE_LAN_ALIASES`; Dienste im Ein-Host-Muster auf Ports 8443–8445
+      (Traccar/Google/Apple) *(2026-10-14)*
+- [x] **Zertifikat vor dem Login** – Block „Zertifikat einrichten" auf der
+      Anmeldeseite + `http://<host>/ca.crt` auf Port 80 ohne HTTPS-Umleitung *(2026-10-14)*
+- [ ] **(i) CA auf den Elterngeräten importieren** (Tailscale-App +
+      `http://manucloud.tail0c6f95.ts.net/ca.crt`) → dann ist der Name ohne
+      Warnung erreichbar (`docs/operations-manucloud.md` §4b)
+- [ ] **(i) Router prüfen:** nur 80/443 weiterleiten (kein 8085/8082/8086/9443/
+      8443…) – Stufe 1 der Port-Strategie (`docs/onboarding.md` §7)
+- [ ] **DAU-Onboarding umsetzen** (`docs/onboarding.md` §5): Geräte-Seite geführt
+      machen – WebSerial-Provisioning/Flashen bzw. WLAN-SoftAP (braucht eine
+      Firmware-Entscheidung); Benachrichtigungs-Fallback (F1)
+- [x] Assistent: Schritt-Nummern in Ablaufreihenfolge, Willkommen nennt den
+      Flashen-Schritt, SIM verlinkt 1NCE, **„bereits gemeldet → übernehmen"**
+      statt IMEI abtippen, **Provisioning-Zeile zum Kopieren** (JSON aus IMEI,
+      Server-Adresse und Token) *(2026-10-14)*
+- [ ] **(i) `TRACKER_SERVER_URL` setzen**, sobald die öffentliche Adresse steht –
+      sonst schlägt die UI nur die LAN-Adresse vor (`server/.env.example`)
+
 - [x] **Lizenz entschieden: MIT** (`LICENSE`), README-Abschnitt ergänzt *(2026-10-12)*
 - [x] **Traccar-Admin wieder zugänglich** (Passwort neu gesetzt, `ADMIN-ZUGANG.txt`) *(2026-10-12)*
 - [ ] **(i) Traccar-Passwort in der UI ändern** (Einstellungen → Konto) – das in
@@ -108,6 +128,8 @@ Vorlage: [`docs/measurements/TEMPLATE.md`](docs/measurements/TEMPLATE.md).
 - [ ] Traccar: Geofence + Benachrichtigungen einrichten
 - [x] Backup-Skript für Volumes (`scripts/backup-volumes.sh`) *(2026-10-11)*
 - [ ] macless-haystack absichern (`endpoint_user`/`endpoint_pass`), falls exponiert
+- [ ] **Ports härten (Stufe 2, `docs/onboarding.md` §7):** „nur Caddy exponiert",
+      Tracker-Upload über einen Caddy-Hostnamen, `ufw-docker` für Tailscale/LAN
 - [ ] Umzug auf den Thin Client (`docs/deployment.md`, Abschnitt 7)
 - [ ] Optional: Rate-Limits (Caddy-Plugin/fail2ban), Traccar hinter den Bridge-Login
 - [ ] Benachrichtigungen jenseits von Web-Push **in der UI** einrichtbar machen

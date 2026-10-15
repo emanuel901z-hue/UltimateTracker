@@ -111,12 +111,21 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # Ein-Host-Muster (docs/deployment.md §10.2): die Zusatzdienste unter
+      # demselben Namen auf eigenen Ports – nötig, wenn kein Wildcard-DNS
+      # (z. B. Tailscale-MagicDNS) für Subdomains zur Verfügung steht.
+      - "8443:8443"   # Traccar
+      - "8444:8444"   # Google Find My
+      - "8445:8445"   # Apple Find My
     environment:
       SITE_AUDIO: ${SITE_AUDIO:-audio.localhost}
       SITE_TRACCAR: ${SITE_TRACCAR:-traccar.localhost}
       SITE_FINDMY: ${SITE_FINDMY:-findmy.localhost}
       SITE_APPLE: ${SITE_APPLE:-apple.localhost}
       SITE_LAN: ${SITE_LAN:-localhost}
+      # Zusätzliche Namen/IPs für den LAN-Einstieg (z. B. Tailscale-Adresse),
+      # durch Leerzeichen getrennt – teilen sich das Zertifikat von SITE_LAN.
+      SITE_LAN_ALIASES: ${SITE_LAN_ALIASES:-}
       TLS_ARG: ${TLS_ARG:-internal}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro

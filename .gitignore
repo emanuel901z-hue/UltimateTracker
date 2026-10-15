@@ -43,3 +43,9 @@ Thumbs.db
 # Betriebswerkzeuge (ops/): lokale Geheimnisse der Maschine
 ops/.env
 ops/dozzle-users.yml
+
+# Backups (pg_dump + Volumes – enthalten Positionen, Nachrichten, Zugänge)
+backups/
+
+# Screenshots/Profile der UI-Prüfung (scripts/ui-check.py)
+ui-shots/

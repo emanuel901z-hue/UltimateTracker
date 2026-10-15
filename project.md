@@ -294,3 +294,4 @@ periodischer GNSS-Upload-Zyklus ≈ 1,2 mA Durchschnittsstrom.
 - [`docs/sms.md`](docs/sms.md) – Identitäten (IMEI/MSISDN) und SMS-Pfad
 - [`docs/decisions.md`](docs/decisions.md) – Entscheidungsprotokoll
 - [`docs/parent-usability.md`](docs/parent-usability.md) – Eltern-Tauglichkeit (Analyse & Umsetzung)
+- [`docs/onboarding.md`](docs/onboarding.md) – Erst-Einrichtung vom DAU aus (Zugang, Geräte-Ablauf)

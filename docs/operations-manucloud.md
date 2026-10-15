@@ -9,6 +9,7 @@ läuft (im Unterschied zu `docs/deployment.md`, das den Aufbau beschreibt).
 |---|---|
 | Host | `manucloud` (SSH-Alias, `~/.ssh/config`) |
 | Adresse | `10.1.9.53` (und `10.1.9.208`), LAN `10.1.9.0/24`, Gateway `10.1.9.3` |
+| **Tailscale** | Node `manucloud`, IP `100.124.33.92`, MagicDNS `manucloud.tail0c6f95.ts.net` (Tailnet `tail0c6f95.ts.net`) – **der Weg „von außen"** (kein offener Port) |
 | OS | Ubuntu 24.04 LTS, Kernel 6.8, x86_64 |
 | Hardware | 4 vCPU, 30 GiB RAM, 8 GiB Swap, **Intenso SSD 477 GB** (LVM, 466 GB nutzbar) |
 | Docker | 29.9.0 + Compose v5.6.0, Loglimits + `live-restore` in `/etc/docker/daemon.json` |
@@ -74,8 +75,60 @@ Geheimnisse stehen **nicht** in diesem Dokument:
 | ntfy-Thema | `~/ops/.env` → `NTFY_TOPIC` (auch die App am Handy braucht es) |
 | Cockpit | Systemkonto (`administrator`) |
 
-Zertifikat fürs Handy: `http://10.1.9.53:8085/ca.crt` importieren → danach ist
-`https://10.1.9.53/` ohne Warnung.
+Zertifikat fürs Handy: auf der Anmeldeseite („Zertifikat einrichten") oder direkt
+unter `http://10.1.9.53/ca.crt` herunterladen (Port 80, bewusst ohne
+HTTPS-Umleitung) → danach ist `https://10.1.9.53/` ohne Warnung.
+
+## 4b. Zugang über Tailscale (der Weg „von außen")
+
+Der Eltern-Zugang von unterwegs läuft über **Tailscale** – kein offener Port,
+keine DynDNS-Pflege. MagicDNS kennt aber **keine Subdomains**; deshalb laufen
+alle Dienste unter **einem** Namen auf eigenen Ports (Ein-Host-Muster,
+`docs/deployment.md` §10.2):
+
+```env
+SITE_AUDIO=manucloud.tail0c6f95.ts.net
+SITE_TRACCAR=manucloud.tail0c6f95.ts.net:8443
+SITE_FINDMY=manucloud.tail0c6f95.ts.net:8444
+SITE_APPLE=manucloud.tail0c6f95.ts.net:8445
+SITE_LAN=10.1.9.53
+SITE_LAN_ALIASES=100.124.33.92
+```
+
+| Dienst | URL | Bemerkung |
+|---|---|---|
+| **Eltern-UI (Einstieg)** | <https://manucloud.tail0c6f95.ts.net/> | MagicDNS-Name → Zertifikat passt (SNI). |
+| Traccar | <https://manucloud.tail0c6f95.ts.net:8443/> | Auto-Login per Einmal-Ticket aus der UI. |
+| Google / Apple Find My | `…:8444` / `…:8445` | nur mit Compose-Profil `findmy`. |
+| Notnagel über IP | <https://100.124.33.92/> | Routing + Zertifikat von der internen CA, aber **Namenswarnung**: bei IP-Adressen senden Browser kein SNI, Caddy präsentiert dann das `default_sni`-Zertifikat (`SITE_LAN`). |
+
+**Warum die IP zusätzlich eingetragen ist:** Ohne Eintrag beantwortet Caddy
+fremde Hostnamen mit „HTTP 200 + leerer Seite" – die Tailscale-URL war genau
+deshalb funktionslos.
+
+**Zertifikat holen (ohne Warnung):** Die Anmeldeseite hat einen eigenen Block
+(„Zertifikat einrichten"), und Caddy liefert `/ca.crt` auf **Port 80** bewusst
+**ohne** HTTPS-Umleitung aus – einfach im Browser öffnen:
+
+```
+http://manucloud.tail0c6f95.ts.net/ca.crt      (oder http://10.1.9.53/ca.crt)
+```
+
+Danach das Zertifikat auf dem Gerät installieren (Anleitung auf der Seite bzw.
+im Login-Block), dann <https://manucloud.tail0c6f95.ts.net/> öffnen.
+
+**Wichtig – Docker geht an UFW vorbei:** Die veröffentlichten Ports
+(8082/8085/8443–8445 …) erreicht man **nicht** über die UFW-Regeln „von LAN";
+Docker schreibt seine Regeln in die eigene `DOCKER-USER`-Kette (hier leer, kein
+`ufw-docker`). Wer Ports wirklich begrenzen will, muss `ufw-docker` einsetzen
+oder sie auf `127.0.0.1` binden. Strategie (zweistufig, `ufw-docker` erst zum
+Produktivgang): `docs/onboarding.md` §7.
+
+**Grenzen:** Der **Tracker** (LTE) kann Tailscale nicht nutzen – er braucht den
+öffentlichen Ingress (DynDNS, Abschnitt 3).
+
+Später (Option A): echtes Zertifikat für den Tailscale-Namen
+(`tailscale cert manucloud.tail0c6f95.ts.net`) → **kein** CA-Import mehr nötig.
 
 ## 5. Backups
 

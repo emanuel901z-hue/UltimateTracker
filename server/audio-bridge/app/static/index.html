@@ -163,6 +163,21 @@
       <span class="muted" id="login-state" role="status" aria-live="polite"></span>
     </div>
   </form>
+  <section class="mt" aria-labelledby="ca-help-title">
+    <h3 id="ca-help-title" style="font-size:1rem;margin:.5rem 0 .25rem">Zertifikat einrichten</h3>
+    <p class="hint">Damit die Anmeldung ohne Sicherheitswarnung klappt: das Zertifikat
+      des Servers <strong>einmal pro Gerät</strong> installieren.</p>
+    <p><a class="button-link" id="ca-download" href="/ca.crt" download>Zertifikat herunterladen</a>
+      <span class="muted" id="ca-state" role="status" aria-live="polite"></span></p>
+    <details>
+      <summary class="muted">Anleitung: Android · iPhone · Windows</summary>
+      <ul class="muted">
+        <li><strong>Android:</strong> Einstellungen → Sicherheit → Verschlüsselung &amp; Anmeldedaten → Zertifikat installieren → <em>CA-Zertifikat</em> → Datei auswählen.</li>
+        <li><strong>iPhone/iPad:</strong> Datei öffnen → Profil laden (Einstellungen → Allgemein → VPN &amp; Geräteverwaltung), danach Einstellungen → Allgemein → Info → Zertifikatsvertrauenseinstellungen → aktivieren.</li>
+        <li><strong>Windows:</strong> Datei doppelklicken → Zertifikat installieren → „Lokaler Computer“ → „Alle Zertifikate in folgendem Speicher ablegen“ → <em>Vertrauenswürdige Stammzertifizierungsstellen</em>.</li>
+      </ul>
+    </details>
+  </section>
   <details class="mt">
     <summary class="muted">Stattdessen API-Token verwenden (Skripte, Erstinstallation)</summary>
     <label class="mt" for="token">Parent-Token
@@ -213,18 +228,30 @@
             sinnvoll ist. Du kannst jederzeit mit „Zurück" korrigieren; optionale Schritte
             lassen sich überspringen. <strong>Alles geht hier im Browser</strong> –
             Tokens und Zugänge legt das System selbst an.</p>
+          <p><strong>Vorher einmalig am Tracker selbst:</strong> Firmware aufspielen und
+            den Tracker mit Server-Adresse und Token versorgen (Provisioning). Erst danach
+            kann er sich hier melden. Die Anleitung dafür steht in der
+            Projektdokumentation (Bring-up / Firmware).</p>
           <ul>
             <li><strong>Tracker</strong> (fertig geflasht und mit Akku)</li>
             <li><strong>SIM-Karte</strong> eingelegt (für Ortung unterwegs)</li>
-            <li><strong>IMEI</strong> zur Hand (Aufkleber auf dem Modem oder in der
-              Bring-up-Konsole mit <code>AT+GSN</code>)</li>
+            <li><strong>IMEI</strong> zur Hand – sie steht auf dem Aufkleber des Modems
+              oder in der Bring-up-Konsole (<code>AT+GSN</code>)</li>
           </ul>
-          <p class="hint">Es geht los mit: Tracker anlegen → SIM → Karte prüfen →
-            Benachrichtigungen → Funktionstest.</p>
+          <p class="hint">Reihenfolge: Tracker anlegen → SIM → Karte prüfen →
+            Benachrichtigungen → Zertifikat → Apple Find My (optional) → Funktionstest.</p>
         </div>
 
         <div id="setup-step-geraet" hidden>
           <h3>1 · Tracker anlegen</h3>
+          <div id="s-detected-wrap" hidden>
+            <label for="s-detected">Bereits gemeldet – hier übernehmen
+              <select id="s-detected"><option value="">– bitte auswählen –</option></select>
+            </label>
+            <p class="hint">Dieser Tracker hat sich schon gemeldet. Auswählen – die IMEI wird
+              eingetragen, dann nur noch einen Namen vergeben und speichern. So muss die
+              IMEI nicht abgetippt werden.</p>
+          </div>
           <p class="hint">Die <strong>IMEI</strong> steht auf dem Aufkleber des SIM7080G-Modems
             (15 Ziffern). Der Name ist frei wählbar – z. B. der Vorname des Kindes.</p>
           <label for="s-imei">IMEI (15 Ziffern)
@@ -252,6 +279,28 @@
               <span class="muted" id="s-token-state" role="status" aria-live="polite"></span>
             </div>
           </div>
+          <div class="mt">
+            <h4 style="font-size:.95rem;margin:.5rem 0 .25rem">Provisioning für die Bring-up-Konsole</h4>
+            <p class="hint">Diese Zeile in der Bring-up-Firmware im Serial-Monitor
+              (115200) einfügen und mit Enter abschicken – danach kennt der Tracker
+              Server-Adresse und Token.</p>
+            <label for="s-server">Server-Adresse für den Tracker
+              <input id="s-server" type="text" placeholder="https://meinname.example.org"
+                     aria-describedby="s-server-hint">
+            </label>
+            <p class="hint" id="s-server-hint">Muss aus dem <strong>Mobilfunknetz</strong>
+              erreichbar sein – der Tracker hängt per LTE, nicht im Heimnetz. Für einen
+              Test im LAN die Host-Adresse mit Port verwenden (z. B.
+              <code>http://192.168.1.50:8085</code>).</p>
+            <label for="s-provision">Provisioning-Zeile (JSON)
+              <input id="s-provision" type="text" readonly aria-describedby="s-provision-hint">
+            </label>
+            <p class="hint" id="s-provision-hint">Enthält IMEI, Server-Adresse und Token.</p>
+            <div class="row-tight">
+              <button id="s-provision-copy">Zeile kopieren</button>
+              <span class="muted" id="s-provision-state" role="status" aria-live="polite"></span>
+            </div>
+          </div>
         </div>
 
         <div id="setup-step-sim" hidden>
@@ -260,6 +309,10 @@
             Tracker seinen Standort nicht senden. <em>Hier</em> trägst du die
             <strong>ICCID</strong> ein – das ist nur für den SMS-Pfad nötig. Sie steht auf
             der SIM-Karte bzw. im Portal des Anbieters (z. B. 1NCE). Die Rufnummer ist optional.</p>
+          <p class="hint">Die SIM muss beim Anbieter <strong>aktiviert</strong> sein – bei
+            1NCE im Portal unter
+            <a href="https://1nce.com" target="_blank" rel="noopener">1nce.com</a>;
+            dort stehen auch ICCID und Rufnummer. Ohne Aktivierung sendet der Tracker nichts.</p>
           <label for="s-iccid">ICCID (19–22 Ziffern)
             <input id="s-iccid" type="text" inputmode="numeric" maxlength="22" aria-describedby="s-iccid-error">
           </label>
@@ -300,7 +353,7 @@
         </div>
 
         <div id="setup-step-funktionstest" hidden>
-          <h3>5 · Funktionstest</h3>
+          <h3>7 · Funktionstest</h3>
           <p>Drücke am Tracker den <strong>PTT-Knopf</strong> (kurz halten, dann sprechen).
             Sobald die Nachricht ankommt, erscheint sie unter „Nachrichten".</p>
           <div class="row-tight">
@@ -312,7 +365,7 @@
         </div>
 
         <div id="setup-step-zertifikat" hidden>
-          <h3>6 · Zertifikat einrichten (optional)</h3>
+          <h3>5 · Zertifikat einrichten (optional)</h3>
           <p class="hint">Damit HTTPS ohne Warnung funktioniert (und Push-Benachrichtigungen
             erlaubt sind), muss das Zertifikat dieser Installation einmal auf jedem Gerät
             installiert werden. Der Browser darf das aus Sicherheitsgründen nicht selbst –
@@ -342,7 +395,7 @@
         </div>
 
         <div id="setup-step-apple" hidden>
-          <h3>7 · Apple Find My (optional)</h3>
+          <h3>6 · Apple Find My (optional)</h3>
           <p class="hint">Für die Apple-Zusatzortung braucht der Dienst eine Apple-ID.
             <strong>Empfehlung:</strong> einen Zweit-Account verwenden (Apple mag häufige
             Abfragen nicht) – die Zugangsdaten liegen nur lokal in dieser Installation.</p>
@@ -2395,6 +2448,7 @@ async function loadSetup() {
     const res = await fetch('/api/v1/parent/setup' + query, { headers: headers() });
     if (!res.ok) return;
     setupState = await res.json();
+    loadDetected();
   } catch (err) {
     return;
   }
@@ -2410,6 +2464,10 @@ async function loadSetup() {
     ? 'Es sind bereits Daten angekommen ✓'
     : 'Noch keine Daten – Knopf am Tracker drücken, dann erneut prüfen.';
   if (setupState.tokens) $('s-token').value = setupState.tokens.device || '';
+  if (setupState.tracker_server && !$('s-server').value) {
+    $('s-server').value = setupState.tracker_server;
+  }
+  updateProvisionLine();
   $('setup-apple-state').textContent = setupState.steps.apple
     ? 'Zugangsdaten sind hinterlegt ✓'
     : 'Noch keine Apple-ID hinterlegt.';
@@ -2433,6 +2491,32 @@ async function loadSetup() {
     showSetupStep(0);
   }
 }
+
+// Schon gemeldete, noch unbenannte Tracker zum Übernehmen anbieten (Befund A7):
+// so muss die IMEI nicht abgetippt werden.
+async function loadDetected() {
+  const wrap = $('s-detected-wrap');
+  const select = $('s-detected');
+  if (!wrap || !select || !state.token) return;
+  try {
+    const res = await fetch('/api/v1/parent/devices', { headers: headers() });
+    if (!res.ok) return;
+    const data = await res.json();
+    const fresh = (data.devices || []).filter((d) => d.seen && (!d.name || d.name === d.id));
+    select.innerHTML = '<option value="">– bitte auswählen –</option>' +
+      fresh.map((d) => '<option value="' + d.id + '">' + d.id + '</option>').join('');
+    wrap.hidden = fresh.length === 0;
+  } catch (err) {
+    /* still: der normale Weg (IMEI eintippen) bleibt */
+  }
+}
+$('s-detected').addEventListener('change', () => {
+  const value = $('s-detected').value;
+  if (!value) return;
+  $('s-imei').value = value;
+  fieldError($('s-imei'), '');
+  $('s-name').focus();
+});
 
 function updateSetupButtons() {
   const step = SETUP_STEPS[setupIndex];
@@ -2497,6 +2581,30 @@ $('s-token-copy').addEventListener('click', async () => {
     $('s-token-state').textContent = 'bitte mit Strg+C kopieren';
   }
   setTimeout(() => { $('s-token-state').textContent = ''; }, 4000);
+});
+
+// Provisioning-Zeile für die Firmware (B6) live aus IMEI, Server und Token bauen.
+function updateProvisionLine() {
+  const imei = $('s-imei').value.trim() || '<IMEI>';
+  const server = $('s-server').value.trim() || '<SERVER-ADRESSE>';
+  const token = $('s-token').value || '<TOKEN>';
+  $('s-provision').value = JSON.stringify(
+    { cmd: 'provision', device_id: imei, server: server, token: token });
+}
+$('s-imei').addEventListener('input', updateProvisionLine);
+$('s-server').addEventListener('input', updateProvisionLine);
+
+$('s-provision-copy').addEventListener('click', async () => {
+  const value = $('s-provision').value;
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    $('s-provision-state').textContent = 'kopiert ✓';
+  } catch (err) {
+    $('s-provision').select();
+    $('s-provision-state').textContent = 'bitte mit Strg+C kopieren';
+  }
+  setTimeout(() => { $('s-provision-state').textContent = ''; }, 4000);
 });
 
 $('s-traccar-copy').addEventListener('click', async () => {
