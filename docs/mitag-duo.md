@@ -87,6 +87,13 @@ Damit brauchst du **weder LDO noch Lastschalter**, und der Tag hängt **nicht** 
 der 3V3-/DC1-Rail des ESP. Auch der Ruhestrom kostet nichts extra: die Rail ist
 ohnehin an.
 
+**Gegenprobe im Schaltplan** (`schematic/T-SIM7080G_Schematic.pdf` im
+Hersteller-Repo, Blätter „PMU" und „SOC"): Die Cross-Reference-Tabelle auf dem
+PMU-Blatt führt `PMU_DCDC5` **nur** auf die SOC-/Header-Seite; am PMU hängen daran
+lediglich Entkopplungskondensatoren (C31 100 nF, C46 10 µF). Auf dem SOC-Blatt
+steht `PMU_DCDC5` ausschließlich im Block **„External Pin"** – also an der
+Stiftleiste. Kein weiterer Verbraucher auf dem Board.
+
 Falls du ihn doch **schaltbar** willst: die Kamera-Rails (ALDO1/ALDO2/ALDO4) sind
 ohne Kamera frei, aber nicht am Header – dann müsstest du am PMU-Ausgang löten.
 Firmware: I2C-Register `0x90`, Bit `1<<n` = Enable (n: 0=ALDO1 … 3=ALDO4),
