@@ -221,6 +221,20 @@ zu hoch).
 | Superkondensator statt Stützkondensator | ~30 Ω ESR → für 2 A unbrauchbar |
 | Akku parallel zur Hauptbatterie | Ausgleichsströme ohne Balancing/Schutz |
 
+### Beschafft (2026-10-16)
+
+| Teil | Bezug | Werte |
+|---|---|---|
+| Keramik-Set | HUAREW, Amazon `B087785H1J` | 10 Werte × 30 St., **50 V, ±10 %** |
+| Elko für die BAT-Pads | HUABAN, Amazon `B0CFXJK7LB` | **35 V / 1000 µF**, 10×17 mm |
+| Widerstände | BOJACK, Amazon `B08FD1XVL6` | 25 Werte, 1000 St., 1/4 W, 5 % |
+| Transistoren | CYTGOUPER, Amazon `B0FGQ1515F` | 200 St., 10 BC-Typen (NPN/PNP) |
+
+> Das Angebot nennt für 35 V/1000 µF **10×17 mm**, das Datenblatt der CD11GT-Reihe
+> nennt dort **10×20 mm** (10×17 gehört in der Tabelle zum 25-V-Typ). Funktional
+> egal – beide liegen bei 0,03–0,07 Ω –, aber beim Auspacken einmal nachmessen:
+> die Bauhöhe hängt davon ab.
+
 ## 7. Prüfpunkte beim Einbau
 
 | # | Prüfung | Erwartung |
