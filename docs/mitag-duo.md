@@ -181,7 +181,47 @@ ein Tag später auf das andere Netz umzustellen.
 **Anti-Stalking ×2:** beide Tags piepen unabhängig und lösen fremde
 „Tracker reist mit dir"-Warnungen aus – doppelt so oft wie mit einem.
 
-## 6. Prüfpunkte beim Einbau
+## 6. Bauteile (Beschaffung)
+
+Stand 2026-10-16 – die konkreten Teile für den MiTag-Zweig und die BAT-Pads,
+inklusive der Fallstricke, die wir dabei geprüft haben.
+
+**Keramik (Entkopplung).** HUAREW-Keramik-Set, 10 Werte × 30 Stück (300 St.),
+bedrahtet, **50 V, ±10 %** (X7R-Klasse), enthält 0,1 µF = 100 nF … 10 µF.
+
+- Deckt ab: MiTag-Entkopplung (2× 100 nF), Taster-Entprellung, BAT-Pads,
+  Decoupling um MAX98357A/INMP441.
+- **50 V statt 6,3 V ist hier ein Vorteil**: weniger **DC-Bias**-Verlust, die
+  Kapazität bleibt näher am Nennwert.
+- **±10 % schließt Y5V aus** (das wäre −20 %/+80 %) → X7R, temperaturstabil.
+- Die 4,7-/10-µF-Scheiben sind die größten im Set – im engen Gehäuse lieber den
+  kleinen Elko für den MiTag-Bulk nehmen.
+
+**Elektrolyt (Stütze an den BAT-Pads).** CD11GT(G)-Serie, **1000 µF/25 V
+(10×17 mm, 0,065 Ω)** oder **1000 µF/35 V (10×20 mm, 0,032 Ω)**, Ripple
+1380–1800 mA @ 105 °C, 3000 h. **Liegend** einbauen (stehend ist der 20-mm-Körper
+zu hoch).
+
+- **Nicht** das 20-%-Verlustfaktor-Sortiment: daraus folgt ESR ≈ 0,56 Ω beim
+  470 µF → bei 2 A Sendespitze ~1 V Einbruch.
+- Bei gleicher Baugröße ist ein 35-V-Typ dem 16-V-Typ hier überlegen (Tabelle der
+  Serie) – deshalb 25/35 V, nicht 16 V.
+
+**Elko-Sortiment (Bulk).** Vorhanden: 0,1 µF–470 µF, 16/50 V, 4×7…8×12 mm.
+
+- Brauchbar für: Bulk am MiTag (10 µF), Puffer rund um Audio.
+- **Nicht** für die BAT-Pads (ESR) und **nicht** als 100-nF-Entkopplung.
+
+**Bewusst nicht verwendet:**
+
+| Teil | Warum nicht |
+|---|---|
+| LIR2032 im MiTag-Schacht | mechanisch passend, aber **4,2 V geladen** → über der Grenze des Tags (3,6 V) |
+| ML2032 / VL2032 | 3 V, aber Memory-Backup-Zellen mit zu hohem Innenwiderstand für die 9,5-mA-Spitzen |
+| Superkondensator statt Stützkondensator | ~30 Ω ESR → für 2 A unbrauchbar |
+| Akku parallel zur Hauptbatterie | Ausgleichsströme ohne Balancing/Schutz |
+
+## 7. Prüfpunkte beim Einbau
 
 | # | Prüfung | Erwartung |
 |---|---|---|
@@ -194,7 +234,7 @@ ein Tag später auf das andere Netz umzustellen.
 | 7 | GNSS-Störung | GNSS-Fix-Zeit mit/ohne eingebauten Tag vergleichen |
 | 8 | Zwei Tags | beide gleichzeitig gekoppelt und in ihrer App sichtbar |
 
-## 7. Rechtliches (kurz)
+## 8. Rechtliches (kurz)
 
 - Ausbauen und Umversorgen entwertet die **CE-/FCC-Zertifizierung** des Moduls *als
   Produkt*.
